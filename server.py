@@ -6,7 +6,7 @@ import os
 load_dotenv()
 
 server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-server.bind((os.environ.get('SERVER_ADDRESS', '0.0.0.0'), 8080))
+server.bind((os.environ.get('SERVER_ADDRESS', '0.0.0.0'), 3389))
 
 server.listen(os.environ.get('MAX_CONNECTIONS', 5))
 print("Server is listening...")

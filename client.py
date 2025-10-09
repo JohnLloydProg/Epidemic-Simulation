@@ -6,7 +6,8 @@ import os
 load_dotenv()
 
 client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-client.connect((os.environ.get('SERVER_ADDRESS', '127.0.0.1'), 8080))
+print("Connecting to server in address:", os.environ.get('SERVER_ADDRESS'))
+client.connect((os.environ.get('SERVER_ADDRESS', '127.0.0.1'), 3389))
 
 def receive_messages(sock:socket.socket):
     while True:
