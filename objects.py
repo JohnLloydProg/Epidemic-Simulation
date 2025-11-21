@@ -1,5 +1,3 @@
-
-
 class Status:
     time:int
 
