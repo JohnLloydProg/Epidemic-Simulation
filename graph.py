@@ -1,14 +1,18 @@
 import pygame as pg
+import heapq
 
 class Node:
     id:int = 0
     edges:list['Edge']
+    agents:list
     radius = 20
     pos:tuple[int, int]
 
     def __init__(self, x:int, y:int):
         self.id = Node.id
         Node.id += 1
+        self.agents = []
+        self.edges = []
         self.pos = (x, y)
     
     def draw(self, window:pg.Surface, font:pg.font.Font):
@@ -21,21 +25,32 @@ class Node:
 class Edge:
     id:int = 0
     nodes:tuple['Node', 'Node']
-    weight:float
+    agents:list
+    travelling_time:int
 
-    def __init__(self, node_a:'Node', node_b:'Node', weight:float=0):
+    def __init__(self, node_a:'Node', node_b:'Node', travelling_time:int):
         self.id = Edge.id
         Edge.id += 1
         self.nodes = (node_a, node_b)
-        self.weight = weight
+        self.agents = []
+        self.travelling_time = travelling_time
     
     def draw(self, window:pg.Surface):
         pg.draw.line(window, (0, 0, 0), self.nodes[0].pos, self.nodes[1].pos, 4)
 
 
+class Region:
+    id:int = 0
+    nodes:list['Node']
+    
+    def __init__(self, nodes:list[Node], no_resi):
+        self.nodes = nodes
+
+
 class Graph:
     nodes:list['Node']
     edges:list['Edge']
+    regions:list['Region']
 
     def __init__(self):
         self.nodes = []
@@ -44,7 +59,7 @@ class Graph:
     def add_node(self, node:Node):
         self.nodes.append(node)
     
-    def add_edge(self, weight:float, *args):
+    def add_edge(self, travelling_time:int, *args):
         if (len(args) != 2):
             raise ValueError(f"Expected 2 arguments received {len(args)}")
         if (isinstance(args[0], int) and isinstance(args[0], int)):
@@ -60,18 +75,32 @@ class Graph:
                     node_2 = node
             if (not node_1 or not node_2):
                 raise ValueError(f"No node has the id of {id_1}/{id_2}")
-            self.edges.append(Edge(node_1, node_2, weight))
+            self.edges.append(Edge(node_1, node_2, travelling_time))
         elif (isinstance(args[0], Node) and isinstance(args[1], Node)):
             node_1, node_2 = args[0], args[1]
             if (node_1 == node_2):
                 raise ValueError("You can't add an edge connecting the same nodes")
-            self.edges.append(Edge(node_1, node_2, weight))
+            edge = Edge(node_1, node_2, travelling_time)
+            self.edges.append(edge)
+            node_1.edges.append(edge)
+            node_2.edges.append(edge)
 
-    def get_edge(self, id:int) -> Edge:
-        for edge in self.edges:
-            if (id == edge.id):
-                return edge
-
+    def get_edge(self, *args) -> Edge:
+        if (len(args) == 1):
+            if (not isinstance(args[0], int)):
+                raise ValueError("Argument has to be an integer corresponding to the id")
+            id = args[0]
+            for edge in self.edges:
+                if (id == edge.id):
+                    return edge
+        elif (len(args) == 2):
+            if (not isinstance(args[0], Node) or not isinstance(args[0], Node)):
+                raise ValueError("Argument has to be nodes of connected by an edge")
+            node_1 = args[0]
+            node_2 = args[1]
+            for edge in self.edges:
+                if (node_1 in edge.nodes and node_2 in edge.nodes):
+                    return edge
     def get_node(self, id:int) -> Node:
         for node in self.nodes:
             if (id == node.id):
@@ -95,3 +124,48 @@ class Graph:
 
         for node in self.nodes:
             node.draw(window, font)
+    
+    def shortest_edge_path(self, start_id: int, end_id: int) -> list[int]:
+        if start_id not in [n.id for n in self.nodes] or end_id not in [n.id for n in self.nodes]:
+            raise ValueError("Start or end node ID not in graph.")
+
+        # Initialize distances and previous edge mapping
+        distances: dict[int, float] = {node.id: float('inf') for node in self.nodes}
+        previous_edge: dict[int, int | None] = {node.id: None for node in self.nodes}
+
+        distances[start_id] = 0
+        pq: list[tuple[float, int]] = [(0, start_id)]  # (distance, node_id)
+
+        while pq:
+            dist, current_id = heapq.heappop(pq)
+            current_node = next(n for n in self.nodes if n.id == current_id)
+
+            if dist > distances[current_id]:
+                continue
+
+            for edge in current_node.edges:
+                neighbor = edge.nodes[0] if edge.nodes[1] == current_node else edge.nodes[1]
+                new_dist = dist + edge.travelling_time
+
+                if new_dist < distances[neighbor.id]:
+                    distances[neighbor.id] = new_dist
+                    previous_edge[neighbor.id] = edge.id
+                    heapq.heappush(pq, (new_dist, neighbor.id))
+
+        # Reconstruct path as list of edge IDs
+        path: list[int] = []
+        current = end_id
+
+        while current != start_id:
+            edge_id = previous_edge[current]
+            if edge_id is None:
+                return []  # no path
+
+            path.append(edge_id)
+            edge = next(e for e in self.edges if e.id == edge_id)
+            # move to the other node in the edge
+            current = edge.nodes[0].id if edge.nodes[1].id == current else edge.nodes[1].id
+
+        path.reverse()
+        return path
+
