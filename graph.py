@@ -4,13 +4,11 @@ import heapq
 class Node:
     id:int = 0
     radius:int = 20
-    agents:list
     edges:list['Edge']
 
     def __init__(self, x:int, y:int):
         self.id = Node.id
         Node.id += 1
-        self.agents = []
         self.edges = []
         self.pos = (x, y)
     
