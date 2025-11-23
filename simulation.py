@@ -1,7 +1,7 @@
 from objects import InitialParameters, Status
 from graph import Graph, Node, Edge
-from agents.agent import Agent
-from time import sleep
+from agents.agent import Agent, WorkingAgent, Firm
+from time import time_ns
 import random
 import pygame as pg
         
@@ -47,34 +47,20 @@ def create_test_graph_complex() -> Graph:
 
 class Simulation:
     compartments = ['S', 'E', 'I', 'R']
-    initial_parameters:InitialParameters
     seir_compartments:dict[str, list[Agent]]
     graph:Graph
     clock:pg.time.Clock
     window:pg.Surface
     font:pg.font.Font
-    average_infection_chance:list[float] = []
+    infection_chances:list[float] = []
+    simulation_ns_per_time_unit = (10**9)//40
 
     def __init__(self, initial_parameters:InitialParameters, headless=True):
         self.initial_parameters = initial_parameters
         self.seir_compartments = {}
         self.headless = headless
         self.graph = create_test_graph_complex()
-
-        for compartment in self.compartments:
-            l = []
-            for _ in range(self.initial_parameters.no_per_compartment[compartment]):
-                residence_node = random.choice(self.graph.nodes)
-                firm_node = random.choice(self.graph.nodes)
-                while (residence_node == firm_node):
-                    firm_node = random.choice(self.graph.nodes)
-                agent = Agent(self.graph, residence_node, firm_node, compartment)
-                agent.set_path(self.graph.shortest_edge_path(residence_node.id, firm_node.id), firm_node)
-                agent.set_state('travelling')
-                l.append(agent)
-                print(f"Agent id {agent.id} with path: {agent.path}")
-            self.seir_compartments[compartment] = l
-
+        self.populate_compartments()
         
         if (not headless):
             pg.init()
@@ -82,17 +68,31 @@ class Simulation:
             self.window = pg.display.set_mode((1080, 720))
             self.font = pg.font.Font(None, 25)
     
+    def populate_compartments(self):
+        firms = [Firm(random.choice(self.graph.nodes)) for i in range(5)]
+        firm_nodes = list(map(lambda firm: firm.node, firms))
+        for compartment in self.compartments:
+            l = []
+            for _ in range(self.initial_parameters.no_per_compartment[compartment]):
+                residence_node = random.choice(list(filter(lambda node: node not in firm_nodes, self.graph.nodes)))
+                firm = random.choice(firms)
+                agent = WorkingAgent(self.graph, residence_node, firm, (8, 17), compartment=compartment)
+                l.append(agent)
+            self.seir_compartments[compartment] = l
+    
     def generate_status(self) -> Status:
-        pass
+        status = Status(self.time)
+        return status
 
     def run(self):
-        time = 0
+        self.time = 360
+        draw_time = 0
+        simulation_time = 0
         running = True
-        while ((time // (60 * 24) < self.initial_parameters.duration) and running):
-            print(f"time: {time}")
-            if (self.average_infection_chance):
-                ave = round(sum(self.average_infection_chance) / len(self.average_infection_chance), 4)
-                print(f'Average infection chance: {ave}')
+        while ((self.time // (60 * 24) < self.initial_parameters.duration) and running):
+            minute = self.time % 60
+            hour = (self.time // 60) % 24
+            day = self.time // (60 * 24)
             if (not self.headless):
                 for event in pg.event.get():
                     if event.type == pg.QUIT:
@@ -101,22 +101,31 @@ class Simulation:
             
             for agents in self.seir_compartments.values():
                 for agent in agents:
-                    if (agent.state == 'travelling'):
-                        agent.traverse_graph(time, compute_for_chance_of_infection, self.initial_parameters.chance_per_contact, self)
-            
-            # Working adults go through their day
-            # To go to their work and encounters other people (Base No. of contacts based on edges traveresed)
-            # Upon reaching their destination check if the agent becomes exposed, infected, or such *Consider compartment time periods*
-            # while working record the time the agent works. (This is recorded on the business node)
-            if (not self.headless):
+                    if (agent.state == 'home'):
+                        if (isinstance(agent, WorkingAgent)):
+                            if (hour == agent.working_hours[0] - 1):
+                                print(f"Agent {agent.id}: Going to work")
+                                agent.set_path(self.graph.shortest_edge_path(agent.residence_node.id, agent.firm.node.id), agent.firm.node)
+                                agent.set_state('travelling')
+                    elif (agent.state == 'travelling'):
+                        agent.traverse_graph(self.time, compute_for_chance_of_infection, self.initial_parameters.chance_per_contact)
+                    elif (isinstance(agent, WorkingAgent) and agent.state == 'working'):
+                        agent.working(hour)
+
+            if (not self.headless and time_ns() - draw_time >= (10**9)//60):
+                draw_time = time_ns()
                 self.window.fill((255, 255, 255))
                 self.graph.draw(self.window, self.font)
+                text = self.font.render(f"time: {self.time} (Day {day} {hour}:{minute})", False, (0, 0, 0))
+                pg.draw.circle(self.window, (0, 255, 0), pg.mouse.get_pos(), 5)
+                self.window.blit(text, text.get_rect(topright=(1060, 20)))
                 pg.display.update()
-                self.clock.tick(60)
-            time += 1
-            sleep(0.5)
-            pass
 
+            if (not self.headless and time_ns() - simulation_time >= self.simulation_ns_per_time_unit):
+                simulation_time = time_ns()
+                self.time += 1
+            else:
+                self.time += 1
 
 if __name__ == '__main__':
     Simulation(InitialParameters(365, {'S':20, 'E':0, 'I':20, 'R':10}), False).run()

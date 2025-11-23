@@ -3,10 +3,9 @@ import heapq
 
 class Node:
     id:int = 0
-    edges:list['Edge']
+    radius:int = 20
     agents:list
-    radius = 20
-    pos:tuple[int, int]
+    edges:list['Edge']
 
     def __init__(self, x:int, y:int):
         self.id = Node.id
@@ -24,9 +23,7 @@ class Node:
 
 class Edge:
     id:int = 0
-    nodes:tuple['Node', 'Node']
     agents:list
-    travelling_time:int
 
     def __init__(self, node_a:'Node', node_b:'Node', travelling_time:int):
         self.id = Edge.id
@@ -41,7 +38,6 @@ class Edge:
 
 class Region:
     id:int = 0
-    nodes:list['Node']
     
     def __init__(self, nodes:list[Node], no_resi):
         self.nodes = nodes
@@ -108,22 +104,6 @@ class Graph:
 
     def get_edges(self, node:Node) -> list[Edge]:
         return filter(lambda edge: node in edge.nodes, self.edges)
-
-    def adjacent_nodes(self, node:Node) -> list[Node]:
-        adjacent_nodes:list[Node] = []
-        for edge in self.edges:
-            if edge.nodes[0] == node:
-                adjacent_nodes.append(edge.nodes[1])
-            elif edge.nodes[1] == node:
-                adjacent_nodes.append(edge.nodes[0])
-        return adjacent_nodes
-
-    def draw(self, window:pg.Surface, font:pg.font.Font):
-        for edge in self.edges:
-            edge.draw(window)
-
-        for node in self.nodes:
-            node.draw(window, font)
     
     def shortest_edge_path(self, start_id: int, end_id: int) -> list[int]:
         if start_id not in [n.id for n in self.nodes] or end_id not in [n.id for n in self.nodes]:
@@ -168,4 +148,20 @@ class Graph:
 
         path.reverse()
         return path
+
+    def adjacent_nodes(self, node:Node) -> list[Node]:
+        adjacent_nodes:list[Node] = []
+        for edge in self.edges:
+            if edge.nodes[0] == node:
+                adjacent_nodes.append(edge.nodes[1])
+            elif edge.nodes[1] == node:
+                adjacent_nodes.append(edge.nodes[0])
+        return adjacent_nodes
+
+    def draw(self, window:pg.Surface, font:pg.font.Font):
+        for edge in self.edges:
+            edge.draw(window)
+
+        for node in self.nodes:
+            node.draw(window, font)
 
