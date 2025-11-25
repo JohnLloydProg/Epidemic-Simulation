@@ -1,54 +1,46 @@
+from graphing.core import Node, Edge
+from agents.sector import Firm, Household
 import pygame as pg
 import heapq
-
-class Node:
-    id:int = 0
-    radius:int = 20
-    edges:list['Edge']
-
-    def __init__(self, x:int, y:int):
-        self.id = Node.id
-        Node.id += 1
-        self.edges = []
-        self.pos = (x, y)
-    
-    def draw(self, window:pg.Surface, font:pg.font.Font):
-        pg.draw.circle(window, (255, 0, 0), self.pos, self.radius)
-        pg.draw.circle(window, (0, 0, 0), self.pos, self.radius, 2)
-        text = font.render(str(self.id), False, (0, 0, 0))
-        window.blit(text, text.get_rect(center=self.pos))
-
-
-class Edge:
-    id:int = 0
-    agents:list
-
-    def __init__(self, node_a:'Node', node_b:'Node', travelling_time:int):
-        self.id = Edge.id
-        Edge.id += 1
-        self.nodes = (node_a, node_b)
-        self.agents = []
-        self.travelling_time = travelling_time
-    
-    def draw(self, window:pg.Surface):
-        pg.draw.line(window, (0, 0, 0), self.nodes[0].pos, self.nodes[1].pos, 4)
+import random
 
 
 class Region:
     id:int = 0
+    firms:list[Firm]
+    households:list[Household]
     
-    def __init__(self, nodes:list[Node], no_resi):
+    def __init__(self, nodes:list[Node], area:float=100.0):
         self.nodes = nodes
+        self.area = area
+        self.firms = []
+        self.households = []
+    
+    def add_firm(self):
+        connected_nodes = list(filter(lambda node: len(node.edges) > 0, self.nodes))
+        firm = Firm(random.choice(connected_nodes))
+        self.firms.append(firm)
+
+    def add_household(self):
+        connected_nodes = list(filter(lambda node: len(node.edges) > 0, self.nodes))
+        household = Household(random.choice(connected_nodes))
+        self.households.append(household)
 
 
 class Graph:
     nodes:list['Node']
     edges:list['Edge']
     regions:list['Region']
+    start_drag:tuple[int, int] = None
+    x_temp_offset:int = None
+    y_temp_offset:int = None
+    y_offset:int = 0
+    x_offset:int = 0
 
     def __init__(self):
         self.nodes = []
         self.edges = []
+        self.regions = []
 
     def add_node(self, node:Node):
         self.nodes.append(node)
@@ -56,28 +48,29 @@ class Graph:
     def add_edge(self, travelling_time:int, *args):
         if (len(args) != 2):
             raise ValueError(f"Expected 2 arguments received {len(args)}")
+        node_1 = None
+        node_2 = None
         if (isinstance(args[0], int) and isinstance(args[0], int)):
             id_1, id_2 = args[0], args[1]
             if (id_1 == id_2):
                 raise ValueError("You can't add an edge connecting the same nodes")
-            node_1 = None
-            node_2 = None
             for node in self.nodes:
                 if (id_1 == node.id):
                     node_1 = node
                 elif (id_2 == node.id):
                     node_2 = node
-            if (not node_1 or not node_2):
-                raise ValueError(f"No node has the id of {id_1}/{id_2}")
-            self.edges.append(Edge(node_1, node_2, travelling_time))
         elif (isinstance(args[0], Node) and isinstance(args[1], Node)):
             node_1, node_2 = args[0], args[1]
             if (node_1 == node_2):
                 raise ValueError("You can't add an edge connecting the same nodes")
-            edge = Edge(node_1, node_2, travelling_time)
-            self.edges.append(edge)
-            node_1.edges.append(edge)
-            node_2.edges.append(edge)
+
+        if (not node_1 or not node_2):
+            raise ValueError(f"No node_1 or node_2")    
+        
+        edge = Edge(node_1, node_2, travelling_time)
+        self.edges.append(edge)
+        node_1.edges.append(edge)
+        node_2.edges.append(edge)
 
     def get_edge(self, *args) -> Edge:
         if (len(args) == 1):
@@ -156,10 +149,27 @@ class Graph:
                 adjacent_nodes.append(edge.nodes[0])
         return adjacent_nodes
 
+    def map_dragging(self, event:pg.event.Event):
+        if (event.type == pg.MOUSEBUTTONDOWN):
+            self.start_drag = event.pos
+        elif (event.type == pg.MOUSEBUTTONUP):
+            self.x_offset = self.x_temp_offset
+            self.y_offset = self.y_temp_offset
+            self.start_drag = None
+            self.x_temp_offset = None
+            self.y_temp_offset = None
+        elif (event.type == pg.MOUSEMOTION and self.start_drag):
+            self.x_temp_offset = self.x_offset + (event.pos[0] - self.start_drag[0])
+            self.y_temp_offset = self.y_offset + (event.pos[1] - self.start_drag[1])
+        
+
     def draw(self, window:pg.Surface, font:pg.font.Font):
+        x_offset = self.x_offset if self.x_temp_offset == None else self.x_temp_offset
+        y_offset = self.y_offset if self.y_temp_offset == None else self.y_temp_offset
+        
         for edge in self.edges:
-            edge.draw(window)
+            edge.draw(window, x_offset, y_offset)
 
         for node in self.nodes:
-            node.draw(window, font)
+            node.draw(window, font, x_offset, y_offset)
 

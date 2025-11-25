@@ -1,33 +1,11 @@
 from typing import Callable, Literal
-from graph import Graph, Edge, Node
+from objects import InitialParameters
+from graphing.graph import Graph
+from agents.sector import Household, Firm
+from agents.core import Establishment
+from graphing.core import Edge
 import pygame as pg
 import random
-
-
-def get_agents_from_establishment(establishment:'Establishment') -> list['Agent']:
-    return establishment.agents
-
-
-class Establishment:
-    id:int = 0
-    agents:list['Agent']
-
-    def __init__(self, node:Node):
-        self.id = Establishment.id
-        self.node = node
-        self.agents = []
-        Establishment.id += 1
-
-
-class Household(Establishment):
-    def __init__(self, node):
-        super().__init__(node)
-
-
-class Firm(Establishment):
-    def __init__(self, node):
-        super().__init__(node)
-
 
 
 class Agent:
@@ -36,11 +14,12 @@ class Agent:
     started_travelling:int = 0
     destination:Establishment = None
     current_establishment:Establishment
+    time_infected:int = 0
     path:list[int]
     current_edge:Edge = None
     state:str = 'home'
 
-    def __init__(self, graph:Graph, household:'Household', compartment:str='S'):
+    def __init__(self, graph:Graph, household:Household, compartment:str='S'):
         self.household = household
         self.current_establishment = household
         self.current_node = household.node
@@ -60,6 +39,10 @@ class Agent:
             self.infected_contacts = sum(map(lambda agent: 1 if agent.SEIR_compartment == 'I' else 0, self.current_establishment.agents))
         print(f"left node with id {self.current_node.id}")
         self.path = path.copy()
+    
+    def time_event(self, time:int, initial_parameter:InitialParameters):
+        if (self.SEIR_compartment == 'E' and time - self.time_infected >= initial_parameter.incubation_period):
+            self.SEIR_compartment = 'I'
 
     def traverse_graph(self, time:int, compute_function:Callable, chance_per_contact:float):
         assert self.state == 'travelling', "Can't traverse if not travelling"
@@ -91,6 +74,7 @@ class Agent:
                 print(f"Infected contacts for agent {self.id}: {self.infected_contacts} (overall {chance_infection})")
                 if (random.random() <= chance_infection):
                     self.SEIR_compartment = 'E'
+                    self.time_infected = time
 
 
 class WorkingAgent(Agent):

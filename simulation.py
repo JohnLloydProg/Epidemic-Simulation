@@ -1,7 +1,9 @@
 from objects import InitialParameters, Status
-from graph import Graph, Node, Edge
-from agents.agent import Agent, WorkingAgent, Firm, Household
-from time import time_ns
+from graphing.graph import Graph, Region
+from graphing.core import Node
+from agents.agent import Agent, WorkingAgent
+from agents.sector import Firm, Household
+from time import time_ns, sleep
 import random
 import pygame as pg
         
@@ -42,25 +44,42 @@ def create_test_graph_complex() -> Graph:
     for a, b in edges:
         graph.add_edge(random.randint(10, 20), a, b)
 
+    # Add regions (no overlapping)
+    regions = [
+        [n0, n4, n1], [n1, n4, n2, n5], [n0, n4, n3, n7],
+        [n7, n4, n5, n8], [n5, n6, n8], [n5, n2, n6],
+        [n7, n8, n9], [n3, n7, n9]
+    ]
+
+    for region in regions:
+        region = Region(region)
+        for i in range(random.randint(5, 10)):
+            region.add_household()
+        for i in range(random.randint(1, 5)):
+            region.add_firm()
+        graph.regions.append(region)
+
     return graph
 
 
 class Simulation:
     compartments = ['S', 'E', 'I', 'R']
-    seir_compartments:dict[str, tuple[list[Agent], list[WorkingAgent]]]
+    working_agents:list[WorkingAgent]
+    non_working_agents:list[Agent]
     graph:Graph
     clock:pg.time.Clock
     window:pg.Surface
     font:pg.font.Font
     infection_chances:list[float] = []
-    simulation_ns_per_time_unit = (10**9)//30
+    simulation_ns_per_time_unit = (10**9)//60 # 1/<number of minutes in simulation per 1 second in real time>
 
     def __init__(self, initial_parameters:InitialParameters, headless=True):
         self.initial_parameters = initial_parameters
-        self.seir_compartments = {}
+        self.working_agents = []
+        self.non_working_agents = []
         self.headless = headless
         self.graph = create_test_graph_complex()
-        self.populate_compartments()
+        self.generate_agents()
         
         if (not headless):
             pg.init()
@@ -68,22 +87,28 @@ class Simulation:
             self.window = pg.display.set_mode((1080, 720))
             self.font = pg.font.Font(None, 25)
     
-    def populate_compartments(self):
-        firms = [Firm(random.choice(self.graph.nodes)) for i in range(5)]
-        households = [Household(random.choice(self.graph.nodes)) for i in range(15)]
-        
+    def generate_agents(self):
+        households = []
+        firms = []
+        for region in self.graph.regions:
+            households.extend(region.households)
+            firms.extend(region.firms)
+
         for compartment in self.compartments:
-            non_working_agents = []
-            working_agents = []
             for _ in range(self.initial_parameters.no_per_compartment[compartment]):
                 household = random.choice(households)
                 firm = random.choice(firms)
                 agent = WorkingAgent(self.graph, household, firm, (8, 17), compartment=compartment)
-                working_agents.append(agent)
-            self.seir_compartments[compartment] = (non_working_agents, working_agents)
+                self.working_agents.append(agent)
     
     def generate_status(self) -> Status:
-        status = Status(self.time)
+        seir = {compartment:0 for compartment in self.compartments}
+        for working_agent in self.working_agents:
+            seir[working_agent.SEIR_compartment] += 1
+        for non_working_agent in self.non_working_agents:
+            seir[non_working_agent.SEIR_compartment] += 1
+
+        status = Status(self.time, seir)
         return status
 
     def run(self):
@@ -100,23 +125,29 @@ class Simulation:
                     if event.type == pg.QUIT:
                         running = False 
                         break
+                    self.graph.map_dragging(event)
+
+            if (hour == 0 and minute == 0):
+                status = self.generate_status()
+                status.display_report()
             
-            for tup in self.seir_compartments.values():
-                for working_agent in tup[1]:
-                    if (working_agent.state == 'home'):
-                        if (hour == working_agent.working_hours[0] - 1):
-                            print(f"Agent {working_agent.id}: Going to work")
-                            working_agent.set_path(self.graph.shortest_edge_path(working_agent.household.node.id, working_agent.firm.node.id), working_agent.firm)
-                            working_agent.set_state('travelling')
-                    elif (working_agent.state == 'travelling'):
-                        working_agent.traverse_graph(self.time, compute_for_chance_of_infection, self.initial_parameters.chance_per_contact)
-                    elif (working_agent.state == 'working'):
-                        working_agent.working(hour)
-                for non_working_agent in tup[0]:
-                    if (non_working_agent.state == 'home'):
-                        pass
-                    elif (non_working_agent.state == 'travelling'):
-                        non_working_agent.traverse_graph(self.time, compute_for_chance_of_infection, self.initial_parameters.chance_per_contact)
+            for working_agent in self.working_agents:
+                if (working_agent.state == 'home'):
+                    if (hour == working_agent.working_hours[0] - 1):
+                        print(f"Agent {working_agent.id}: Going to work")
+                        working_agent.set_path(self.graph.shortest_edge_path(working_agent.household.node.id, working_agent.firm.node.id), working_agent.firm)
+                        working_agent.set_state('travelling')
+                elif (working_agent.state == 'travelling'):
+                    working_agent.traverse_graph(self.time, compute_for_chance_of_infection, self.initial_parameters.chance_per_contact)
+                elif (working_agent.state == 'working'):
+                    working_agent.working(hour)
+                working_agent.time_event(self.time, self.initial_parameters)
+            for non_working_agent in self.non_working_agents:
+                if (non_working_agent.state == 'home'):
+                    pass
+                elif (non_working_agent.state == 'travelling'):
+                    non_working_agent.traverse_graph(self.time, compute_for_chance_of_infection, self.initial_parameters.chance_per_contact)
+                non_working_agent.time_event(self.time, self.initial_parameters)
 
             if (not self.headless and time_ns() - draw_time >= (10**9)//60):
                 draw_time = time_ns()
@@ -127,11 +158,13 @@ class Simulation:
                 self.window.blit(text, text.get_rect(topright=(1060, 20)))
                 pg.display.update()
 
-            if (not self.headless and time_ns() - simulation_time >= self.simulation_ns_per_time_unit):
+            if (not self.headless):
+                while (not (time_ns() - simulation_time >= self.simulation_ns_per_time_unit)):
+                    sleep(0.0001)
                 simulation_time = time_ns()
                 self.time += 1
-            elif (self.headless):
+            else:
                 self.time += 1
 
 if __name__ == '__main__':
-    Simulation(InitialParameters(365, {'S':20, 'E':0, 'I':20, 'R':10}), False).run()
+    Simulation(InitialParameters(365, {'S':70, 'E':10, 'I':30, 'R':20}), False).run()
