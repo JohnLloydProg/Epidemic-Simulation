@@ -25,6 +25,7 @@ class Agent:
         self.current_node = household.node
         household.agents.append(self)
         self.SEIR_compartment = compartment
+        self.speed = random.randint(1, 10)
         self.graph = graph
         self.id = Agent.id
         Agent.id += 1
@@ -54,7 +55,7 @@ class Agent:
             return
         
         if (self.current_edge):
-            if (time - self.started_travelling >= self.current_edge.travelling_time):
+            if (time - self.started_travelling >= round(self.current_edge.distance / self.speed)):
                 nodes = self.current_edge.nodes
                 self.current_node = nodes[0] if self.current_node == nodes[1] else nodes[1]
                 self.current_edge.agents.remove(self)

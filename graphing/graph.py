@@ -10,9 +10,8 @@ class Region:
     firms:list[Firm]
     households:list[Household]
     
-    def __init__(self, nodes:list[Node], area:float=100.0):
+    def __init__(self, nodes:list[Node]):
         self.nodes = nodes
-        self.area = area
         self.firms = []
         self.households = []
     
@@ -45,12 +44,12 @@ class Graph:
     def add_node(self, node:Node):
         self.nodes.append(node)
     
-    def add_edge(self, travelling_time:int, *args):
+    def add_edge(self, distance:int, *args):
         if (len(args) != 2):
             raise ValueError(f"Expected 2 arguments received {len(args)}")
         node_1 = None
         node_2 = None
-        if (isinstance(args[0], int) and isinstance(args[0], int)):
+        if (isinstance(args[0], int) and isinstance(args[1], int)):
             id_1, id_2 = args[0], args[1]
             if (id_1 == id_2):
                 raise ValueError("You can't add an edge connecting the same nodes")
@@ -67,10 +66,26 @@ class Graph:
         if (not node_1 or not node_2):
             raise ValueError(f"No node_1 or node_2")    
         
-        edge = Edge(node_1, node_2, travelling_time)
+        edge = Edge(node_1, node_2, distance)
         self.edges.append(edge)
         node_1.edges.append(edge)
         node_2.edges.append(edge)
+    
+    def add_region(self, node_ids:list[int], no_households:int, no_firms:int):
+        region_nodes = []
+
+        for node in self.nodes:
+            if (node.id in node_ids):
+                region_nodes.append(node)
+
+        region = Region(region_nodes)
+        for _ in range(no_households):
+            region.add_household()
+        
+        for _ in range(no_firms):
+            region.add_firm()
+
+        self.regions.append(region)
 
     def get_edge(self, *args) -> Edge:
         if (len(args) == 1):
@@ -116,7 +131,7 @@ class Graph:
 
             for edge in current_node.edges:
                 neighbor = edge.nodes[0] if edge.nodes[1] == current_node else edge.nodes[1]
-                new_dist = dist + edge.travelling_time
+                new_dist = dist + edge.distance
 
                 if new_dist < distances[neighbor.id]:
                     distances[neighbor.id] = new_dist
