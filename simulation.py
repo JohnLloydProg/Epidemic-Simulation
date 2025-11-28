@@ -128,6 +128,8 @@ class Simulation:
             minute = self.time % 60
             hour = (self.time // 60) % 24
             day = self.time // (60 * 24)
+            time_record = time_ns()
+
             if (not self.headless):
                 for event in pg.event.get():
                     if (event.type == pg.QUIT):
@@ -160,7 +162,8 @@ class Simulation:
                 draw_time = time_ns()
                 self.window.fill((255, 255, 255))
                 self.graph.draw(self.window, self.font)
-                text = self.font.render(f"time: {self.time} (Day {day} {hour}:{minute})", False, (0, 0, 0))
+                delta = (time_ns() - time_record) / (10**6)
+                text = self.font.render(f"time: {self.time} (Day {day} {hour}:{minute}) {round(delta, 2)}ms per step", False, (0, 0, 0))
                 pg.draw.circle(self.window, (0, 255, 0), pg.mouse.get_pos(), 5)
                 self.window.blit(text, text.get_rect(topright=(1060, 20)))
                 pg.display.update()
