@@ -1,6 +1,6 @@
 import pandas as pd
-from graphing.core import Node, Edge
-from graphing.graph import Graph, Region
+from graphing.core import Node
+from graphing.graph import Graph
 import random
 
 def load_graph(city_path:str) -> Graph:

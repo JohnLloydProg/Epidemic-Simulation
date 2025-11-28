@@ -1,3 +1,4 @@
+from functools import lru_cache
 from graphing.core import Node, Edge
 from agents.sector import Firm, Household
 import pygame as pg
@@ -111,6 +112,7 @@ class Graph:
     def get_edges(self, node:Node) -> list[Edge]:
         return filter(lambda edge: node in edge.nodes, self.edges)
     
+    @lru_cache(maxsize=None, typed=False)
     def shortest_edge_path(self, start_id: int, end_id: int) -> list[int]:
         if start_id not in [n.id for n in self.nodes] or end_id not in [n.id for n in self.nodes]:
             raise ValueError("Start or end node ID not in graph.")
@@ -167,7 +169,7 @@ class Graph:
     def map_dragging(self, event:pg.event.Event):
         if (event.type == pg.MOUSEBUTTONDOWN):
             self.start_drag = event.pos
-        elif (event.type == pg.MOUSEBUTTONUP):
+        elif (event.type == pg.MOUSEBUTTONUP and self.y_temp_offset and self.x_temp_offset):
             self.x_offset = self.x_temp_offset
             self.y_offset = self.y_temp_offset
             self.start_drag = None

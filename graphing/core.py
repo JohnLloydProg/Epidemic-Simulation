@@ -21,13 +21,12 @@ class Node:
 
 class Edge:
     id:int = 0
-    agents:list
+    no_infected:int = 0
 
     def __init__(self, node_a:'Node', node_b:'Node', distance:int):
         self.id = Edge.id
         Edge.id += 1
         self.nodes = (node_a, node_b)
-        self.agents = []
         self.distance = distance
     
     def draw(self, window:pg.Surface, x_offset:int, y_offset:int):
