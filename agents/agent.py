@@ -1,10 +1,19 @@
 from typing import Callable, Literal
+from functools import lru_cache
 from objects import InitialParameters
 from graphing.graph import Graph
 from agents.sector import Household, Firm
 from agents.core import Establishment
 from graphing.core import Edge
 import random
+
+@lru_cache(maxsize=128, typed=False)
+def compute_for_chance_of_infection(number_of_infected_contacts:int, chance_per_contact:float):
+    chance_of_not_per_contact = 1 - chance_per_contact
+    chance_of_not_infected = 1
+    for _ in range(number_of_infected_contacts):
+        chance_of_not_infected *= chance_of_not_per_contact
+    return round(1 - chance_of_not_infected, 4)
 
 
 class Agent:
@@ -46,7 +55,7 @@ class Agent:
         if (self.SEIR_compartment == 'E' and time - self.time_infected >= initial_parameter.incubation_period):
             self.SEIR_compartment = 'I'
 
-    def traverse_graph(self, time:int, compute_function:Callable, chance_per_contact:float):
+    def traverse_graph(self, time:int, chance_per_contact:float):
         assert self.state == 'travelling', "Can't traverse if not travelling"
         # Selects next point of traversal
         if (self.current_edge == None and self.path and self.destination):
@@ -78,7 +87,7 @@ class Agent:
             elif (isinstance(self, WorkingAgent) and self.destination == self.firm):
                 self.set_state('working')
             if (self.SEIR_compartment == 'S'):
-                chance_infection = compute_function(self.infected_contacts, chance_per_contact)
+                chance_infection = compute_for_chance_of_infection(self.infected_contacts, chance_per_contact)
                 if (random.random() <= chance_infection):
                     self.SEIR_compartment = 'E'
                     self.time_infected = time

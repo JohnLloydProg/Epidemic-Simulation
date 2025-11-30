@@ -29,6 +29,9 @@ class Edge:
         self.nodes = (node_a, node_b)
         self.distance = distance
     
+    def get_adjacent_node(self, current_node:Node) -> Node:
+        return self.nodes[0] if current_node == self.nodes[1] else self.nodes[1]
+    
     def draw(self, window:pg.Surface, x_offset:int, y_offset:int):
         node1_pos = self.nodes[0].pos
         node2_pos = self.nodes[1].pos

@@ -2,6 +2,15 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 
+class SingletonMeta(type):
+    _instances = {}
+
+    def __call__(cls, *args, **kwds):
+        if cls not in cls._instances:
+            cls._instances[cls] = super().__class__(cls, *args, **kwds)
+        return cls._instances[cls]
+
+
 class Status:
     def __init__(self, time:int, SEIR_compartments:dict[str, int]):
         self.time = time
