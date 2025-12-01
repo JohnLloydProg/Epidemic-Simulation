@@ -1,9 +1,7 @@
 from objects import InitialParameters, Status
-from threading import Thread
 from concurrent.futures import ThreadPoolExecutor
 from multiprocessing.managers import BaseManager
-from multiprocessing import Process, Condition, Value
-from functools import lru_cache
+from multiprocessing import Process, Condition, Value, Queue, Lock
 from graphing.mapping import load_graph
 from graphing.graph import Graph, GraphDrawing
 from agents.agent import Agent, WorkingAgent
@@ -11,20 +9,7 @@ from time import time_ns, sleep
 from pympler import asizeof
 import random
 import pygame as pg
-
-@lru_cache(maxsize=128, typed=False)
-def next_occurrence_of_hour(current_time, target_hour):
-    MIN_PER_DAY = 1440
-    current_minute_within_day = current_time % MIN_PER_DAY
-    target_minute_within_day = target_hour * 60
-
-    if target_minute_within_day > current_minute_within_day:
-        # occurs later today
-        return current_time - current_minute_within_day + target_minute_within_day
-    else:
-        # occurs tomorrow
-        return (current_time - current_minute_within_day +
-                MIN_PER_DAY + target_minute_within_day)
+import event as sim_event
 
 
 def printProgressBar (iteration, total, prefix = '', suffix = '', decimals = 1, length = 100, fill = '█', printEnd = "\r"):
@@ -63,7 +48,7 @@ class Simulation:
     window:pg.Surface
     font:pg.font.Font
     infection_chances:list[float] = []
-    simulation_ns_per_time_unit = (10**9)//60 # 1/<number of minutes in simulation per 1 second in real time>
+    simulation_ns_per_time_unit = (10**9)//40 # 1/<number of minutes in simulation per 1 second in real time>
     batch_size:int = 1000
     batches:list[list]
 
@@ -107,12 +92,11 @@ class Simulation:
                     counter = 0
         return batches
     
-    def generate_status(self, time:int) -> Status:
+    def generate_status(self, time:int, queue:Queue) -> Status:
         seir = {compartment:0 for compartment in self.compartments}
-        for working_agent in self.working_agents:
-            seir[working_agent.SEIR_compartment] += 1
-        for non_working_agent in self.non_working_agents:
-            seir[non_working_agent.SEIR_compartment] += 1
+        for i in range(self.total_workers):
+            for agent in queue.get():
+                seir[agent.SEIR_compartment] += 1
 
         status = Status(time, seir)
         return status
@@ -127,8 +111,10 @@ class Simulation:
 
         graph:Graph = self.graph_manager.Graph()
         batches = self.generate_agents()
-        workers = [Process(target=run, args=(batches[i], graph, self.initial_parameters, cond, time, counter, self.total_workers)) for i in range(self.total_workers)]
-    
+        agents_queue = Queue()
+        lock = Lock()
+        workers = [Process(target=run, args=(batches[i], graph, self.initial_parameters, cond, time, counter, self.total_workers, agents_queue, lock)) for i in range(self.total_workers)]
+
         for worker in workers:
             worker.start()
         
@@ -137,6 +123,7 @@ class Simulation:
         sleep(5)
         print('simulation starting')
         graph_drawing = GraphDrawing(graph)
+        latest_status:Status = None
         while (running):
             minute = time.value % 60
             hour = (time.value // 60) % 24
@@ -148,18 +135,25 @@ class Simulation:
                         running = False 
                         break
                     elif (event.type == pg.KEYDOWN):
-                        if (event.key == pg.K_p):
-                            status = self.generate_status(time.value)
-                            Process(None, status.display_report).start()
+                        if (event.key == pg.K_p and latest_status):
+                            Process(None, latest_status.display_report).start()
                     graph_drawing.map_dragging(event)
                 
             with cond:
-                counter.value = 0
+                with lock:
+                    counter.value = 0
                 cond.notify_all()
 
+
                 cond.wait()
-                time.value += 1
-            sleep(0.0001)
+                with lock:
+                    time.value += 1
+            
+            if (hour == 0 and minute == 1):
+                self.generate_status(time, agents_queue)
+
+            while not (time_ns() - simultation_time >= self.simulation_ns_per_time_unit):
+                sleep(0.0001)
             simultation_time = time_ns()
             
             if (not self.headless and time_ns() - draw_time >= (10**9)//60):
@@ -167,7 +161,7 @@ class Simulation:
                 self.window.fill((255, 255, 255))
                 graph_drawing.draw(self.window, self.font)
                 delta = (time_ns() - time_record) / (10**6)
-                text = self.font.render(f"time: {time.value} (Day {day} {hour}:{minute}) {round(delta, 2)}ms per step", False, (0, 0, 0))
+                text = self.font.render(f"time: {time.value} (Day {day} {hour}:{minute}) {round(delta, 2)}ms per step {len(sim_event._events.values())} events", False, (0, 0, 0))
                 pg.draw.circle(self.window, (0, 255, 0), pg.mouse.get_pos(), 5)
                 self.window.blit(text, text.get_rect(topright=(1060, 20)))
                 pg.display.update()
@@ -176,7 +170,7 @@ class Simulation:
             worker.terminate()
             worker.join()
 
-def run(agents:list[Agent], graph:Graph, initial_parameters:InitialParameters, cond, shared_time, counter, total:int,):
+def run(agents:list[Agent], graph:Graph, initial_parameters:InitialParameters, cond, shared_time, counter, total:int, agents_queue:Queue, lock):
     batch_size = 1000
     time = shared_time.value
 
@@ -185,6 +179,8 @@ def run(agents:list[Agent], graph:Graph, initial_parameters:InitialParameters, c
     for agent in agents:
         batches[-1].append(agent)
         batch_counter += 1
+        if (isinstance(agent, WorkingAgent)):
+            agent.ready_for_work()
         if (batch_counter == batch_size):
             batches.append([])
             batch_counter = 0
@@ -199,25 +195,41 @@ def run(agents:list[Agent], graph:Graph, initial_parameters:InitialParameters, c
             hour = (time // 60) % 24
             day = time // (60 * 24)
             
-            def handle(agents:list[Agent]):
-                for agent in agents:
-                    if (agent.state == 'home'):
-                        if (isinstance(agent, WorkingAgent)):
-                            if (hour == agent.working_hours[0] - 1):
-                                agent.set_path(graph.shortest_edge_path(agent.household.node.id, agent.firm.node.id), agent.firm)
-                                agent.set_state('travelling')
-                    elif (agent.state == 'travelling'):
-                        agent.traverse_graph(time, initial_parameters.chance_per_contact)
-                    elif (agent.state == 'working' and isinstance(agent, WorkingAgent)):
-                        agent.working(hour)
-                    agent.time_event(time, initial_parameters)
+            def go_work(agent:WorkingAgent):
+                agent.go_work(time)
+            
+            def go_home(agent:Agent):
+                agent.go_home(time)
+            
+            def traverse(agent:Agent):
+                agent.traverse_graph(time, initial_parameters)
+            
+            def infected(agent:Agent):
+                agent.SEIR_compartment = 'I'
         
             time_record = time_ns()
-            executor.map(handle, batches)
+            for event in sim_event.get(time):
+                if (event.type == sim_event.AGENT_GO_WORK):
+                    executor.map(go_work, event.agents)
+                elif (event.type == sim_event.AGENT_TRAVERSE):
+                    executor.map(traverse, event.agents)
+                elif (event.type == sim_event.AGENT_GO_HOME):
+                    executor.map(go_home, event.agents)
+                elif (event.type == sim_event.AGENT_INFECTED):
+                    executor.map(infected, event.agents)
+            
+            if (hour == 0 and minute == 0):
+                print('events', asizeof.asizeof(sim_event._events))
+                agents_to_send = []
+                for batch in batches:
+                    agents_to_send.extend(batch)
+                print('list', asizeof.asizeof(agents_to_send))
+                agents_queue.put(agents_to_send)
 
-            with cond:
+            with lock:
                 counter.value += 1
-                if (counter.value == total):
+            if (counter.value == total):
+                with cond:
                     cond.notify()
 
 
