@@ -49,7 +49,7 @@ class Agent:
         self.current_establishment = household
         self.current_node = household.node
         if (compartment == 'I'):
-            self.current_establishment.no_infected.value += 1
+            self.current_establishment.no_infected += 1
         self.SEIR_compartment = compartment
         self.speed = random.randint(1, 10)
         self.graph = graph
@@ -62,9 +62,9 @@ class Agent:
     def set_path(self, path:list[int], destination:'Establishment'):
         self.destination = destination
         if (self.SEIR_compartment == 'I'):
-            self.current_establishment.no_infected.value -= 1
+            self.current_establishment.no_infected -= 1
         elif (self.SEIR_compartment == 'S'):
-            self.infected_contacts = self.current_establishment.no_infected.value
+            self.infected_contacts = self.current_establishment.no_infected
         self.path = path.copy()
     
     def time_event(self, time:int, initial_parameter:InitialParameters):
@@ -84,9 +84,9 @@ class Agent:
                 nodes = self.current_edge.nodes
                 self.current_node = nodes[0] if self.current_node == nodes[1] else nodes[1]
                 if (self.SEIR_compartment == 'I'):
-                    self.current_edge.no_infected.value -= 1
+                    self.current_edge.no_infected -= 1
                 elif (self.SEIR_compartment == 'S'):
-                    self.infected_contacts += self.current_edge.no_infected.value
+                    self.infected_contacts += self.current_edge.no_infected
                 self.current_edge = None
             else:
                 return
@@ -94,7 +94,7 @@ class Agent:
         if (self.current_edge == None and self.path and self.destination):
             self.current_edge = self.graph.get_edge(self.path.pop(0))
             if (self.SEIR_compartment == 'I'):
-                self.current_edge.no_infected.value += 1
+                self.current_edge.no_infected += 1
             self.started_travelling = time
             self.travel_time = round(self.current_edge.distance / self.speed)
             event.emit(time + self.travel_time, event.AGENT_TRAVERSE, self)
@@ -103,7 +103,7 @@ class Agent:
         if (self.current_node == self.destination.node):
             self.current_establishment = self.destination
             if (self.SEIR_compartment == 'I'):
-                self.destination.no_infected.value += 1
+                self.destination.no_infected += 1
             if (self.destination == self.household):
                 self.set_state('home')
                 if (isinstance(self, WorkingAgent)):
@@ -124,8 +124,6 @@ class WorkingAgent(Agent):
         super().__init__(graph, household, compartment)
         self.firm = firm
         self.working_hours = working_hours
-    
-    def ready_for_work(self):
         event.emit((self.working_hours[0] - 1)*60, event.AGENT_GO_WORK, self)
     
     def go_work(self, time:int):

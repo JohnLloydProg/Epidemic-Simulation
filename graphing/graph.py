@@ -33,6 +33,11 @@ class Graph():
     nodes:list['Node']
     edges:list['Edge']
     regions:list['Region']
+    start_drag:tuple[int, int] = None
+    x_temp_offset:int = None
+    y_temp_offset:int = None
+    y_offset:int = 0
+    x_offset:int = 0
 
     def __init__(self):
         self.nodes = []
@@ -84,12 +89,6 @@ class Graph():
             region.add_firm()
 
         self.regions.append(region)
-    
-    def get_regions(self) -> list[Region]:
-        return self.regions
-
-    def get_nodes(self) -> list[Node]:
-        return self.nodes
 
     def get_edge(self, *args) -> Edge:
         if (len(args) == 1):
@@ -107,14 +106,13 @@ class Graph():
             for edge in self.edges:
                 if (node_1 in edge.nodes and node_2 in edge.nodes):
                     return edge
+                
     def get_node(self, id:int) -> Node:
         for node in self.nodes:
             if (id == node.id):
                 return node
 
-    def get_edges(self, node:Node=None) -> list[Edge]:
-        if (not node):
-            return self.edges
+    def get_edges(self, node:Node) -> list[Edge]:
         return filter(lambda edge: node in edge.nodes, self.edges)
     
     @lru_cache(maxsize=None, typed=False)
@@ -171,17 +169,6 @@ class Graph():
                 adjacent_nodes.append(edge.nodes[0])
         return adjacent_nodes
 
-
-class GraphDrawing:
-    start_drag:tuple[int, int] = None
-    x_temp_offset:int = None
-    y_temp_offset:int = None
-    y_offset:int = 0
-    x_offset:int = 0
-
-    def __init__(self, graph:Graph):
-        self.graph = graph
-
     def map_dragging(self, event:pg.event.Event):
         if (event.type == pg.MOUSEBUTTONDOWN):
             self.start_drag = event.pos
@@ -200,9 +187,9 @@ class GraphDrawing:
         x_offset = self.x_offset if self.x_temp_offset == None else self.x_temp_offset
         y_offset = self.y_offset if self.y_temp_offset == None else self.y_temp_offset
         
-        for edge in self.graph.get_edges():
+        for edge in self.edges:
             edge.draw(window, x_offset, y_offset)
 
-        for node in self.graph.get_nodes():
+        for node in self.nodes:
             node.draw(window, font, x_offset, y_offset)
 
