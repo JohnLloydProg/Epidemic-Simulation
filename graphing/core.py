@@ -21,12 +21,13 @@ class Node:
 
 class Edge:
     id:int = 0
-    no_infected:int = 0
+    agents:list
 
     def __init__(self, node_a:'Node', node_b:'Node', distance:int):
         self.id = Edge.id
         Edge.id += 1
         self.nodes = (node_a, node_b)
+        self.agents = []
         self.distance = distance
     
     def get_adjacent_node(self, current_node:Node) -> Node:

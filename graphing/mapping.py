@@ -18,7 +18,7 @@ def load_graph() -> Graph:
     
     for i in range(len(edges)):
         edge_xl = edges.iloc[i]
-        graph.add_edge(random.randint(10, 40), int(edge_xl['Node 1'] - 1), int(edge_xl['Node 2'] - 1))
+        graph.add_edge(int(edge_xl['Distance (m)']), int(edge_xl['Node 1'] - 1), int(edge_xl['Node 2'] - 1))
     
     regions = pd.read_excel(f'{city_path}/regions.xlsx', index_col=0)
     regions[['Map edge nodes within the region', 'Artifical Nodes within the region', 'Street Nodes within the Region']] = regions[['Map edge nodes within the region', 'Artifical Nodes within the region', 'Street Nodes within the Region']].astype(str)

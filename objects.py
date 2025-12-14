@@ -38,10 +38,21 @@ class Status:
 class InitialParameters:
     income_tax:float = 0.1
     vat:float = 0.12
+    contact_range:int = 4
 
-    def __init__(self, duration:int, no_per_comparment:dict[str, int], chance_per_contact:float=0.1, incubation_period_in_hours:int=1):
-        self.incubation_period = incubation_period_in_hours * 60
+    def __init__(self, duration:int, no_per_comparment:dict[str, int], chance_per_contact_on_edge:tuple[float, float]=(0.04, 0.02), chance_per_contact_on_establishment:tuple[float, float]=(0.1, 0.05), incubation_period_in_hours:tuple[int, int]=(12, 5)):
+        self.incubation_period_in_hours = incubation_period_in_hours
         self.duration = duration
         self.no_per_compartment = no_per_comparment
-        self.chance_per_contact = chance_per_contact
+        self.chance_per_contact_on_edge = chance_per_contact_on_edge
+        self.chance_per_contact_on_establishment = chance_per_contact_on_establishment
+    
+    def sample_infection_establishment_CPC(self) -> float:
+        return np.random.normal(loc=self.chance_per_contact_on_establishment[0], scale=self.chance_per_contact_on_establishment[1])
+    
+    def sample_infection_edge_CPC(self) -> float:
+        return np.random.normal(loc=self.chance_per_contact_on_edge[0], scale=self.chance_per_contact_on_edge[1])
+
+    def sample_incubation_period(self) -> int:
+        return np.random.normal(loc=self.incubation_period_in_hours[0], scale=self.incubation_period_in_hours[1]) * 60
 

@@ -18,6 +18,7 @@ def get(time:int) -> list[Event]:
     return _events.pop(time, [])
 
 def emit(target_time:int, event_type:int, agent):
+    target_time += target_time % 2
     if (target_time in _events):
         events_in_time = _events.get(target_time)
         for event in events_in_time:
