@@ -2,6 +2,7 @@ AGENT_GO_WORK = 0
 AGENT_TRAVERSE = 1
 AGENT_GO_HOME = 2
 AGENT_INFECTED = 3
+AGENT_REMOVED = 4
 _events:dict[int, list['Event']] = {}
 
 

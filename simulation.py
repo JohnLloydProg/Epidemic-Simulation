@@ -8,6 +8,7 @@ from graphing.core import Edge
 from agents.agent import Agent, WorkingAgent
 from time import time_ns, sleep
 from datetime import datetime
+from dotenv import load_dotenv
 import random
 import pygame as pg
 import event as sim_event
@@ -65,7 +66,7 @@ def get_contact_duration(L: float, r: float, agent_1:Agent, agent_2:Agent) -> fl
 
 
 class Simulation:
-    compartments = ['S', 'E', 'I', 'R']
+    compartments = ['S', 'E', 'I', 'R', 'D']
     agents:list[Agent]
     graph:Graph
     clock:pg.time.Clock
@@ -112,10 +113,15 @@ class Simulation:
 
     def go_work(self, agents:list[WorkingAgent]):
         for agent in agents:
+            # TO ADD: factor to not go to work if infected or symptomatic or scared agent
+            if (agent.SEIR_compartment == 'D'):
+                continue
             agent.go_work(self.time, self.initial_parameters)
         
     def go_home(self, agents:list[Agent]):
         for agent in agents:
+            if (agent.SEIR_compartment == 'D'):
+                continue
             agent.go_home(self.time, self.initial_parameters)
         
     def traverse(self, agents:list[Agent]):
@@ -125,6 +131,16 @@ class Simulation:
     def infected(self, agents:list[Agent]):
         for agent in agents:
             agent.SEIR_compartment = 'I'
+            sim_event.emit(self.time + round(self.initial_parameters.sample_infected_duration()), sim_event.AGENT_REMOVED, agent)
+    
+    def remove_agents(self, agents:list[Agent]):
+        for agent in agents:
+            recover_chance = self.initial_parameters.sample_recovery_chance()
+            # TO ADD: Recovery chance depending on age, health condition, etc.
+            if (random.random() <= recover_chance):
+                agent.SEIR_compartment = 'R'
+            else:
+                agent.SEIR_compartment = 'D'
 
     def contact_pairing(self, edges:list[Edge]):
         for edge in edges:
@@ -191,6 +207,8 @@ class Simulation:
                         agent_executor.map(self.go_home, agent_batches)
                     elif (event.type == sim_event.AGENT_INFECTED):
                         agent_executor.map(self.infected, agent_batches)
+                    elif (event.type == sim_event.AGENT_REMOVED):
+                        agent_executor.map(self.remove_agents, agent_batches)
 
                 edge_batches = [self.graph.edges[i:i+10] for i in range(0, len(self.graph.edges), 10)]
                 if (not self.headless):
@@ -215,6 +233,7 @@ class Simulation:
         
 
 if __name__ == '__main__':
+    load_dotenv()
     print(datetime.now().isoformat())
-    Simulation(InitialParameters(365, {'S':250000, 'E':0, 'I':1000, 'R':0})).run()
+    Simulation(InitialParameters(365, {'S':250000, 'E':0, 'I':1000, 'R':0, 'D':0})).run()
     print(datetime.now().isoformat())

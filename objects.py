@@ -1,5 +1,6 @@
 import matplotlib.pyplot as plt
 import numpy as np
+import os
 
 
 class SingletonMeta(type):
@@ -40,12 +41,14 @@ class InitialParameters:
     vat:float = 0.12
     contact_range:int = 4
 
-    def __init__(self, duration:int, no_per_comparment:dict[str, int], chance_per_contact_on_edge:tuple[float, float]=(0.04, 0.02), chance_per_contact_on_establishment:tuple[float, float]=(0.1, 0.05), incubation_period_in_hours:tuple[int, int]=(12, 5)):
-        self.incubation_period_in_hours = incubation_period_in_hours
+    def __init__(self, duration:int, no_per_comparment:dict[str, int]):
+        self.incubation_period_in_hours = (os.environ.get('INCUBATION_PERIOD_IN_HOURS_MEAN', 12), os.environ.get('INCUBATION_PERIOD_IN_HOURS_STD', 5))
+        self.infected_duration_in_hours = (os.environ.get('INFECTED_DURATION_IN_HOURS_MEAN', 168), os.environ.get('INFECTED_DURATION_IN_HOURS_STD', 24))
         self.duration = duration
         self.no_per_compartment = no_per_comparment
-        self.chance_per_contact_on_edge = chance_per_contact_on_edge
-        self.chance_per_contact_on_establishment = chance_per_contact_on_establishment
+        self.chance_per_contact_on_edge = (os.environ.get('CHANCE_PER_CONTACT_ON_EDGE_MEAN', 0.04), os.environ.get('CHANCE_PER_CONTACT_ON_EDGE_STD', 0.02))
+        self.chance_per_contact_on_establishment = (os.environ.get('CHANCE_PER_CONTACT_ON_ESTABLISHMENT_MEAN', 0.1), os.environ.get('CHANCE_PER_CONTACT_ON_ESTABLISHMENT_STD', 0.05))
+        self.recovery_chance = (os.environ.get('RECOVERY_CHANCE_MEAN', 0.9), os.environ.get('RECOVERY_CHANCE_STD', 0.05))
     
     def sample_infection_establishment_CPC(self) -> float:
         return np.random.normal(loc=self.chance_per_contact_on_establishment[0], scale=self.chance_per_contact_on_establishment[1])
@@ -55,4 +58,10 @@ class InitialParameters:
 
     def sample_incubation_period(self) -> int:
         return np.random.normal(loc=self.incubation_period_in_hours[0], scale=self.incubation_period_in_hours[1]) * 60
+
+    def sample_infected_duration(self) -> int:
+        return np.random.normal(loc=self.infected_duration_in_hours[0], scale=self.infected_duration_in_hours[1]) * 60
+    
+    def sample_recovery_chance(self) -> float:
+        return np.random.normal(loc=self.recovery_chance[0], scale=self.recovery_chance[1])
 
