@@ -10,11 +10,9 @@ import random
 import math
 
 @lru_cache(maxsize=128, typed=False)
-def compute_for_chance_of_infection(number_of_infected_contacts:int, chance_per_contact:float):
-    chance_of_not_per_contact = 1 - chance_per_contact
-    chance_of_not_infected = 1
-    for _ in range(number_of_infected_contacts):
-        chance_of_not_infected *= chance_of_not_per_contact
+def compute_for_chance_of_infection(chance_per_contact:float, contact_rate:float, infected_density:float, duration:int) -> float:
+    total_probability_of_infection = chance_per_contact * contact_rate * infected_density * duration
+    chance_of_not_infected = math.exp(-total_probability_of_infection)
     return round(1 - chance_of_not_infected, 4)
 
 @lru_cache(maxsize=128, typed=False)
@@ -38,6 +36,9 @@ class Agent:
     started_travelling:int = 0
     destination:Establishment = None
     current_establishment:Establishment
+    commuting:bool = True
+    method:str = 'walking'
+    arrival_time:int = 0
     travel_time:int = 0
     time_infected:int = 0
     path:list[int]
@@ -65,8 +66,7 @@ class Agent:
 
         # Check for infection before leaving the establishment
         if (self.SEIR_compartment == 'S'):
-            contacted_agents = [agent for agent in self.current_establishment.agents if agent.SEIR_compartment == 'I']
-            chance_infection = compute_for_chance_of_infection(len(contacted_agents), initial_parameters.sample_infection_establishment_CPC())
+            chance_infection = compute_for_chance_of_infection(initial_parameters.sample_infection_establishment_CPC(), self.current_establishment.contact_rate(), self.current_establishment.infected_density(), time - self.arrival_time)
             if (random.random() <= chance_infection):
                 self.SEIR_compartment = 'E'
                 self.time_infected = time
@@ -102,6 +102,7 @@ class Agent:
         if (self.current_node == self.destination.node):
             self.current_establishment = self.destination
             self.current_establishment.agents.append(self)
+            self.arrival_time = time
             if (self.destination == self.household):
                 self.set_state('home')
                 if (isinstance(self, WorkingAgent)):
@@ -109,12 +110,6 @@ class Agent:
             elif (isinstance(self, WorkingAgent) and self.destination == self.firm):
                 self.set_state('working')
                 event.emit(next_occurrence_of_hour(time, self.working_hours[1]), event.AGENT_GO_HOME, self)
-            if (self.SEIR_compartment == 'S'):
-                chance_infection = compute_for_chance_of_infection(len(self.contacted_agents), initial_parameters.sample_infection_edge_CPC())
-                if (random.random() <= chance_infection):
-                    self.SEIR_compartment = 'E'
-                    self.time_infected = time
-                    event.emit(time + round(initial_parameters.sample_incubation_period()), event.AGENT_INFECTED, self)
 
 
 class WorkingAgent(Agent):

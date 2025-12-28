@@ -140,17 +140,17 @@ class Simulation:
                             futures.append(agent_executor.submit(remove_agents_partial, agent_batch))
 
                 edge_batches = [self.graph.edges[i:i+10] for i in range(0, len(self.graph.edges), 10)]
-                contact_pairing_partial = partial(events.contact_pairing, initial_parameters=self.initial_parameters, time=self.time)
+                edge_infection_partial = partial(events.edge_infection, initial_parameters=self.initial_parameters, time=self.time)
                 if (not self.headless):
                     if (time_ns() - simultation_time >= self.simulation_ns_per_time_unit):
                         for edge_batch in edge_batches:
-                            futures.append(edge_executor.submit(contact_pairing_partial, edge_batch))
+                            futures.append(edge_executor.submit(edge_infection_partial, edge_batch))
                         wait(futures)
                         simultation_time = time_ns()
                         self.time += self.time_step
                 else:
                     for edge_batch in edge_batches:
-                        futures.append(edge_executor.submit(contact_pairing_partial, edge_batch))
+                        futures.append(edge_executor.submit(edge_infection_partial, edge_batch))
                     wait(futures)
                     self.time += self.time_step
                 
