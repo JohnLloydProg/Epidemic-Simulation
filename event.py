@@ -1,3 +1,5 @@
+import os
+
 AGENT_GO_WORK = 0
 AGENT_TRAVERSE = 1
 AGENT_GO_HOME = 2
@@ -19,7 +21,7 @@ def get(time:int) -> list[Event]:
     return _events.pop(time, [])
 
 def emit(target_time:int, event_type:int, agent):
-    target_time += target_time % 2
+    target_time += target_time % int(os.environ.get('TIME_STEP', '2'))
     if (target_time in _events):
         events_in_time = _events.get(target_time)
         for event in events_in_time:

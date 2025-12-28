@@ -1,17 +1,18 @@
 from objects import InitialParameters, Status
-from concurrent.futures import ThreadPoolExecutor
-from functools import lru_cache, partial
+from concurrent.futures import ThreadPoolExecutor, wait
+from functools import partial
 from multiprocessing import Process, Pool
 from graphing.mapping import load_graph
 from graphing.graph import Graph
-from graphing.core import Edge
 from agents.agent import Agent, WorkingAgent
-from time import time_ns, sleep
+from agents import events
+from time import time_ns
 from datetime import datetime
 from dotenv import load_dotenv
 import random
 import pygame as pg
 import event as sim_event
+import os
 
 
 def printProgressBar (iteration, total, prefix = '', suffix = '', decimals = 1, length = 100, fill = '█', printEnd = "\r"):
@@ -35,35 +36,6 @@ def printProgressBar (iteration, total, prefix = '', suffix = '', decimals = 1, 
     if iteration == total: 
         print()
 
-@lru_cache(maxsize=None, typed=False)
-def get_contact_duration(L: float, r: float, agent_1:Agent, agent_2:Agent) -> float:
-    te1 = agent_1.started_travelling + L / agent_1.speed
-    te2 = agent_2.started_travelling + L / agent_2.speed
-    valid_start = max(agent_1.started_travelling, agent_2.started_travelling)
-    valid_end = min(te1, te2)
-    
-    if valid_start >= valid_end:
-        return 0.0 
-    
-    dv = agent_1.speed - agent_2.speed
-    
-    C = agent_1.speed * agent_1.started_travelling - agent_2.speed * agent_2.started_travelling
-    
-    if abs(dv) < 1e-9:
-        dist = abs(agent_1.speed * (agent_2.started_travelling - agent_1.started_travelling))
-        return (valid_end - valid_start) if dist <= r else 0.0
-
-    t_sol_1 = (C + r) / dv
-    t_sol_2 = (C - r) / dv
-    
-    t_contact_start = min(t_sol_1, t_sol_2)
-    t_contact_end = max(t_sol_1, t_sol_2)
-
-    final_start = max(valid_start, t_contact_start)
-    final_end = min(valid_end, t_contact_end)
-    
-    return max(0.0, final_end - final_start)
-
 
 class Simulation:
     compartments = ['S', 'E', 'I', 'R', 'D']
@@ -78,6 +50,7 @@ class Simulation:
 
     def __init__(self, initial_parameters:InitialParameters, headless=True):
         self.initial_parameters = initial_parameters
+        self.time_step = int(os.environ.get('TIME_STEP', '2'))
         self.agents = []
         self.headless = headless
         self.graph = load_graph()
@@ -110,61 +83,6 @@ class Simulation:
             seir[agent.SEIR_compartment] += 1
         status = Status(time, seir)
         return status
-
-    def go_work(self, agents:list[WorkingAgent]):
-        for agent in agents:
-            # TO ADD: factor to not go to work if infected or symptomatic or scared agent
-            if (agent.SEIR_compartment == 'D'):
-                continue
-            agent.go_work(self.time, self.initial_parameters)
-        
-    def go_home(self, agents:list[Agent]):
-        for agent in agents:
-            if (agent.SEIR_compartment == 'D'):
-                continue
-            agent.go_home(self.time, self.initial_parameters)
-        
-    def traverse(self, agents:list[Agent]):
-        for agent in agents:
-            agent.traverse_graph(self.time, self.initial_parameters)
-        
-    def infected(self, agents:list[Agent]):
-        for agent in agents:
-            agent.SEIR_compartment = 'I'
-            sim_event.emit(self.time + round(self.initial_parameters.sample_infected_duration()), sim_event.AGENT_REMOVED, agent)
-    
-    def remove_agents(self, agents:list[Agent]):
-        for agent in agents:
-            recover_chance = self.initial_parameters.sample_recovery_chance()
-            # TO ADD: Recovery chance depending on age, health condition, etc.
-            if (random.random() <= recover_chance):
-                agent.SEIR_compartment = 'R'
-            else:
-                agent.SEIR_compartment = 'D'
-
-    def contact_pairing(self, edges:list[Edge]):
-        for edge in edges:
-            positions = []
-            for agent in edge.agents:
-                positions.append((agent, agent.speed * (self.time - agent.started_travelling)))
-
-            positions.sort(key=lambda x: x[1])
-            for i in range(len(positions)):
-                agent:Agent = positions[i][0]
-                pos_1 = positions[i][1]
-                for j in range(i+1, len(positions)):
-                    contacted_agent:Agent = positions[j][0]
-                    pos_2 = positions[j][1]
-                    if (contacted_agent.SEIR_compartment not in ['I', 'S'] and agent.SEIR_compartment not in ['I', 'S']):
-                        continue
-                    if pos_2 - pos_1 > self.initial_parameters.contact_range:
-                        break
-                    if (get_contact_duration(edge.distance, self.initial_parameters.contact_range, agent, contacted_agent) > 3):
-                        if (contacted_agent not in agent.contacted_agents and contacted_agent.SEIR_compartment == 'I'):
-                            agent.contacted_agents.append(contacted_agent)
-                        if (agent not in contacted_agent.contacted_agents and agent.SEIR_compartment == 'I'):
-                            contacted_agent.contacted_agents.append(agent)
-
             
     
     def run(self):
@@ -180,6 +98,7 @@ class Simulation:
                 hour = (self.time // 60) % 24
                 day = self.time // (60 * 24)
                 time_record = time_ns()
+                futures = []
 
                 if (not self.headless):
                     for event in pg.event.get():
@@ -200,25 +119,40 @@ class Simulation:
                 for event in sim_event.get(self.time):
                     agent_batches = [event.agents[i:i+self.batch_size] for i in range(0, len(event.agents), self.batch_size)]
                     if (event.type == sim_event.AGENT_GO_WORK):
-                        agent_executor.map(self.go_work, agent_batches)
+                        go_work_partial = partial(events.go_work, initial_parameters=self.initial_parameters, time=self.time)
+                        for agent_batch in agent_batches:
+                            futures.append(agent_executor.submit(go_work_partial, agent_batch))
                     elif (event.type == sim_event.AGENT_TRAVERSE):
-                        agent_executor.map(self.traverse, agent_batches)
+                        traverse_partial = partial(events.traverse, initial_parameters=self.initial_parameters, time=self.time)
+                        for agent_batch in agent_batches:
+                            futures.append(agent_executor.submit(traverse_partial, agent_batch))
                     elif (event.type == sim_event.AGENT_GO_HOME):
-                        agent_executor.map(self.go_home, agent_batches)
+                        go_home_partial = partial(events.go_home, initial_parameters=self.initial_parameters, time=self.time)
+                        for agent_batch in agent_batches:
+                            futures.append(agent_executor.submit(go_home_partial, agent_batch))
                     elif (event.type == sim_event.AGENT_INFECTED):
-                        agent_executor.map(self.infected, agent_batches)
+                        infected_partial = partial(events.infected, initial_parameters=self.initial_parameters, time=self.time)
+                        for agent_batch in agent_batches:
+                            futures.append(agent_executor.submit(infected_partial, agent_batch))
                     elif (event.type == sim_event.AGENT_REMOVED):
-                        agent_executor.map(self.remove_agents, agent_batches)
+                        remove_agents_partial = partial(events.remove_agents, initial_parameters=self.initial_parameters)
+                        for agent_batch in agent_batches:
+                            futures.append(agent_executor.submit(remove_agents_partial, agent_batch))
 
                 edge_batches = [self.graph.edges[i:i+10] for i in range(0, len(self.graph.edges), 10)]
+                contact_pairing_partial = partial(events.contact_pairing, initial_parameters=self.initial_parameters, time=self.time)
                 if (not self.headless):
                     if (time_ns() - simultation_time >= self.simulation_ns_per_time_unit):
-                        edge_executor.map(self.contact_pairing, edge_batches)
+                        for edge_batch in edge_batches:
+                            futures.append(edge_executor.submit(contact_pairing_partial, edge_batch))
+                        wait(futures)
                         simultation_time = time_ns()
-                        self.time += 2
+                        self.time += self.time_step
                 else:
-                    edge_executor.map(self.contact_pairing, edge_batches)
-                    self.time += 2
+                    for edge_batch in edge_batches:
+                        futures.append(edge_executor.submit(contact_pairing_partial, edge_batch))
+                    wait(futures)
+                    self.time += self.time_step
                 
                 delta = (time_ns() - time_record) / (10**6)
                 
@@ -235,5 +169,5 @@ class Simulation:
 if __name__ == '__main__':
     load_dotenv()
     print(datetime.now().isoformat())
-    Simulation(InitialParameters(365, {'S':250000, 'E':0, 'I':1000, 'R':0, 'D':0})).run()
+    Simulation(InitialParameters(365, {'S':250000, 'E':0, 'I':1000, 'R':0, 'D':0}), False).run()
     print(datetime.now().isoformat())
