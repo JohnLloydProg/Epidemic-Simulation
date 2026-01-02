@@ -25,30 +25,27 @@ class Node:
 
 class Edge:
     id:int = 0
-    agents:list
+    no_agents:int = 0
+    no_infected_agents:int = 0
     tranportations:list[str] = list(CONTACT_RATES.keys())
 
     def __init__(self, node_a:'Node', node_b:'Node', distance:int):
         self.id = Edge.id
         Edge.id += 1
         self.nodes = (node_a, node_b)
-        self.agents = []
         self.distance = distance
     
     def get_adjacent_node(self, current_node:Node) -> Node:
         return self.nodes[0] if current_node == self.nodes[1] else self.nodes[1]
 
+    # Implement Transportation Method if agent is commuting.
     def contact_rate(self, agent) -> float:
         return  1.0
 
     def infected_density(self) -> float:
-        if (len(self.agents) == 0):
-            return 0.0
-        infected_agents = 0
-        for agent in self.agents:
-            if (agent.SEIR_compartment == 'I'):
-                infected_agents += 1
-        return infected_agents / len(self.agents)
+        if (self.no_agents == 0):
+            return 0
+        return self.no_infected_agents / self.no_agents
     
     def draw(self, window:pg.Surface, x_offset:int, y_offset:int):
         node1_pos = self.nodes[0].pos

@@ -42,17 +42,32 @@ class InitialParameters:
         self.recovery_chance = (float(os.environ.get('RECOVERY_CHANCE_MEAN', 0.9)), float(os.environ.get('RECOVERY_CHANCE_STD', 0.05)))
     
     def sample_infection_establishment_CPC(self) -> float:
-        return np.random.normal(loc=self.chance_per_contact_on_establishment[0], scale=self.chance_per_contact_on_establishment[1])
+        result = -1
+        while (result < 0):
+            result = np.random.normal(loc=self.chance_per_contact_on_establishment[0], scale=self.chance_per_contact_on_establishment[1])
+        return result
     
     def sample_infection_edge_CPC(self) -> float:
-        return np.random.normal(loc=self.chance_per_contact_on_edge[0], scale=self.chance_per_contact_on_edge[1])
+        result = -1
+        while (result < 0):
+            result = np.random.normal(loc=self.chance_per_contact_on_edge[0], scale=self.chance_per_contact_on_edge[1])
+        return result
 
     def sample_incubation_period(self) -> int:
-        return np.random.normal(loc=self.incubation_period_in_hours[0], scale=self.incubation_period_in_hours[1]) * 60
+        result = -1
+        while (result <= 0):
+            result = np.random.normal(loc=self.incubation_period_in_hours[0], scale=self.incubation_period_in_hours[1]) * 60
+        return result
 
     def sample_infected_duration(self) -> int:
-        return np.random.normal(loc=self.infected_duration_in_hours[0], scale=self.infected_duration_in_hours[1]) * 60
+        result = -1
+        while (result <= 0):
+            result = np.random.normal(loc=self.infected_duration_in_hours[0], scale=self.infected_duration_in_hours[1]) * 60
+        return result
     
     def sample_recovery_chance(self) -> float:
-        return np.random.normal(loc=self.recovery_chance[0], scale=self.recovery_chance[1])
+        result = -1
+        while (result < 0):
+            result = np.random.normal(loc=self.recovery_chance[0], scale=self.recovery_chance[1])
+        return result
 

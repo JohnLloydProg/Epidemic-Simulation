@@ -13,7 +13,7 @@ def load_graph() -> Graph:
         node = Node(node_xl['X-Coordinate'], node_xl['Y-Coordinate'])
         graph.add_node(node)
     
-    print("Nodes: ", [node.id for node in graph.nodes])
+    print("Nodes: ", [node for node in graph.nodes])
     edges = pd.read_excel(f"{city_path}/edges.xlsx", index_col=0)
     
     for i in range(len(edges)):
@@ -30,7 +30,7 @@ def load_graph() -> Graph:
         nodes +=  region_xl['Street Nodes within the Region'] if region_xl['Street Nodes within the Region'] != 'nan' else ""
 
         nodes = nodes.strip(",")
-        node_ids = [int(node_id) for node_id in nodes.split(",")]
+        node_ids = [int(node_id) - 1 for node_id in nodes.split(",")]
 
         graph.add_region(node_ids, int(region_xl['Alloted Residential Units']), int(region_xl['Alloted Business Units']))
 

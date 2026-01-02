@@ -32,7 +32,6 @@ def next_occurrence_of_hour(current_time, target_hour):
 
 class Agent:
     id:int = 0
-    contacted_agents:list['Agent']
     started_travelling:int = 0
     destination:Establishment = None
     current_establishment:Establishment
@@ -49,7 +48,9 @@ class Agent:
         self.household = household
         self.current_establishment = household
         self.current_node = household.node
-        self.current_establishment.agents.append(self)
+        self.current_establishment.no_agents += 1
+        if (compartment == 'I'):
+            self.current_establishment.no_infected_agents += 1
         self.SEIR_compartment = compartment
         self.speed = random.randint(200, 300)
         self.graph = graph
@@ -61,7 +62,9 @@ class Agent:
     
     def set_path(self, path:list[int], destination:'Establishment', time:int, initial_parameters:InitialParameters):
         self.destination = destination
-        self.current_establishment.agents.remove(self)
+        self.current_establishment.no_agents -= 1
+        if (self.SEIR_compartment == 'I'):
+            self.current_establishment.no_infected_agents -= 1
         self.contacted_agents = []
 
         # Check for infection before leaving the establishment
@@ -70,46 +73,75 @@ class Agent:
             if (random.random() <= chance_infection):
                 self.SEIR_compartment = 'E'
                 self.time_infected = time
-                event.emit(time + round(initial_parameters.sample_incubation_period()), event.AGENT_INFECTED, self)
+                infection_event = event.AgentEvent(event.AGENT_INFECTED, self)
+                event.emit(time + math.ceil(initial_parameters.sample_incubation_period()), infection_event)
         
         self.path = path.copy()
     
     def go_home(self, time:int, initial_parameters:InitialParameters):
         self.set_path(self.graph.shortest_edge_path(self.current_establishment.node.id, self.household.node.id), self.household, time, initial_parameters)
         self.set_state('travelling')
-        event.emit(time + 1, event.AGENT_TRAVERSE, self)
+        traverse_event = event.AgentEvent(event.AGENT_TRAVERSE, self)
+        event.emit(time + 1, traverse_event)
 
-    def traverse_graph(self, time:int, initial_parameters:InitialParameters):
+    def edge_infection(self, time:int, initial_parameters:InitialParameters, time_step:int):
+        if (self.SEIR_compartment != 'S' or not self.current_edge):
+            return
+
+        if (time + time_step < self.started_travelling + self.travel_time):
+            edge_infection_event = event.AgentEvent(event.EDGE_INFECTION, self)
+            event.emit(time + time_step, edge_infection_event)
+        
+        chance_infection = compute_for_chance_of_infection(initial_parameters.sample_infection_edge_CPC(), self.current_edge.contact_rate(self), self.current_edge.infected_density(), time_step)
+        if (random.random() <= chance_infection):
+            self.SEIR_compartment = 'E'
+            self.time_infected = time
+            infection_event = event.AgentEvent(event.AGENT_INFECTED, self)
+            event.emit(time + math.ceil(initial_parameters.sample_incubation_period()), infection_event)
+
+    def traverse_graph(self, time:int, time_step:int):
         assert self.state == 'travelling', "Can't traverse if not travelling"
         
         if (self.current_edge):
             if (time - self.started_travelling >= self.travel_time):
                 nodes = self.current_edge.nodes
                 self.current_node = nodes[0] if self.current_node == nodes[1] else nodes[1]
-                self.current_edge.agents.remove(self)
+                self.current_edge.no_agents -= 1
+                if (self.SEIR_compartment == 'I'):
+                    self.current_edge.no_infected_agents -= 1
                 self.current_edge = None
             else:
                 return
         
+        # Implement Transportation Method if commuting.
         if (self.current_edge == None and self.path and self.destination):
             self.current_edge = self.graph.get_edge(self.path.pop(0))
-            self.current_edge.agents.append(self)
+            self.current_edge.no_agents += 1
+            if (self.SEIR_compartment == 'I'):
+                self.current_edge.no_infected_agents += 1
             self.started_travelling = time
             self.travel_time = math.ceil(self.current_edge.distance / self.speed)
-            event.emit(time + self.travel_time, event.AGENT_TRAVERSE, self)
+            edge_infection_event = event.AgentEvent(event.EDGE_INFECTION, self)
+            traversal_event = event.AgentEvent(event.AGENT_TRAVERSE, self)
+            event.emit(time + time_step, edge_infection_event)
+            event.emit(time + self.travel_time, traversal_event)
             return
 
         if (self.current_node == self.destination.node):
             self.current_establishment = self.destination
-            self.current_establishment.agents.append(self)
+            self.current_establishment.no_agents += 1
+            if (self.SEIR_compartment == 'I'):
+                self.current_establishment.no_infected_agents += 1
             self.arrival_time = time
             if (self.destination == self.household):
                 self.set_state('home')
                 if (isinstance(self, WorkingAgent)):
-                    event.emit(next_occurrence_of_hour(time, self.working_hours[0]), event.AGENT_GO_WORK, self)
+                    go_work_event = event.AgentEvent(event.AGENT_GO_WORK, self)
+                    event.emit(next_occurrence_of_hour(time, self.working_hours[0] - 1), go_work_event)
             elif (isinstance(self, WorkingAgent) and self.destination == self.firm):
                 self.set_state('working')
-                event.emit(next_occurrence_of_hour(time, self.working_hours[1]), event.AGENT_GO_HOME, self)
+                go_home_event = event.AgentEvent(event.AGENT_GO_HOME, self)
+                event.emit(next_occurrence_of_hour(time, self.working_hours[1]), go_home_event)
 
 
 class WorkingAgent(Agent):
@@ -117,9 +149,9 @@ class WorkingAgent(Agent):
         super().__init__(graph, household, compartment)
         self.firm = firm
         self.working_hours = working_hours
-        event.emit((self.working_hours[0] - 1)*60, event.AGENT_GO_WORK, self)
     
     def go_work(self, time:int, initial_parameters:InitialParameters):
         self.set_path(self.graph.shortest_edge_path(self.household.node.id, self.firm.node.id), self.firm, time, initial_parameters)
         self.set_state('travelling')
-        event.emit(time + 1, event.AGENT_TRAVERSE, self)
+        traversal_event = event.AgentEvent(event.AGENT_TRAVERSE, self)
+        event.emit(time + 1, traversal_event)

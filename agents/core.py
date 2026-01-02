@@ -2,24 +2,20 @@
 
 class Establishment:
     id:int = 0
-    agents:list
+    no_agents:int = 0
+    no_infected_agents:int = 0
     max_contact_rate:float = 10.0
     max_capacity:int = 100
 
     def __init__(self, node):
         self.node = node
         self.id = Establishment.id
-        self.agents = []
         Establishment.id += 1
     
     def contact_rate(self) -> float:
-        return self.max_contact_rate * (len(self.agents) / self.max_capacity)
+        return self.max_contact_rate * (self.no_agents / self.max_capacity)
     
     def infected_density(self) -> float:
-        if (len(self.agents) == 0):
-            return 0.0
-        infected_agents = 0
-        for agent in self.agents:
-            if (agent.SEIR_compartment == 'I'):
-                infected_agents += 1
-        return infected_agents / len(self.agents)
+        if (self.no_agents == 0):
+            return 0
+        return self.no_infected_agents / self.no_agents
