@@ -6,6 +6,9 @@ AGENT_GO_HOME = 2
 AGENT_INFECTED = 3
 AGENT_REMOVED = 4
 EDGE_INFECTION = 5
+FIRM_ACTIVITY_COLLECTION = 6
+AGENT_GO_SHOPPING = 7
+
 _events:dict[int, list['Event']] = {}
 _time_step = 0
 
@@ -18,24 +21,45 @@ class Event:
 
 
 class AgentEvent(Event):
-    _agents:list
+    _agents:dict
 
     def __init__(self, type:int, agent):
         super().__init__(type)
         self._agent = agent
-        self._agents = [agent]
+        self._agents = {agent.id:agent}
     
     def extends(self, event:'AgentEvent'):
         if (self.type != event.type):
             raise ValueError(f"Event type {self.type} can't extend with event type {self.type}. Agent Event extension is only possible with the same types.")
         
-        self._agents.append(event._agent)
+        self._agents[event._agent.id] = event._agent
     
     def get_agents(self) -> list:
-        return self._agents
+        return list(self._agents.values())
     
     def __str__(self) -> str:
         return f"AgentEvent(type={self.type}, agents={self._agents})"
+
+
+class FirmEvent(Event):
+    _firms:dict
+
+    def __init__(self, type:int, firm):
+        super().__init__(type)
+        self._firm = firm
+        self._firms = {firm.id:firm}
+    
+    def extends(self, event:'FirmEvent'):
+        if (self.type != event.type):
+            raise ValueError(f"Event type {self.type} can't extend with event type {self.type}. Firm Event extension is only possible with the same types.")
+        
+        self._firms[event._firm.id] = event._firm
+    
+    def get_firms(self) -> list:
+        return list(self._firms.values())
+    
+    def __str__(self):
+        return f"FirmEvent(type={self.type}, agents={self._firms})"
 
 
 def init():
@@ -65,6 +89,8 @@ def emit(target_time:int, event:Event):
         for target_event in events_in_time:
             if (target_event.type == event.type):
                 if (isinstance(target_event, AgentEvent) and isinstance(event, AgentEvent)):
+                    target_event.extends(event)
+                elif (isinstance(target_event, FirmEvent) and isinstance(event, FirmEvent)):
                     target_event.extends(event)
                 return
         events_in_time.append(event)

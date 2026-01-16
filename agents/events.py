@@ -1,7 +1,11 @@
-from agents.agent import WorkingAgent, Agent, compute_for_chance_of_infection
+from agents.agent import WorkingAgent, Agent, next_occurrence_of_hour
+from simulation import ENHANCED_CQ, MODIFIED_ENHANCED_CQ, GENERAL_CQ, MODIFIED_GENERAL_CQ
+from agents.sector import Firm
+from agents.agent import compute_for_chance_of_infection
 from objects import InitialParameters
 import functools
 from graphing.core import Edge
+import math
 import event
 import random
 import os
@@ -31,43 +35,143 @@ def try_catch_wrapper(func):
     return wrapper
 
 @try_catch_wrapper
-def go_work(agents:list[WorkingAgent], time:int, initial_parameters:InitialParameters):
+def go_work(agents:list[WorkingAgent], time:int, initial_parameters:InitialParameters, quarantine:int|None=None):
     for agent in agents:
         # TO ADD: factor to not go to work if infected or symptomatic or scared agent
-        if (agent.SEIR_compartment == 'D'):
+        if (agent.SEIR_compartment == 'D' or (agent.SEIR_compartment == 'I' and agent.symptomatic) or (quarantine == ENHANCED_CQ and not agent.firm.essential)):
             continue
-        agent.go_work(time, initial_parameters)
+
+        if (not agent.firm):
+            raise ValueError("WorkingAgent has no assigned firm to go to work.")
+
+        agent.set_path(agent.graph.shortest_edge_path(agent.household.node.id, agent.firm.node.id), agent.firm, time, initial_parameters)
+        agent.set_state('travelling')
+        traversal_event = event.AgentEvent(event.AGENT_TRAVERSE, agent)
+        event.emit(time + 1, traversal_event)
 
 @try_catch_wrapper
 def go_home(agents:list[Agent], time:int, initial_parameters:InitialParameters):
     for agent in agents:
         if (agent.SEIR_compartment == 'D'):
             continue
-        agent.go_home(time, initial_parameters)
+
+        agent.set_path(agent.graph.shortest_edge_path(agent.current_establishment.node.id, agent.household.node.id), agent.household, time, initial_parameters)
+        agent.set_state('travelling')
+        traverse_event = event.AgentEvent(event.AGENT_TRAVERSE, agent)
+        event.emit(time + 1, traverse_event)
 
 @try_catch_wrapper
 def traverse(agents:list[Agent], time:int, time_step:int):
     for agent in agents:
-        agent.traverse_graph(time, time_step)
+        assert agent.state == 'travelling', "Can't traverse if not travelling"
+        
+        if (agent.current_edge):
+            if (time - agent.started_travelling >= agent.travel_time):
+                nodes = agent.current_edge.nodes
+                agent.current_node = nodes[0] if agent.current_node == nodes[1] else nodes[1]
+                agent.current_edge.no_agents -= 1
+                if (agent.SEIR_compartment == 'I'):
+                    agent.current_edge.no_infected_agents -= 1
+                agent.current_edge = None
+            else:
+                continue
+        
+        # Implement Transportation Method if commuting.
+        if (agent.current_edge == None and agent.path and agent.destination):
+            agent.current_edge = agent.graph.get_edge(agent.path.pop(0))
+            agent.current_edge.no_agents += 1
+            if (agent.SEIR_compartment == 'I'):
+                agent.current_edge.no_infected_agents += 1
+            agent.started_travelling = time
+            agent.travel_time = math.ceil(agent.current_edge.distance / agent.speed)
+            edge_infection_event = event.AgentEvent(event.EDGE_INFECTION, agent)
+            traversal_event = event.AgentEvent(event.AGENT_TRAVERSE, agent)
+            event.emit(time + time_step, edge_infection_event)
+            event.emit(time + agent.travel_time, traversal_event)
+            continue
+
+        if (agent.current_node == agent.destination.node):
+            agent.current_establishment = agent.destination
+            agent.current_establishment.no_agents += 1
+            if (agent.SEIR_compartment == 'I'):
+                agent.current_establishment.no_infected_agents += 1
+            agent.arrival_time = time
+            if (agent.destination == agent.household):
+                agent.set_state('home')
+                if (isinstance(agent, WorkingAgent)):
+                    go_work_event = event.AgentEvent(event.AGENT_GO_WORK, agent)
+                    event.emit(next_occurrence_of_hour(time, agent.working_hours[0] - 1), go_work_event)
+            elif (isinstance(agent, WorkingAgent) and agent.destination == agent.firm):
+                agent.set_state('working')
+                agent.firm.attend(agent)
+                if (random.random() <= 0.2):
+                    next_event = event.AgentEvent(event.AGENT_GO_SHOPPING, agent)
+                else:
+                    next_event = event.AgentEvent(event.AGENT_GO_HOME, agent)
+                event.emit(next_occurrence_of_hour(time, agent.working_hours[1]), next_event)
+            elif (isinstance(agent.destination, Firm)):
+                agent.set_state('consuming')
+                agent.destination.serve(agent)
+                go_home_event = event.AgentEvent(event.AGENT_GO_HOME, agent)
+                event.emit(time + random.randrange(1, 3) * 60, go_home_event)
 
 @try_catch_wrapper
 def infected(agents:list[Agent], time:int, initial_parameters:InitialParameters):
     for agent in agents:
         agent.SEIR_compartment = 'I'
+        agent.symptomatic = random.random() < 0.6  # 60% chance to be symptomatic
         remove_event = event.AgentEvent(event.AGENT_REMOVED, agent)
         event.emit(time + round(initial_parameters.sample_infected_duration()), remove_event)
 
 @try_catch_wrapper
 def edge_infection(agents:list[Agent], time:int, initial_parameters:InitialParameters, time_step:int):
     for agent in agents:
-        agent.edge_infection(time, initial_parameters, time_step)
+        if (agent.SEIR_compartment != 'S' or not agent.current_edge):
+            continue
+
+        if (time + time_step < agent.started_travelling + agent.travel_time):
+            edge_infection_event = event.AgentEvent(event.EDGE_INFECTION, agent)
+            event.emit(time + time_step, edge_infection_event)
+        
+        chance_infection = compute_for_chance_of_infection(initial_parameters.sample_infection_edge_CPC(), agent.current_edge.contact_rate(agent), agent.current_edge.infected_density(), time_step)
+        if (random.random() <= chance_infection):
+            agent.SEIR_compartment = 'E'
+            agent.time_infected = time
+            infection_event = event.AgentEvent(event.AGENT_INFECTED, agent)
+            event.emit(time + math.ceil(initial_parameters.sample_incubation_period()), infection_event)
 
 @try_catch_wrapper
-def remove_agents(agents:list[Agent], initial_parameters:InitialParameters):
+def remove_agents(agents:list[Agent], time:int, initial_parameters:InitialParameters):
     for agent in agents:
         recover_chance = initial_parameters.sample_recovery_chance()
         # TO ADD: Recovery chance depending on age, health condition, etc.
         if (random.random() <= recover_chance):
             agent.SEIR_compartment = 'R'
+            if (isinstance(agent, WorkingAgent)):
+                go_work_event = event.AgentEvent(event.AGENT_GO_WORK, agent)
+                event.emit(next_occurrence_of_hour(time, agent.working_hours[0] - 1), go_work_event)
         else:
             agent.SEIR_compartment = 'D'
+
+@try_catch_wrapper
+def firm_activity_collection(firms:list[Firm], time:int) -> tuple[int, int]:
+    work_total = 0
+    cons_total = 0
+    for firm in firms:
+        total = firm.get_activity_total()
+        work_total += total[0]
+        cons_total += total[1]
+        next_event = event.FirmEvent(event.FIRM_ACTIVITY_COLLECTION, firm)
+        event.emit(time + 24 * 60, next_event)
+    return (work_total, cons_total)
+
+def shopping_agents(agents:list[Agent], time:int, initial_parameters:InitialParameters):
+    for agent in agents:
+        firms = agent.graph.get_firms()
+        if (isinstance(agent, WorkingAgent)):
+            firms.remove(agent.firm)
+        destination:Firm = random.choice(firms)
+        agent.set_path(agent.graph.shortest_edge_path(agent.current_establishment.node.id, destination.node.id), destination, time, initial_parameters)
+        agent.set_state('travelling')
+        traverse_event = event.AgentEvent(event.AGENT_TRAVERSE, agent)
+        event.emit(time + 1, traverse_event)

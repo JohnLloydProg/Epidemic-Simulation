@@ -1,6 +1,7 @@
 from functools import lru_cache
 from graphing.core import Node, Edge
 from agents.sector import Firm, Household
+import event
 import pygame as pg
 import heapq
 import random
@@ -20,7 +21,7 @@ class Region:
     
     def add_firm(self):
         connected_nodes = list(filter(lambda node: len(node.edges) > 0, self.nodes))
-        firm = Firm(random.choice(connected_nodes))
+        firm = Firm(random.choice(connected_nodes), random.choices(['micro', 'small', 'medium', 'large'], weights=[0.84, 0.13, 0.02, 0.01])[0])
         self.firms.append(firm)
 
     def add_household(self):
@@ -83,6 +84,9 @@ class Graph():
         
         for _ in range(no_firms):
             region.add_firm()
+        
+        for firm in region.firms:
+            event.emit(24 * 60, event.FirmEvent(event.FIRM_ACTIVITY_COLLECTION, firm))
 
         self.regions[region.id] = region
 
@@ -91,6 +95,18 @@ class Graph():
                 
     def get_node(self, id:int) -> Node:
         return self.nodes.get(id)
+
+    def get_firms(self) -> list[Firm]:
+        firms = []
+        for region in self.regions.values():
+            firms.extend(region.firms)
+        return firms
+
+    def get_households(self) -> list[Household]:
+        households = []
+        for region in self.regions.values():
+            households.extend(region.households)
+        return households
     
     @lru_cache(maxsize=None, typed=False)
     def shortest_edge_path(self, start_id: int, end_id: int) -> list[int]:
