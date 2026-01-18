@@ -2,6 +2,7 @@ from typing import Callable, Literal
 import event
 from functools import lru_cache
 from objects import InitialParameters
+from const import QUARANTINE_CR_PERCENTAGE
 from graphing.graph import Graph
 from agents.sector import Household, Firm
 from agents.core import Establishment
@@ -21,27 +22,13 @@ def compute_for_chance_of_infection(chance_per_contact:float, contact_rate:float
         chance_of_not_infected = 0.0
     return round(1 - chance_of_not_infected, 4)
 
-@lru_cache(maxsize=128, typed=False)
-def next_occurrence_of_hour(current_time, target_hour):
-    MIN_PER_DAY = 1440
-    current_minute_within_day = current_time % MIN_PER_DAY
-    target_minute_within_day = target_hour * 60
-
-    if target_minute_within_day > current_minute_within_day:
-        # occurs later today
-        return current_time - current_minute_within_day + target_minute_within_day
-    else:
-        # occurs tomorrow
-        return (current_time - current_minute_within_day +
-                MIN_PER_DAY + target_minute_within_day)
-
 
 class Agent:
     id:int = 0
     started_travelling:int = 0
     destination:Establishment = None
     current_establishment:Establishment
-    commuting:bool = True
+    commuting:bool
     method:str = 'walking'
     arrival_time:int = 0
     travel_time:int = 0
@@ -49,6 +36,7 @@ class Agent:
     path:list[int]
     current_edge:Edge = None
     symptomatic:bool = False
+    tested:bool = False
     state:str = 'home'
 
     def __init__(self, graph:Graph, household:Household, compartment:str='S'):
@@ -68,7 +56,7 @@ class Agent:
     def set_state(self, state:Literal['home', 'travelling', 'working', 'consuming']):
         self.state = state
     
-    def set_path(self, path:list[int], destination:'Establishment', time:int, initial_parameters:InitialParameters):
+    def set_path(self, path:list[int], destination:'Establishment', time:int, initial_parameters:InitialParameters, quarantine_level:int):
         self.destination = destination
         self.current_establishment.no_agents -= 1
         if (self.SEIR_compartment == 'I'):
@@ -77,7 +65,7 @@ class Agent:
 
         # Check for infection before leaving the establishment
         if (self.SEIR_compartment == 'S'):
-            chance_infection = compute_for_chance_of_infection(initial_parameters.sample_infection_establishment_CPC(), self.current_establishment.contact_rate(), self.current_establishment.infected_density(), time - self.arrival_time)
+            chance_infection = compute_for_chance_of_infection(initial_parameters.sample_infection_establishment_CPC(), self.current_establishment.contact_rate() * QUARANTINE_CR_PERCENTAGE.get(quarantine_level, 1), self.current_establishment.infected_density(), time - self.arrival_time)
             if (random.random() <= chance_infection):
                 self.SEIR_compartment = 'E'
                 self.time_infected = time
@@ -90,6 +78,7 @@ class Agent:
 class WorkingAgent(Agent):
     minimum_salary:int
     firm:Firm = None
+    errand_run:bool = False
 
     def __init__(self, graph:Graph, household:Household, working_hours:tuple[int, int], compartment:str = 'S'):
         super().__init__(graph, household, compartment)

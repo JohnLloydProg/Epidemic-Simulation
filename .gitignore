@@ -4,6 +4,7 @@ Include/
 Lib/
 Scripts/
 
+logfile.txt
 pyvenv.cfg
 .env
 

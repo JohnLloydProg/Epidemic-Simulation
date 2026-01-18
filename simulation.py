@@ -1,6 +1,7 @@
 from objects import InitialParameters, Status
+from const import ENHANCED_CQ, MODIFIED_ENHANCED_CQ, GENERAL_CQ, MODIFIED_GENERAL_CQ
 from concurrent.futures import ThreadPoolExecutor, wait, Future
-from functools import partial
+from functools import partial, lru_cache
 from multiprocessing import Process
 from graphing.mapping import load_graph
 from graphing.graph import Graph
@@ -18,11 +19,19 @@ import math
 import os
 import sys
 
-ENHANCED_CQ = 0
-MODIFIED_ENHANCED_CQ = 1
-GENERAL_CQ = 2
-MODIFIED_GENERAL_CQ = 3
+@lru_cache(maxsize=128, typed=False)
+def next_occurrence_of_hour(current_time, target_hour):
+    MIN_PER_DAY = 1440
+    current_minute_within_day = current_time % MIN_PER_DAY
+    target_minute_within_day = target_hour * 60
 
+    if target_minute_within_day > current_minute_within_day:
+        # occurs later today
+        return current_time - current_minute_within_day + target_minute_within_day
+    else:
+        # occurs tomorrow
+        return (current_time - current_minute_within_day +
+                MIN_PER_DAY + target_minute_within_day)
 
 def printProgressBar (iteration, total, prefix = '', suffix = '', decimals = 1, length = 100, fill = '█', printEnd = "\r"):
     """
@@ -45,6 +54,16 @@ def printProgressBar (iteration, total, prefix = '', suffix = '', decimals = 1, 
     if iteration == total: 
         print()
 
+def daily_work(agents:list[Agent], time:int) -> set[int]:
+    will_work = set()
+    for agent in agents:
+        if (agent.SEIR_compartment == 'D' or (agent.SEIR_compartment == 'I' and agent.symptomatic)):
+            continue
+        work_event = sim_event.AgentEvent(sim_event.AGENT_GO_WORK, agent)
+        sim_event.emit(next_occurrence_of_hour(time, agent.working_hours[0] - 1), work_event)
+        will_work.add(agent.id)
+    return will_work
+
 
 class Simulation:
     compartments = ['S', 'E', 'I', 'R', 'D']
@@ -56,13 +75,13 @@ class Simulation:
     infection_chances:list[float] = []
     simulation_ns_per_time_unit = (10**9)//40 # 1/<number of minutes in simulation per 1 second in real time>
     logger = logging.getLogger('simulation')
-    quarantine = None
+    quarantine = MODIFIED_ENHANCED_CQ
     batch_size:int = 1000
     activity = 0
     budget = 0
 
     def __init__(self, initial_parameters:InitialParameters, headless=True):
-        logging.basicConfig(handlers=[logging.FileHandler("logfile.txt"), logging.StreamHandler(sys.stdout)], level=logging.INFO if os.environ.get('DEBUG', 'False') == 'True' else logging.WARNING)
+        logging.basicConfig(handlers=[logging.FileHandler("logfile.txt", 'w'), logging.StreamHandler(sys.stdout)], level=logging.INFO if os.environ.get('DEBUG', 'False') == 'True' else logging.WARNING)
         self.logger.info(f'Initializing simulation with headless = {headless}...')
         sim_event.init()
         self.initial_parameters = initial_parameters
@@ -80,22 +99,15 @@ class Simulation:
             self.font = pg.font.Font(None, 15)
     
     def generate_agents(self):
-        households:list[Household] = []
-        firms:list[Firm] = []
-        for region in self.graph.regions.values():
-            households.extend(region.households)
-            firms.extend(region.firms)
-        
         self.logger.info('generating agents...')
-        for household in households:
+        for household in self.graph.get_households():
             for _ in range(household.resident_count):
                 agent = WorkingAgent(self.graph, household, (8, 17))
                 household.resident_agents.append(agent)
-                work_event = sim_event.AgentEvent(sim_event.AGENT_GO_WORK, agent)
-                sim_event.emit((agent.working_hours[0] - 1)*60, work_event)
                 self.agents.append(agent)
         
         self.logger.info('assigning firms to agents...')
+        firms = self.graph.get_firms()
         for agent in self.agents:
             firm = random.choice(firms)
             while (len(firm.resident_agents) >= firm.max_capacity):
@@ -112,10 +124,9 @@ class Simulation:
         self.logger.info('assigning initial infections...')
         assigned = set()
         for compartment in self.compartments:
-            for _ in range(self.initial_parameters.no_per_compartment.get(compartment, 0)):
-                agent = random.choice(self.agents)
-                while (agent.id in assigned):
-                    agent = random.choice(self.agents)
+            un_assigned_agents = list(filter(lambda agent: agent.id not in assigned, self.agents))
+            agents = random.sample(un_assigned_agents, self.initial_parameters.no_per_compartment.get(compartment, 0))
+            for agent in agents:
                 agent.SEIR_compartment = compartment
                 
                 if (compartment == 'I'):
@@ -143,7 +154,7 @@ class Simulation:
                 event_agents = event.get_agents()
                 agent_batches = [event_agents[i:i+self.batch_size] for i in range(0, len(event_agents), self.batch_size)]
                 if (event.type == sim_event.AGENT_GO_WORK):
-                    go_work_partial = partial(events.go_work, initial_parameters=self.initial_parameters, time=time, quarantine=self.quarantine)
+                    go_work_partial = partial(events.go_work, initial_parameters=self.initial_parameters, time=time, quarantine_level=self.quarantine)
                     for agent_batch in agent_batches:
                         futures.append(executor.submit(go_work_partial, agent_batch))
                 elif (event.type == sim_event.AGENT_TRAVERSE):
@@ -151,7 +162,7 @@ class Simulation:
                     for agent_batch in agent_batches:
                         futures.append(executor.submit(traverse_partial, agent_batch))
                 elif (event.type == sim_event.AGENT_GO_HOME):
-                    go_home_partial = partial(events.go_home, initial_parameters=self.initial_parameters, time=time)
+                    go_home_partial = partial(events.go_home, initial_parameters=self.initial_parameters, time=time, quarantine_level=self.quarantine)
                     for agent_batch in agent_batches:
                         futures.append(executor.submit(go_home_partial, agent_batch))
                 elif (event.type == sim_event.AGENT_INFECTED):
@@ -162,12 +173,12 @@ class Simulation:
                     remove_agents_partial = partial(events.remove_agents, initial_parameters=self.initial_parameters, time=time)
                     for agent_batch in agent_batches:
                         futures.append(executor.submit(remove_agents_partial, agent_batch))
-                elif (event.type == sim_event.EDGE_INFECTION):
-                    edge_infection_partial = partial(events.edge_infection, time=time, initial_parameters=self.initial_parameters, time_step=self.time_step)
+                elif (event.type == sim_event.EDGE_INFECTION and self.quarantine not in {ENHANCED_CQ, MODIFIED_ENHANCED_CQ}):
+                    edge_infection_partial = partial(events.edge_infection, time=time, initial_parameters=self.initial_parameters, time_step=self.time_step, quarantine_level=self.quarantine)
                     for agent_batch in agent_batches:
                         futures.append(executor.submit(edge_infection_partial, agent_batch))
                 elif (event.type == sim_event.AGENT_GO_SHOPPING):
-                    go_shopping_partial = partial(events.shopping_agents, time=time, initial_parameters=self.initial_parameters)
+                    go_shopping_partial = partial(events.shopping_agents, time=time, initial_parameters=self.initial_parameters, quarantine_level=self.quarantine)
                     for agent_batch in agent_batches:
                         futures.append(executor.submit(go_shopping_partial, agent_batch))
             elif (isinstance(event, sim_event.FirmEvent)):
@@ -215,16 +226,44 @@ class Simulation:
                     day_delta = (time_ns() - simulation_day_time) / (10**9)
                     printProgressBar(day, 365, prefix = 'Progress:', suffix = f'Complete {day_delta} seconds per Simulation Day', length = 50)
                     simulation_day_time = time_ns()
-                    if (self.quarantine == ENHANCED_CQ):
+                    
+                    will_work:set[int] = set()
+                    if (not self.quarantine):
+                        agent_batches = [self.agents[i:i+self.batch_size] for i in range(0, len(self.agents), self.batch_size)]
+                        set_for_work_partial = partial(daily_work, time=time)
+                        futures:list[Future] = []
+                        for agent_batch in agent_batches:
+                            futures.append(agent_executor.submit(set_for_work_partial, agent_batch))
+
+                        for future in futures:
+                            will_work.update(future.result())
+                    elif (self.quarantine in {ENHANCED_CQ, MODIFIED_ENHANCED_CQ}):
+                        # implement covid tests
+                        for firm in self.graph.get_firms():
+                            if (firm.essential):
+                                will_work.update(daily_work(firm.resident_agents, time))
+                            else:
+                                if (self.quarantine == MODIFIED_ENHANCED_CQ):
+                                    max_capacity = int(0.5 * firm.max_capacity)
+                                    if (len(firm.resident_agents) < max_capacity):
+                                        agents = firm.resident_agents
+                                    else:
+                                        agents = random.sample(firm.resident_agents, max_capacity)
+                                    will_work.update(daily_work(agents, time))
+
+                    if (self.quarantine in {ENHANCED_CQ, MODIFIED_ENHANCED_CQ}):
                         compartments_not_allowed = {'D', 'I'}
                         for household in self.graph.get_households():
                             if (random.random() < 0.3):
-                                agents = list(filter(lambda agent: (agent.SEIR_compartment not in compartments_not_allowed or (agent.SEIR_compartment == 'I' and not agent.symptomatic)) and not agent.commuting and not agent.firm.essential, household.resident_agents))
+                                agents = list(filter(lambda agent: (agent.SEIR_compartment not in compartments_not_allowed or (agent.SEIR_compartment == 'I' and not agent.symptomatic)), household.resident_agents))
                                 if (not agents):
                                     continue
                                 agent:WorkingAgent = random.choice(agents)
-                                suply_run = sim_event.AgentEvent(sim_event.AGENT_GO_SHOPPING, agent)
-                                sim_event.emit(time + (random.randrange(10, 21) * 60), suply_run)
+                                if (agent.id in will_work):
+                                    agent.errand_run = True
+                                else:
+                                    suply_run = sim_event.AgentEvent(sim_event.AGENT_GO_SHOPPING, agent)
+                                    sim_event.emit(time + (random.randrange(10, 21) * 60), suply_run)
 
 
                 if (not self.headless):
