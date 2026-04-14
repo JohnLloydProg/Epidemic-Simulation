@@ -148,18 +148,6 @@ def remove_agents(agents:list[Agent], time:int, initial_parameters:InitialParame
             agent.SEIR_compartment = 'D'
 
 @try_catch_wrapper
-def firm_activity_collection(firms:list[Firm], time:int) -> tuple[int, int]:
-    work_total = 0
-    cons_total = 0
-    for firm in firms:
-        total = firm.get_activity_total()
-        work_total += total[0]
-        cons_total += total[1]
-        next_event = event.FirmEvent(event.FIRM_ACTIVITY_COLLECTION, firm)
-        event.emit(time + 24 * 60, next_event)
-    return (work_total, cons_total)
-
-@try_catch_wrapper
 def shopping_agents(agents:list[Agent], time:int, initial_parameters:InitialParameters, quarantine_level:int):
     for agent in agents:
         firms = agent.graph.get_firms()

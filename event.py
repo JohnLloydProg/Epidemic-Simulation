@@ -41,27 +41,6 @@ class AgentEvent(Event):
         return f"AgentEvent(type={self.type}, agents={self._agents})"
 
 
-class FirmEvent(Event):
-    _firms:dict
-
-    def __init__(self, type:int, firm):
-        super().__init__(type)
-        self._firm = firm
-        self._firms = {firm.id:firm}
-    
-    def extends(self, event:'FirmEvent'):
-        if (self.type != event.type):
-            raise ValueError(f"Event type {self.type} can't extend with event type {self.type}. Firm Event extension is only possible with the same types.")
-        
-        self._firms[event._firm.id] = event._firm
-    
-    def get_firms(self) -> list:
-        return list(self._firms.values())
-    
-    def __str__(self):
-        return f"FirmEvent(type={self.type}, agents={self._firms})"
-
-
 def init():
     global _time_step
     _time_step = int(os.environ.get('TIME_STEP', '2'))
@@ -89,8 +68,6 @@ def emit(target_time:int, event:Event):
         for target_event in events_in_time:
             if (target_event.type == event.type):
                 if (isinstance(target_event, AgentEvent) and isinstance(event, AgentEvent)):
-                    target_event.extends(event)
-                elif (isinstance(target_event, FirmEvent) and isinstance(event, FirmEvent)):
                     target_event.extends(event)
                 return
         events_in_time.append(event)

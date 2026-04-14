@@ -29,7 +29,6 @@ class Agent:
     destination:Establishment = None
     current_establishment:Establishment
     commuting:bool
-    method:str = 'walking'
     arrival_time:int = 0
     travel_time:int = 0
     time_infected:int = 0
@@ -47,7 +46,6 @@ class Agent:
         if (compartment == 'I'):
             self.current_establishment.no_infected_agents += 1
         self.SEIR_compartment = compartment
-        self.speed = random.randint(200, 300)
         self.commuting = random.random() < 0.8
         self.graph = graph
         self.id = Agent.id

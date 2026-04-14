@@ -84,9 +84,6 @@ class Graph():
         
         for _ in range(no_firms):
             region.add_firm()
-        
-        for firm in region.firms:
-            event.emit(24 * 60, event.FirmEvent(event.FIRM_ACTIVITY_COLLECTION, firm))
 
         self.regions[region.id] = region
 

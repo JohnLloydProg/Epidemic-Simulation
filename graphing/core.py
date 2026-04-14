@@ -1,9 +1,5 @@
 import pygame as pg
 
-CONTACT_RATES = {
-    'jeep':4.5, 'bus':5.0, 'walking':1.0, 'tricycle':2.0
-}
-
 
 class Node:
     id:int = 0
@@ -25,9 +21,7 @@ class Node:
 
 class Edge:
     id:int = 0
-    no_agents:int = 0
-    no_infected_agents:int = 0
-    tranportations:list[str] = list(CONTACT_RATES.keys())
+    no_vehicles = 0
 
     def __init__(self, node_a:'Node', node_b:'Node', distance:int):
         self.id = Edge.id
@@ -36,16 +30,9 @@ class Edge:
         self.distance = distance
     
     def get_adjacent_node(self, current_node:Node) -> Node:
+        if (current_node not in self.nodes):
+            raise ValueError("Current node is not part of this edge.")
         return self.nodes[0] if current_node == self.nodes[1] else self.nodes[1]
-
-    # Implement Transportation Method if agent is commuting.
-    def contact_rate(self, agent) -> float:
-        return  1.0
-
-    def infected_density(self) -> float:
-        if (self.no_agents == 0):
-            return 0
-        return self.no_infected_agents / self.no_agents
     
     def draw(self, window:pg.Surface, x_offset:int, y_offset:int):
         node1_pos = self.nodes[0].pos

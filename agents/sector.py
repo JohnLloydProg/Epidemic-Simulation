@@ -33,14 +33,3 @@ class Firm(Establishment):
         self.customers = []
         self.resident_agents = []
         self.essential = random.random() < 0.3
-    
-    def attend(self, agent):
-        self.worked_agents.append(agent)
-    
-    def serve(self, agent):
-        self.customers.append(agent)
-    
-    def get_activity_total(self) -> tuple[int, int]:
-        total_activity = (sum(map(lambda agent: agent.minimum_salary * 1.5, self.worked_agents)), sum(map(lambda agent: agent.minimum_salary * 1.5 * 0.75, self.customers)))
-        self.worked_agents.clear()
-        return total_activity
