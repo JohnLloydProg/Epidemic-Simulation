@@ -6,14 +6,14 @@ from multiprocessing import Process
 from graphing.mapping import load_graph
 from graphing.graph import Graph
 from agents.agent import Agent, WorkingAgent
-from agents.sector import Firm, Household
+from agents.core import Firm, Household
 from agents import events
 from time import time_ns
 from datetime import datetime
 from dotenv import load_dotenv
 import random
 import pygame as pg
-import event as sim_event
+from sim_event import manager
 import logging
 import math
 import os
@@ -59,8 +59,8 @@ def daily_work(agents:list[Agent], time:int) -> set[int]:
     for agent in agents:
         if (agent.SEIR_compartment == 'D' or (agent.SEIR_compartment == 'I' and agent.symptomatic)):
             continue
-        work_event = sim_event.AgentEvent(sim_event.AGENT_GO_WORK, agent)
-        sim_event.emit(next_occurrence_of_hour(time, agent.working_hours[0] - 1), work_event)
+        work_event = manager.AgentEvent(manager.AGENT_GO_WORK, agent)
+        manager.emit(next_occurrence_of_hour(time, agent.working_hours[0] - 1), work_event)
         will_work.add(agent.id)
     return will_work
 
@@ -83,7 +83,7 @@ class Simulation:
     def __init__(self, initial_parameters:InitialParameters, headless=True):
         logging.basicConfig(handlers=[logging.FileHandler("logfile.txt", 'w'), logging.StreamHandler(sys.stdout)], level=logging.INFO if os.environ.get('DEBUG', 'False') == 'True' else logging.WARNING)
         self.logger.info(f'Initializing simulation with headless = {headless}...')
-        sim_event.init()
+        manager.init()
         self.initial_parameters = initial_parameters
         self.time_step = int(os.environ.get('TIME_STEP', '2'))
         self.agents = []
@@ -131,11 +131,11 @@ class Simulation:
                 
                 if (compartment == 'I'):
                     agent.symptomatic = random.random() < 0.6
-                    remove_event = sim_event.AgentEvent(sim_event.AGENT_REMOVED, agent)
-                    sim_event.emit(math.ceil(self.initial_parameters.sample_infected_duration()), remove_event)
+                    remove_event = manager.AgentEvent(manager.AGENT_REMOVED, agent)
+                    manager.emit(math.ceil(self.initial_parameters.sample_infected_duration()), remove_event)
                 elif (compartment == 'E'):
-                    infection_event = sim_event.AgentEvent(sim_event.AGENT_INFECTED, agent)
-                    sim_event.emit(math.ceil(self.initial_parameters.sample_incubation_period()), infection_event)
+                    infection_event = manager.AgentEvent(manager.AGENT_INFECTED, agent)
+                    manager.emit(math.ceil(self.initial_parameters.sample_incubation_period()), infection_event)
                 
                 assigned.add(agent.id)
     
@@ -149,42 +149,42 @@ class Simulation:
     def handle_events(self, time:int, executor:ThreadPoolExecutor) -> list[Future]:
         futures:list[Future] = []
 
-        for event in sim_event.get(time):
-            if (isinstance(event, sim_event.AgentEvent)):
+        for event in manager.get(time):
+            if (isinstance(event, manager.AgentEvent)):
                 event_agents = event.get_agents()
                 agent_batches = [event_agents[i:i+self.batch_size] for i in range(0, len(event_agents), self.batch_size)]
-                if (event.type == sim_event.AGENT_GO_WORK):
+                if (event.type == manager.AGENT_GO_WORK):
                     go_work_partial = partial(events.go_work, initial_parameters=self.initial_parameters, time=time, quarantine_level=self.quarantine)
                     for agent_batch in agent_batches:
                         futures.append(executor.submit(go_work_partial, agent_batch))
-                elif (event.type == sim_event.AGENT_TRAVERSE):
+                elif (event.type == manager.AGENT_TRAVERSE):
                     traverse_partial = partial(events.traverse, time=time, time_step=self.time_step)
                     for agent_batch in agent_batches:
                         futures.append(executor.submit(traverse_partial, agent_batch))
-                elif (event.type == sim_event.AGENT_GO_HOME):
+                elif (event.type == manager.AGENT_GO_HOME):
                     go_home_partial = partial(events.go_home, initial_parameters=self.initial_parameters, time=time, quarantine_level=self.quarantine)
                     for agent_batch in agent_batches:
                         futures.append(executor.submit(go_home_partial, agent_batch))
-                elif (event.type == sim_event.AGENT_INFECTED):
+                elif (event.type == manager.AGENT_INFECTED):
                     infected_partial = partial(events.infected, initial_parameters=self.initial_parameters, time=time)
                     for agent_batch in agent_batches:
                         futures.append(executor.submit(infected_partial, agent_batch))
-                elif (event.type == sim_event.AGENT_REMOVED):
+                elif (event.type == manager.AGENT_REMOVED):
                     remove_agents_partial = partial(events.remove_agents, initial_parameters=self.initial_parameters, time=time)
                     for agent_batch in agent_batches:
                         futures.append(executor.submit(remove_agents_partial, agent_batch))
-                elif (event.type == sim_event.EDGE_INFECTION and self.quarantine not in {ENHANCED_CQ, MODIFIED_ENHANCED_CQ}):
+                elif (event.type == manager.EDGE_INFECTION and self.quarantine not in {ENHANCED_CQ, MODIFIED_ENHANCED_CQ}):
                     edge_infection_partial = partial(events.edge_infection, time=time, initial_parameters=self.initial_parameters, time_step=self.time_step, quarantine_level=self.quarantine)
                     for agent_batch in agent_batches:
                         futures.append(executor.submit(edge_infection_partial, agent_batch))
-                elif (event.type == sim_event.AGENT_GO_SHOPPING):
+                elif (event.type == manager.AGENT_GO_SHOPPING):
                     go_shopping_partial = partial(events.shopping_agents, time=time, initial_parameters=self.initial_parameters, quarantine_level=self.quarantine)
                     for agent_batch in agent_batches:
                         futures.append(executor.submit(go_shopping_partial, agent_batch))
-            elif (isinstance(event, sim_event.FirmEvent)):
+            elif (isinstance(event, manager.FirmEvent)):
                 event_firms = event.get_firms()
                 firm_batches = [event_firms[i:i+100] for i in range(0, len(event_firms), 100)]
-                if (event.type == sim_event.FIRM_ACTIVITY_COLLECTION):
+                if (event.type == manager.FIRM_ACTIVITY_COLLECTION):
                     firm_activity_partial = partial(events.firm_activity_collection, time=time)
                     activity_collection:list[Future] = []
                     for firm_batch in firm_batches:
@@ -262,8 +262,8 @@ class Simulation:
                                 if (agent.id in will_work):
                                     agent.errand_run = True
                                 else:
-                                    suply_run = sim_event.AgentEvent(sim_event.AGENT_GO_SHOPPING, agent)
-                                    sim_event.emit(time + (random.randrange(10, 21) * 60), suply_run)
+                                    suply_run = manager.AgentEvent(manager.AGENT_GO_SHOPPING, agent)
+                                    manager.emit(time + (random.randrange(10, 21) * 60), suply_run)
 
 
                 if (not self.headless):
@@ -295,7 +295,7 @@ class Simulation:
                     draw_time = time_ns()
                     self.window.fill((255, 255, 255))
                     self.graph.draw(self.window, self.font)
-                    text = self.font.render(f"time: {time} (Day {day} {hour}:{minute}) {round(delta, 2)}ms per step {len(sim_event._events.values())} events", False, (0, 0, 0))
+                    text = self.font.render(f"time: {time} (Day {day} {hour}:{minute}) {round(delta, 2)}ms per step {len(manager._events.values())} events", False, (0, 0, 0))
                     states_text = self.font.render(f"States: {states}", False, (0, 0, 0))
                     self.window.blit(states_text, states_text.get_rect(topleft=(20, 40)))
                     metric_text = self.font.render(f"Activity: {self.activity}, Budget: {self.budget}", False, (0, 0, 0))

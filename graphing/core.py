@@ -1,4 +1,6 @@
 import pygame as pg
+from agents.core import Firm, Household
+import random
 
 
 class Node:
@@ -38,4 +40,27 @@ class Edge:
         node1_pos = self.nodes[0].pos
         node2_pos = self.nodes[1].pos
         pg.draw.line(window, (0, 0, 0), (node1_pos[0] + x_offset, node1_pos[1] + y_offset), (node2_pos[0] + x_offset, node2_pos[1] + y_offset), 2)
+
+
+class Region:
+    id:int = 0
+    firms:list[Firm]
+    households:list[Household]
+    
+    def __init__(self, nodes:list[Node]):
+        self.nodes = nodes
+        self.firms = []
+        self.households = []
+        self.id = Region.id
+        Region.id += 1
+    
+    def add_firm(self):
+        connected_nodes = list(filter(lambda node: len(node.edges) > 0, self.nodes))
+        firm = Firm(random.choice(connected_nodes), random.choices(['micro', 'small', 'medium', 'large'], weights=[0.84, 0.13, 0.02, 0.01])[0])
+        self.firms.append(firm)
+
+    def add_household(self):
+        connected_nodes = list(filter(lambda node: len(node.edges) > 0, self.nodes))
+        household = Household(random.choice(connected_nodes))
+        self.households.append(household)
         

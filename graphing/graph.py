@@ -1,49 +1,24 @@
 from functools import lru_cache
-from graphing.core import Node, Edge
-from agents.sector import Firm, Household
-import event
+from graphing.core import Node, Edge, Region
+from agents.core import Firm, Household
 import pygame as pg
 import heapq
 import random
 
 
-class Region:
-    id:int = 0
-    firms:list[Firm]
-    households:list[Household]
-    
-    def __init__(self, nodes:list[Node]):
-        self.nodes = nodes
-        self.firms = []
-        self.households = []
-        self.id = Region.id
-        Region.id += 1
-    
-    def add_firm(self):
-        connected_nodes = list(filter(lambda node: len(node.edges) > 0, self.nodes))
-        firm = Firm(random.choice(connected_nodes), random.choices(['micro', 'small', 'medium', 'large'], weights=[0.84, 0.13, 0.02, 0.01])[0])
-        self.firms.append(firm)
-
-    def add_household(self):
-        connected_nodes = list(filter(lambda node: len(node.edges) > 0, self.nodes))
-        household = Household(random.choice(connected_nodes))
-        self.households.append(household)
-
-
-class Graph():
+class Graph:
     nodes:dict[int, 'Node']
     edges:dict[int, 'Edge']
-    regions:dict[int, 'Region']
     start_drag:tuple[int, int] = None
     x_temp_offset:int = None
     y_temp_offset:int = None
     y_offset:int = 0
     x_offset:int = 0
 
-    def __init__(self):
+    def __init__(self, layer:str):
+        self.layer = layer
         self.nodes = {}
         self.edges = {}
-        self.regions = {}
 
     def add_node(self, node:Node):
         self.nodes[node.id] = node
@@ -71,84 +46,12 @@ class Graph():
         self.edges[edge.id] = edge
         node_1.edges.append(edge)
         node_2.edges.append(edge)
-    
-    def add_region(self, node_ids:list[int], no_households:int, no_firms:int):
-        region_nodes = []
-
-        for id in node_ids:
-            region_nodes.append(self.nodes.get(id))
-
-        region = Region(region_nodes)
-        for _ in range(no_households):
-            region.add_household()
-        
-        for _ in range(no_firms):
-            region.add_firm()
-
-        self.regions[region.id] = region
 
     def get_edge(self, id) -> Edge:
         return self.edges.get(id)
                 
     def get_node(self, id:int) -> Node:
         return self.nodes.get(id)
-
-    def get_firms(self) -> list[Firm]:
-        firms = []
-        for region in self.regions.values():
-            firms.extend(region.firms)
-        return firms
-
-    def get_households(self) -> list[Household]:
-        households = []
-        for region in self.regions.values():
-            households.extend(region.households)
-        return households
-    
-    @lru_cache(maxsize=None, typed=False)
-    def shortest_edge_path(self, start_id: int, end_id: int) -> list[int]:
-        if start_id not in self.nodes or end_id not in self.nodes:
-            raise ValueError("Start or end node ID not in graph.")
-
-        # Initialize distances and previous edge mapping
-        distances: dict[int, float] = {node: float('inf') for node in self.nodes}
-        previous_edge: dict[int, int | None] = {node: None for node in self.nodes}
-
-        distances[start_id] = 0
-        pq: list[tuple[float, int]] = [(0, start_id)]  # (distance, node_id)
-
-        while pq:
-            dist, current_id = heapq.heappop(pq)
-            current_node = next(n for n in self.nodes.values() if n.id == current_id)
-
-            if dist > distances[current_id]:
-                continue
-
-            for edge in current_node.edges:
-                neighbor = edge.get_adjacent_node(current_node)
-                new_dist = dist + edge.distance
-
-                if new_dist < distances[neighbor.id]:
-                    distances[neighbor.id] = new_dist
-                    previous_edge[neighbor.id] = edge.id
-                    heapq.heappush(pq, (new_dist, neighbor.id))
-
-        # Reconstruct path as list of edge IDs
-        path: list[int] = []
-        current = end_id
-
-        while current != start_id:
-            edge_id = previous_edge[current]
-            if edge_id is None:
-                return []  # no path
-
-            path.append(edge_id)
-            edge = next(e for e in self.edges.values() if e.id == edge_id)
-            # move to the other node in the edge
-            current = edge.nodes[0].id if edge.nodes[1].id == current else edge.nodes[1].id
-
-        path.reverse()
-        return path
 
     def map_dragging(self, event:pg.event.Event):
         if (event.type == pg.MOUSEBUTTONDOWN):
@@ -173,4 +76,40 @@ class Graph():
 
         for node in self.nodes.values():
             node.draw(window, font, x_offset, y_offset)
+
+
+class RegionGraph(Graph):
+    regions:dict[int, 'Region']
+
+    def __init__(self, layer:str):
+        super().__init__(layer)
+        self.regions = {}
+    
+    def add_region(self, node_ids:list[int], no_households:int, no_firms:int):
+        region_nodes = []
+
+        for id in node_ids:
+            region_nodes.append(self.nodes.get(id))
+
+        region = Region(region_nodes)
+        for _ in range(no_households):
+            region.add_household()
+        
+        for _ in range(no_firms):
+            region.add_firm()
+
+        self.regions[region.id] = region
+    
+    def get_firms(self) -> list[Firm]:
+        firms = []
+        for region in self.regions.values():
+            firms.extend(region.firms)
+        return firms
+
+    def get_households(self) -> list[Household]:
+        households = []
+        for region in self.regions.values():
+            households.extend(region.households)
+        return households
+    
 
