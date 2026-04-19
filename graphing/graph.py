@@ -1,13 +1,11 @@
-from functools import lru_cache
 from graphing.core import Node, Edge, Region
 from agents.core import Firm, Household
 import pygame as pg
-import heapq
-import random
 
 
 class Graph:
-    nodes:dict[int, 'Node']
+    edge_counter:int = 0
+    nodes:dict[tuple[str, int], 'Node']
     edges:dict[int, 'Edge']
     start_drag:tuple[int, int] = None
     x_temp_offset:int = None
@@ -20,15 +18,16 @@ class Graph:
         self.nodes = {}
         self.edges = {}
 
-    def add_node(self, node:Node):
+    def add_node(self, x:int, y:int, node_count:int):
+        node = Node(x, y, (self.layer, node_count))
         self.nodes[node.id] = node
-    
+
     def add_edge(self, distance:int, *args):
         if (len(args) != 2):
             raise ValueError(f"Expected 2 arguments received {len(args)}")
         node_1 = None
         node_2 = None
-        if (isinstance(args[0], int) and isinstance(args[1], int)):
+        if (isinstance(args[0], tuple) and isinstance(args[1], tuple)):
             id_1, id_2 = args[0], args[1]
             if (id_1 == id_2):
                 raise ValueError("You can't add an edge connecting the same nodes")
@@ -42,15 +41,16 @@ class Graph:
         if (not node_1 or not node_2):
             raise ValueError(f"No node_1 or node_2")    
         
-        edge = Edge(node_1, node_2, distance)
+        edge = Edge(node_1, node_2, distance, (self.layer, self.edge_counter))
         self.edges[edge.id] = edge
         node_1.edges.append(edge)
         node_2.edges.append(edge)
+        self.edge_counter += 1
 
-    def get_edge(self, id) -> Edge:
+    def get_edge(self, id:tuple[str, int]) -> Edge:
         return self.edges.get(id)
                 
-    def get_node(self, id:int) -> Node:
+    def get_node(self, id:tuple[str, int]) -> Node:
         return self.nodes.get(id)
 
     def map_dragging(self, event:pg.event.Event):
@@ -67,7 +67,10 @@ class Graph:
             self.y_temp_offset = self.y_offset + (event.pos[1] - self.start_drag[1])
         
 
-    def draw(self, window:pg.Surface, font:pg.font.Font):
+    def draw(self, window:pg.Surface, font:pg.font.Font, layer:str):
+        if (self.layer != layer):
+            return
+
         x_offset = self.x_offset if self.x_temp_offset == None else self.x_temp_offset
         y_offset = self.y_offset if self.y_temp_offset == None else self.y_temp_offset
         

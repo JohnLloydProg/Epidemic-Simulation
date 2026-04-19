@@ -4,30 +4,28 @@ import random
 
 
 class Node:
-    id:int = 0
     radius:int = 10
+    agents:list
     edges:list['Edge']
 
-    def __init__(self, x:int, y:int):
-        self.id = Node.id
-        Node.id += 1
+    def __init__(self, x:int, y:int, id:tuple[str, int]):
+        self.id = id
         self.edges = []
+        self.agents = []
         self.pos = (x, y)
     
     def draw(self, window:pg.Surface, font:pg.font.Font, x_offset:int, y_offset:int):
         pg.draw.circle(window, (255, 0, 0), (self.pos[0] + x_offset, self.pos[1] + y_offset), self.radius)
         pg.draw.circle(window, (0, 0, 0), (self.pos[0] + x_offset, self.pos[1] + y_offset), self.radius, 2)
-        text = font.render(str(self.id), False, (0, 0, 0))
+        text = font.render(str(self.id[1]), False, (0, 0, 0))
         window.blit(text, text.get_rect(center=(self.pos[0] + x_offset, self.pos[1] + y_offset)))
 
 
 class Edge:
-    id:int = 0
     no_vehicles = 0
 
-    def __init__(self, node_a:'Node', node_b:'Node', distance:int):
-        self.id = Edge.id
-        Edge.id += 1
+    def __init__(self, node_a:'Node', node_b:'Node', distance:int,  id:tuple[str, int]):
+        self.id = id
         self.nodes = (node_a, node_b)
         self.distance = distance
     

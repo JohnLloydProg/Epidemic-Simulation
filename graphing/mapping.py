@@ -1,29 +1,45 @@
+from functools import lru_cache
+from graphing.core import Node, Edge
+from graphing.graph import Graph, RegionGraph
+from transport.transportation import Route, PublicTransportation, RailTransportation
 import pandas as pd
-from graphing.core import Node
-from graphing.graph import Graph
-import random
-"""
+import heapq
+
+
+class State:
+    def __init__(self, node:Node, cost:float, route:Route | None, previous_state):
+        self.node = node
+        self.cost = cost
+        self.route = route
+        self.previous_state = previous_state
+
+    def __lt__(self, other):
+        return self.cost < other.cost
+
+
 @lru_cache(maxsize=None, typed=False)
-def shortest_edge_path(self, start_id: int, end_id: int, nodes:dict[int, Node], edges:dict[int, Edge]) -> list[int]:
-    if start_id not in nodes or end_id not in nodes:
+def shortest_edge_path(start_id: tuple[str, int], end_id: tuple[str, int], graph:Graph) -> list[Edge]:
+    if start_id not in graph.nodes or end_id not in graph.nodes:
         raise ValueError("Start or end node ID not in graph.")
 
     # Initialize distances and previous edge mapping
-    distances: dict[int, float] = {node: float('inf') for node in nodes}
-    previous_edge: dict[int, int | None] = {node: None for node in nodes}
+    distances: dict[int, float] = {node: float('inf') for node in graph.nodes}
+    previous_edge: dict[int, int | None] = {node: None for node in graph.nodes}
 
     distances[start_id] = 0
     pq: list[tuple[float, int]] = [(0, start_id)]  # (distance, node_id)
 
     while pq:
         dist, current_id = heapq.heappop(pq)
-        current_node = nodes.get(current_id)
+        current_node = graph.get_node(current_id)
 
         if dist > distances[current_id]:
             continue
 
         for edge in current_node.edges:
             neighbor = edge.get_adjacent_node(current_node)
+            if (neighbor.id[0] != graph.layer):
+                continue
             new_dist = dist + edge.distance
 
             if new_dist < distances[neighbor.id]:
@@ -32,7 +48,7 @@ def shortest_edge_path(self, start_id: int, end_id: int, nodes:dict[int, Node], 
                 heapq.heappush(pq, (new_dist, neighbor.id))
 
     # Reconstruct path as list of edge IDs
-    path: list[int] = []
+    path: list[Edge] = []
     current = end_id
 
     while current != start_id:
@@ -40,47 +56,185 @@ def shortest_edge_path(self, start_id: int, end_id: int, nodes:dict[int, Node], 
         if edge_id is None:
             return []  # no path
 
-        path.append(edge_id)
-        edge = edges.get(edge_id)
+        edge = graph.get_edge(edge_id)
+        path.append(edge)
         # move to the other node in the edge
         current = edge.nodes[0].id if edge.nodes[1].id == current else edge.nodes[1].id
 
     path.reverse()
-    return path"""
+    return path
 
-def load_graph() -> tuple[Graph]:
-    city_path = './cities/Mandaluyong'
-    graph = Graph()
-    nodes = pd.read_excel(f"{city_path}/nodes.xlsx", index_col=0)
 
-    for i in range(len(nodes)):
-        node_xl = nodes.iloc[i]
-        node = Node(node_xl['X-Coordinate'], node_xl['Y-Coordinate'])
-        graph.add_node(node)
+@lru_cache(maxsize=None, typed=False)
+def shortest_path(start_node:Node, end_node:Node, routes:list[Route]) -> list[tuple[Node, Route | None]]:
+    open_set = []
+    heapq.heappush(open_set, State(start_node, 0, None, None))
+
+    TRANSFER_PENALTY = 5.0
+
+    visited = {}
+
+    while open_set:
+        current_state:State = heapq.heappop(open_set)
+        current_node:Node = current_state.node
+        current_route:Route | None = current_state.route
+        
+        if current_node == end_node:
+            # Reconstruct and return the raw path
+            path = []
+            curr = current_state
+            while curr is not None:
+                path.append((curr.node, curr.route))
+                curr = curr.previous_state
+            return path[::-1]
+            
+        state_key = (current_node.id, current_route.id if current_route else None)
+        if state_key in visited and visited[state_key] <= current_state.cost:
+            continue
+        visited[state_key] = current_state.cost
+
+        # Scenario A: Walking
+        if current_route is None:
+            # 1. Walk to neighbors
+            for edge in current_node.edges:
+                neighbor_node = edge.get_adjacent_node(current_node)
+                walk_cost = edge.distance
+                heapq.heappush(open_set, State(neighbor_node, None, current_state.cost + walk_cost, current_state))
+                
+            # 2. Board available routes at this node
+            for route in routes:
+                if current_node in route.get_nodes():
+                    heapq.heappush(open_set, State(current_node, route, current_state.cost + TRANSFER_PENALTY, current_state))
+
+        # Scenario B: Riding
+        else:
+            # 1. Stay on vehicle
+            edge_to_take = None
+            for edge in current_route.path:
+                if current_node in edge.nodes:
+                    edge_to_take = edge 
+                    break
+                    
+            if edge_to_take:
+                neighbor_node = edge_to_take.get_adjacent_node(current_node)
+                ride_cost = edge_to_take.distance / current_route.transport_class.speed
+                heapq.heappush(open_set, State(neighbor_node, current_route, current_state.cost + ride_cost, current_state))
+                
+            # 2. Alight (Switch to walking)
+            heapq.heappush(open_set, State(current_node, None, current_state.cost, current_state))
+
+    return []
+
+
+def load_graph() -> tuple[RegionGraph, Graph, list[Route]]:
+    map_path = './map/'
+    city_graph = RegionGraph('city')
+    railway_graph = Graph('railway')
+    graphs: list[Graph] = [city_graph, railway_graph]
+
+    # Load nodes and edges for each graph
+    for graph in graphs:
+        nodes = pd.read_excel(f"{map_path}/{graph.layer}/nodes.xlsx", index_col=0)
+        for i, node_xl in nodes.iterrows():
+            if (pd.isna(i)):
+                print(f"Skipping node with NaN index in {graph.layer} graph.")
+                continue
+            graph.add_node(int(node_xl['X-Coordinate']), int(node_xl['Y-Coordinate']), i)
+        
+        edges = pd.read_excel(f"{map_path}/{graph.layer}/edges.xlsx", index_col=0)
+        for i in range(len(edges)):
+            edge_xl = edges.iloc[i]
+            try:
+                graph.add_edge(int(edge_xl['Distance (m)']), (graph.layer, int(edge_xl['Node 1'])), (graph.layer, int(edge_xl['Node 2'])))
+            except Exception as e:
+                print(f"Error adding edge {i}: {e}")
+                print(f"Node 1: {(graph.layer, int(edge_xl['Node 1']))}, Node 2: {(graph.layer, int(edge_xl['Node 2']))}")
     
-    print("Nodes: ", [node for node in graph.nodes])
-    edges = pd.read_excel(f"{city_path}/edges.xlsx", index_col=0)
-    
-    for i in range(len(edges)):
-        edge_xl = edges.iloc[i]
-        graph.add_edge(int(edge_xl['Distance (m)']), int(edge_xl['Node 1'] - 1), int(edge_xl['Node 2'] - 1))
-    
-    regions = pd.read_excel(f'{city_path}/regions.xlsx', index_col=0)
-    regions[['Map edge nodes within the region', 'Artifical Nodes within the region', 'Street Nodes within the Region']] = regions[['Map edge nodes within the region', 'Artifical Nodes within the region', 'Street Nodes within the Region']].astype(str)
+    # Load regions for the city graph
+    regions = pd.read_excel(f'{map_path}/{city_graph.layer}/regions.xlsx', index_col=0)
+    regions[['Map edge nodes within the region', 'Street Nodes within the Region']] = regions[['Map edge nodes within the region', 'Street Nodes within the Region']].astype(str)
 
     for i in range(len(regions)):
         region_xl = regions.iloc[i]
         nodes = region_xl['Map edge nodes within the region'] if region_xl['Map edge nodes within the region'] != 'nan' else ""
-        nodes += region_xl['Artifical Nodes within the region'] if region_xl['Artifical Nodes within the region'] != 'nan' else ""
         nodes +=  region_xl['Street Nodes within the Region'] if region_xl['Street Nodes within the Region'] != 'nan' else ""
 
         nodes = nodes.strip(",")
-        node_ids = [int(node_id) - 1 for node_id in nodes.split(",")]
+        node_ids = [(city_graph.layer, int(node_id)) for node_id in nodes.split(",")]
+        try:
+            city_graph.add_region(node_ids, 1, 1)
+        except Exception as e:
+            print(f"Error adding region {i}: {e}")
+            print(f"Node IDs: {node_ids}")
+        
+    # Load transfer edges between city and railway graph
+    transfer_edges = pd.read_excel(f"{map_path}/transfer.xlsx", index_col=0)
+    for i in range(len(transfer_edges)):
+        edge_xl = transfer_edges.iloc[i]
+        try:
+            city_node_id = (city_graph.layer, int(edge_xl['Node 1 (Layer 1)']))
+            railway_node_id = (railway_graph.layer, int(edge_xl['Node 2 (Layer 2)']))
+            city_node = city_graph.get_node(city_node_id)
+            railway_node = railway_graph.get_node(railway_node_id)
+            if not city_node or not railway_node:
+                raise ValueError(f"Invalid node IDs for transfer edge: {city_node_id}, {railway_node_id}")
+            transfer_edge = Edge(city_node, railway_node, 50, ('transfer', i))
+            city_graph.edges[transfer_edge.id] = transfer_edge
+            railway_graph.edges[transfer_edge.id] = transfer_edge
+            city_node.edges.append(transfer_edge)
+            railway_node.edges.append(transfer_edge)
+        except Exception as e:
+            print(f"Error adding transfer edge {i}: {e}")
+            print(f"City Node ID: {(city_graph.layer, int(edge_xl['City Node']))}, Railway Node ID: {(railway_graph.layer, int(edge_xl['Railway Node']))}")
+    
+    # Load routes for transportation
+    routes = []
 
-        graph.add_region(node_ids, int(region_xl['Alloted Residential Units']), int(region_xl['Alloted Business Units']))
+    route_data = pd.read_excel(f"{map_path}/{city_graph.layer}/routes.xlsx", index_col=None)
+    for i in range(len(route_data)):
+        route_xl = route_data.iloc[i]
+        node_id = (city_graph.layer, int(route_xl['Node 1']))
+        reverse_node_id = (city_graph.layer, int(route_xl['Node 2']))
+        node = city_graph.get_node(node_id)
+        reverse_node = city_graph.get_node(reverse_node_id)
+        if not node:
+            print(f"Error loading route {i}: Node {node_id} not found in city graph.")
+            continue
+        try:
+            edges = shortest_edge_path((city_graph.layer, int(route_xl['Node 1'])), (city_graph.layer, int(route_xl['Node 2'])), city_graph)
+            reversed_edges = edges.copy()
+            reversed_edges.reverse()
+        except Exception as e:
+            print(f"Error finding path for route {i}: {e}")
+            print(f"Node 1: {(city_graph.layer, int(route_xl['Node 1']))}, Node 2: {(city_graph.layer, int(route_xl['Node 2']))}")
+            continue
+        route = Route(node, edges, city_graph, PublicTransportation)
+        return_route = Route(reverse_node, reversed_edges, city_graph, PublicTransportation)
+        routes.append(route)
+        routes.append(return_route)
 
-    return graph
+    route_data = pd.read_excel(f"{map_path}/{railway_graph.layer}/routes.xlsx", index_col=None)
+    for i in range(len(route_data)):
+        route_xl = route_data.iloc[i]
+        node_id = (railway_graph.layer, int(route_xl['Node 1']))
+        reverse_node_id = (railway_graph.layer, int(route_xl['Node 2']))
+        node = railway_graph.get_node(node_id)
+        reverse_node = railway_graph.get_node(reverse_node_id)
+        if not node:
+            print(f"Error loading route {i}: Node {node_id} not found in railway graph.")
+            continue
+        edge_ids = route_xl['Path'].split(',')
+        edge_ids = [(railway_graph.layer, int(edge_id.strip())) for edge_id in edge_ids]
+        path = [railway_graph.get_edge(edge_id) for edge_id in edge_ids]
+        reverse_path = path.copy()
+        reverse_path.reverse()
+        route = Route(node, path, railway_graph, PublicTransportation)
+        return_route = Route(reverse_node, reverse_path, railway_graph, PublicTransportation)
+        routes.append(route)
+        routes.append(return_route)
+
+    return (city_graph, railway_graph, routes)
 
 
 if __name__ == '__main__':
-    load_graph('./cities/Mandaluyong')
+    load_graph()

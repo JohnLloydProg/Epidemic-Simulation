@@ -4,16 +4,15 @@ from concurrent.futures import ThreadPoolExecutor, wait, Future
 from functools import partial, lru_cache
 from multiprocessing import Process
 from graphing.mapping import load_graph
-from graphing.graph import Graph
+from graphing.graph import Graph, RegionGraph
 from agents.agent import Agent, WorkingAgent
 from agents.core import Firm, Household
-from agents import events
 from time import time_ns
 from datetime import datetime
 from dotenv import load_dotenv
 import random
 import pygame as pg
-from sim_event import manager
+from sim_event import manager, events
 import logging
 import math
 import os
@@ -67,15 +66,16 @@ def daily_work(agents:list[Agent], time:int) -> set[int]:
 
 class Simulation:
     compartments = ['S', 'E', 'I', 'R', 'D']
+    layer = 'city'
     agents:list[Agent]
-    graph:Graph
+    graph:RegionGraph
     clock:pg.time.Clock
     window:pg.Surface
     font:pg.font.Font
     infection_chances:list[float] = []
     simulation_ns_per_time_unit = (10**9)//40 # 1/<number of minutes in simulation per 1 second in real time>
     logger = logging.getLogger('simulation')
-    quarantine = MODIFIED_ENHANCED_CQ
+    quarantine = None
     batch_size:int = 1000
     activity = 0
     budget = 0
@@ -88,7 +88,10 @@ class Simulation:
         self.time_step = int(os.environ.get('TIME_STEP', '2'))
         self.agents = []
         self.headless = headless
-        self.graph = load_graph()
+        environment = load_graph()
+        self.graph = environment[0]
+        self.railway_graph = environment[1]
+        self.routes = environment[2]
         self.generate_agents()
         self.logger.info(f'Simulation initialized with {len(self.agents)} agents.')
         
@@ -125,6 +128,8 @@ class Simulation:
         assigned = set()
         for compartment in self.compartments:
             un_assigned_agents = list(filter(lambda agent: agent.id not in assigned, self.agents))
+            if (len(un_assigned_agents) == 0):
+                break
             agents = random.sample(un_assigned_agents, self.initial_parameters.no_per_compartment.get(compartment, 0))
             for agent in agents:
                 agent.SEIR_compartment = compartment
@@ -153,19 +158,7 @@ class Simulation:
             if (isinstance(event, manager.AgentEvent)):
                 event_agents = event.get_agents()
                 agent_batches = [event_agents[i:i+self.batch_size] for i in range(0, len(event_agents), self.batch_size)]
-                if (event.type == manager.AGENT_GO_WORK):
-                    go_work_partial = partial(events.go_work, initial_parameters=self.initial_parameters, time=time, quarantine_level=self.quarantine)
-                    for agent_batch in agent_batches:
-                        futures.append(executor.submit(go_work_partial, agent_batch))
-                elif (event.type == manager.AGENT_TRAVERSE):
-                    traverse_partial = partial(events.traverse, time=time, time_step=self.time_step)
-                    for agent_batch in agent_batches:
-                        futures.append(executor.submit(traverse_partial, agent_batch))
-                elif (event.type == manager.AGENT_GO_HOME):
-                    go_home_partial = partial(events.go_home, initial_parameters=self.initial_parameters, time=time, quarantine_level=self.quarantine)
-                    for agent_batch in agent_batches:
-                        futures.append(executor.submit(go_home_partial, agent_batch))
-                elif (event.type == manager.AGENT_INFECTED):
+                if (event.type == manager.AGENT_INFECTED):
                     infected_partial = partial(events.infected, initial_parameters=self.initial_parameters, time=time)
                     for agent_batch in agent_batches:
                         futures.append(executor.submit(infected_partial, agent_batch))
@@ -173,28 +166,6 @@ class Simulation:
                     remove_agents_partial = partial(events.remove_agents, initial_parameters=self.initial_parameters, time=time)
                     for agent_batch in agent_batches:
                         futures.append(executor.submit(remove_agents_partial, agent_batch))
-                elif (event.type == manager.EDGE_INFECTION and self.quarantine not in {ENHANCED_CQ, MODIFIED_ENHANCED_CQ}):
-                    edge_infection_partial = partial(events.edge_infection, time=time, initial_parameters=self.initial_parameters, time_step=self.time_step, quarantine_level=self.quarantine)
-                    for agent_batch in agent_batches:
-                        futures.append(executor.submit(edge_infection_partial, agent_batch))
-                elif (event.type == manager.AGENT_GO_SHOPPING):
-                    go_shopping_partial = partial(events.shopping_agents, time=time, initial_parameters=self.initial_parameters, quarantine_level=self.quarantine)
-                    for agent_batch in agent_batches:
-                        futures.append(executor.submit(go_shopping_partial, agent_batch))
-            elif (isinstance(event, manager.FirmEvent)):
-                event_firms = event.get_firms()
-                firm_batches = [event_firms[i:i+100] for i in range(0, len(event_firms), 100)]
-                if (event.type == manager.FIRM_ACTIVITY_COLLECTION):
-                    firm_activity_partial = partial(events.firm_activity_collection, time=time)
-                    activity_collection:list[Future] = []
-                    for firm_batch in firm_batches:
-                        activity_collection.append(executor.submit(firm_activity_partial, firm_batch))
-                    
-                    for activity_future in activity_collection:
-                        work_total, cons_total = activity_future.result()
-                        self.activity += work_total + cons_total
-                        self.budget += (work_total * 0.15) + (cons_total * 0.12)
-        
         return futures
     
     def get_agent_states(self) -> dict[str, int]:
@@ -294,7 +265,7 @@ class Simulation:
                 if (not self.headless and time_ns() - draw_time >= (10**9)//60):
                     draw_time = time_ns()
                     self.window.fill((255, 255, 255))
-                    self.graph.draw(self.window, self.font)
+                    self.graph.draw(self.window, self.font,  self.layer)
                     text = self.font.render(f"time: {time} (Day {day} {hour}:{minute}) {round(delta, 2)}ms per step {len(manager._events.values())} events", False, (0, 0, 0))
                     states_text = self.font.render(f"States: {states}", False, (0, 0, 0))
                     self.window.blit(states_text, states_text.get_rect(topleft=(20, 40)))
@@ -308,5 +279,5 @@ class Simulation:
 if __name__ == '__main__':
     load_dotenv()
     print(datetime.now().isoformat())
-    Simulation(InitialParameters(365, {'I':1000}), False).run()
+    Simulation(InitialParameters(365, {'I':1}), False).run()
     print(datetime.now().isoformat())

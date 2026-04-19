@@ -6,6 +6,8 @@ import sim_event.manager as manager
 import random
 import time
 
+from transport.transportation import Transportation
+
 def timer(func):
     """A decorator that measures the execution time of a function."""
     @functools.wraps(func)  # Preserves the original function's metadata
@@ -30,26 +32,6 @@ def try_catch_wrapper(func):
     return wrapper
 
 @try_catch_wrapper
-def go_work(agents:list[WorkingAgent], time:int, initial_parameters:InitialParameters, quarantine_level:int):
-    for agent in agents:
-        # TO ADD: factor to not go to work if infected or symptomatic or scared agent
-        if (not agent.firm):
-            raise ValueError("WorkingAgent has no assigned firm to go to work.")
-
-        agent.set_path(agent.graph.shortest_edge_path(agent.household.node.id, agent.firm.node.id), agent.firm, time, initial_parameters, quarantine_level)
-        agent.set_state('travelling')
-        traversal_event = manager.AgentEvent(manager.AGENT_TRAVERSE, agent)
-        manager.emit(time + 1, traversal_event)
-
-@try_catch_wrapper
-def go_home(agents:list[Agent], time:int, initial_parameters:InitialParameters, quarantine_level:int):
-    for agent in agents:
-        agent.set_path(agent.graph.shortest_edge_path(agent.current_establishment.node.id, agent.household.node.id), agent.household, time, initial_parameters, quarantine_level)
-        agent.set_state('travelling')
-        traverse_event = manager.AgentEvent(manager.AGENT_TRAVERSE, agent)
-        manager.emit(time + 1, traverse_event)
-
-@try_catch_wrapper
 def infected(agents:list[Agent], time:int, initial_parameters:InitialParameters):
     for agent in agents:
         agent.SEIR_compartment = 'I'
@@ -68,13 +50,30 @@ def remove_agents(agents:list[Agent], time:int, initial_parameters:InitialParame
             agent.SEIR_compartment = 'D'
 
 @try_catch_wrapper
-def shopping_agents(agents:list[Agent], time:int, initial_parameters:InitialParameters, quarantine_level:int):
+def agent_arrival(agents:list[Agent], time:int):
     for agent in agents:
-        firms = agent.graph.get_firms()
-        if (isinstance(agent, WorkingAgent)):
-            firms.remove(agent.firm)
-        destination:Firm = random.choice(firms)
-        agent.set_path(agent.graph.shortest_edge_path(agent.current_establishment.node.id, destination.node.id), destination, time, initial_parameters, quarantine_level)
-        agent.set_state('travelling')
-        traverse_event = manager.AgentEvent(manager.AGENT_TRAVERSE, agent)
-        manager.emit(time + 1, traverse_event)
+        agent.current_node = agent.checkpoints[0].end_node
+        agent.current_node.agents.append(agent)
+        agent.checkpoints.pop(0)
+        agent.move(time)
+
+@try_catch_wrapper
+def transport_arrived(transportations:list[Transportation], time:int):
+    for transport in transportations:
+        for agent in list(transport.agents):
+            if(transport.current_node == agent.checkpoints[0].end_node):
+                agent.alight_transportation()
+                agent.current_node = transport.current_node
+                agent.current_node.agents.append(agent)
+                agent.checkpoints.pop(0)
+                agent.move(time)
+
+        for agent in list(transport.current_node.agents):
+            current_leg = agent.checkpoints[0]
+            if (current_leg.mode == 'ride' and current_leg.route == transport.route):
+                if (not transport.is_full()):
+                    agent.ride_transportation(transport)
+                    agent.set_state('travelling')
+        
+        transport.transport(time)
+
