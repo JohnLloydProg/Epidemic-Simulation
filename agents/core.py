@@ -45,8 +45,6 @@ class Household(Establishment):
 
 
 class Firm(Establishment):
-    worked_agents:list
-    customers:list
     essential:bool
     resident_agents:list
     

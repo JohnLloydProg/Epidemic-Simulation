@@ -7,6 +7,7 @@ class Node:
     radius:int = 10
     agents:list
     edges:list['Edge']
+    max_agents:int = 300
 
     def __init__(self, x:int, y:int, id:tuple[str, int]):
         self.id = id
@@ -15,7 +16,7 @@ class Node:
         self.pos = (x, y)
     
     def draw(self, window:pg.Surface, font:pg.font.Font, x_offset:int, y_offset:int):
-        pg.draw.circle(window, (255, 0, 0), (self.pos[0] + x_offset, self.pos[1] + y_offset), self.radius)
+        pg.draw.circle(window, (int(255 * min(len(self.agents)/self.max_agents, 1)), 255 - int(255 * min(len(self.agents)/self.max_agents, 1)), 0), (self.pos[0] + x_offset, self.pos[1] + y_offset), self.radius)
         pg.draw.circle(window, (0, 0, 0), (self.pos[0] + x_offset, self.pos[1] + y_offset), self.radius, 2)
         text = font.render(str(self.id[1]), False, (0, 0, 0))
         window.blit(text, text.get_rect(center=(self.pos[0] + x_offset, self.pos[1] + y_offset)))
@@ -31,7 +32,8 @@ class Edge:
     
     def get_adjacent_node(self, current_node:Node) -> Node:
         if (current_node not in self.nodes):
-            raise ValueError("Current node is not part of this edge.")
+            raise ValueError(f"Current node {current_node.id} is not part of this edge {self.nodes[0].id}-{self.nodes[1].id}.")
+        
         return self.nodes[0] if current_node == self.nodes[1] else self.nodes[1]
     
     def draw(self, window:pg.Surface, x_offset:int, y_offset:int):

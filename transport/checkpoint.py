@@ -1,5 +1,6 @@
 from graphing.core import Node
 from transport.transportation import Route
+from functools import lru_cache
 from typing import Literal
 
 
@@ -9,7 +10,9 @@ class Checkpoint:
         self.start_node = start_node
         self.end_node = end_node
         self.route = route
-        self.path_nodes = []
+    
+    def __str__(self):
+        return f"{self.mode} from {self.start_node.id} to {self.end_node.id} using route {self.route}"
 
 
 def generate_checkpoints(raw_path: list[tuple]) -> list[Checkpoint]:
@@ -20,7 +23,6 @@ def generate_checkpoints(raw_path: list[tuple]) -> list[Checkpoint]:
     current_route = raw_path[0][1]
     
     current_leg = Checkpoint(mode=current_mode, start_node=raw_path[0][0], end_node=None, route=current_route)
-    current_leg.path_nodes.append(raw_path[0][0])
 
     for i in range(1, len(raw_path)):
         node, route = raw_path[i]
@@ -31,12 +33,10 @@ def generate_checkpoints(raw_path: list[tuple]) -> list[Checkpoint]:
             checkpoints.append(current_leg)
             
             current_leg = Checkpoint(mode=mode, start_node=raw_path[i-1][0], end_node=None, route=route)
-            current_leg.path_nodes.append(raw_path[i-1][0])
             
             current_mode = mode
             current_route = route
             
-        current_leg.path_nodes.append(node)
 
     current_leg.end_node = raw_path[-1][0]
     checkpoints.append(current_leg)

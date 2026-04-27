@@ -1,11 +1,15 @@
 import os
 
 AGENT_GO_WORK = 0
-AGENT_TRAVERSE = 1
+AGENT_ARRIVAL = 1
 AGENT_GO_HOME = 2
 AGENT_INFECTED = 3
 AGENT_REMOVED = 4
 EDGE_INFECTION = 5
+TRANSPORTATION_ARRIVED = 6
+TRANSPORTATION_MOVE = 8
+TRANSPORTATION_SPAWN = 9
+TRANSPORTATION_DESPAWN = 10
 AGENT_GO_SHOPPING = 7
 
 _events:dict[int, list['Event']] = {}
@@ -40,6 +44,48 @@ class AgentEvent(Event):
         return f"AgentEvent(type={self.type}, agents={self._agents})"
 
 
+class RouteEvent(Event):
+    _routes:dict
+
+    def __init__(self, type:int, route):
+        super().__init__(type)
+        self._route = route
+        self._routes = {route.id:route}
+    
+    def extends(self, event:'RouteEvent'):
+        if (self.type != event.type):
+            raise ValueError(f"Event type {self.type} can't extend with event type {self.type}. Route Event extension is only possible with the same types.")
+        
+        self._routes[event._route.id] = event._route
+    
+    def get_routes(self) -> list:
+        return list(self._routes.values())
+    
+    def __str__(self) -> str:
+        return f"RouteEvent(type={self.type}, routes={self._routes})"
+
+
+class TransportationEvent(Event):
+    _transportations:dict
+
+    def __init__(self, type:int, transportation):
+        super().__init__(type)
+        self._transportation = transportation
+        self._transportations = {transportation.id:transportation}
+    
+    def extends(self, event:'TransportationEvent'):
+        if (self.type != event.type):
+            raise ValueError(f"Event type {self.type} can't extend with event type {self.type}. Transportation Event extension is only possible with the same types.")
+        
+        self._transportations[event._transportation.id] = event._transportation
+    
+    def get_transportations(self) -> list:
+        return list(self._transportations.values())
+    
+    def __str__(self) -> str:
+        return f"TransportationEvent(type={self.type}, transportations={self._transportations})"
+
+
 def init():
     global _time_step
     _time_step = int(os.environ.get('TIME_STEP', '2'))
@@ -67,6 +113,10 @@ def emit(target_time:int, event:Event):
         for target_event in events_in_time:
             if (target_event.type == event.type):
                 if (isinstance(target_event, AgentEvent) and isinstance(event, AgentEvent)):
+                    target_event.extends(event)
+                elif (isinstance(target_event, RouteEvent) and isinstance(event, RouteEvent)):
+                    target_event.extends(event)
+                elif (isinstance(target_event, TransportationEvent) and isinstance(event, TransportationEvent)):
                     target_event.extends(event)
                 return
         events_in_time.append(event)

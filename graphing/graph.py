@@ -4,7 +4,7 @@ import pygame as pg
 
 
 class Graph:
-    edge_counter:int = 0
+    edge_counter:int = 1
     nodes:dict[tuple[str, int], 'Node']
     edges:dict[int, 'Edge']
     start_drag:tuple[int, int] = None
