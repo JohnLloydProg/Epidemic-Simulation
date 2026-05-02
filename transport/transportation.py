@@ -11,14 +11,16 @@ class Route:
     id:int = 0
     spawn_time:int
     ordered_nodes:list[Node]
+    transportations:list['RoutedTransportation']
 
-    def __init__(self, spawn_node:Node, path:list[Edge], graph:Graph, transport_class:type['Transportation'], spawn_time:int):
+    def __init__(self, spawn_node:Node, path:list[Edge], graph:Graph, spawn_time:int, peak_spawn:int):
         self.path = path
         self.graph = graph
         self.id = Route.id
-        self.transport_class = transport_class
         self.spawn_time = spawn_time
         self.spawn_node = spawn_node
+        self.peak_spawn = peak_spawn
+        self.transportations = []
         Route.id += 1
         self.ordered_nodes = self.generate_ordered_nodes()
 
@@ -33,9 +35,29 @@ class Route:
     def __str__(self):
         return f"Route {self.id} from {self.spawn_node.id} to {self.path[-1].get_adjacent_node(self.path[-1].nodes[1]).id if self.path else self.spawn_node.id}"
     
-    def generate_transportation(self, current_time:int) -> 'Transportation':
-        manager.emit(current_time + self.spawn_time, manager.RouteEvent(manager.TRANSPORTATION_SPAWN, self))
-        return self.transport_class(current_node=self.spawn_node, route=self)
+    def generate_transportation(self, current_time:int, is_peak_hours:bool) ->list['RoutedTransportation']:
+        spawn_interval = self.spawn_time if not is_peak_hours else self.peak_spawn
+        manager.emit(current_time + spawn_interval, manager.RouteEvent(manager.TRANSPORTATION_SPAWN, self))
+        _transportations = []
+        for i in range(random.randint(2, 3)):
+            speed = 150
+            if (random.random() < 0.5):
+                passenger = random.choice([(10, 10), (12, 12), (15, 15), (15, 20) ])
+                max_passenger = passenger[1]
+                suggested_passenger = passenger[0]
+                method = 'jeep'
+            else:
+                max_passenger = 50
+                suggested_passenger = 40
+                method = 'bus'
+            transportation = RoutedTransportation(method, speed, max_passenger, suggested_passenger, self.spawn_node, self)
+            _transportations.append(transportation)
+            self.transportations.append(transportation)
+        return _transportations
+
+    def get_average_occupancy(self) -> float:
+        occupancies = [transportation.occupancy() for transportation in self.transportations]
+        return round(sum(occupancies)/len(occupancies), 2) if occupancies else 0
 
     def next_edge(self, current_edge:Edge) -> Edge | None:
         if (len(self.path) == 0):
@@ -48,31 +70,66 @@ class Route:
     def draw(self, window:pg.Rect, graph:Graph):
         x_offset = graph.x_offset if graph.x_temp_offset == None else graph.x_temp_offset
         y_offset = graph.y_offset if graph.y_temp_offset == None else graph.y_temp_offset
+        average_occupancy = self.get_average_occupancy()
 
         points = [(node.pos[0] + x_offset, node.pos[1] + y_offset) for node in self.ordered_nodes]
-        pg.draw.lines(window, (200, 0, 0), False, points, 2)
+        pg.draw.lines(window, (255, int(255*(1 - average_occupancy)), 0), False, points, 2)
+
+
+class TrainRoute(Route):
+    def __init__(self, spawn_node:Node, path:list[Edge], graph:Graph, spawn_time:int, peak_spawn:int):
+        super().__init__(spawn_node, path, graph, spawn_time, peak_spawn)
+
+    def generate_transportation(self, current_time, is_peak_hours:bool):
+        spawn_interval = self.spawn_time if not is_peak_hours else self.peak_spawn
+        manager.emit(current_time + spawn_interval, manager.RouteEvent(manager.TRANSPORTATION_SPAWN, self))
+        transportation = RoutedTransportation('rail', 600, 2000, 1300, self.spawn_node, self)
+        self.transportations.append(transportation)
+        return [transportation]
 
 
 class Transportation:
-    agents:list
     current_edge:Edge = None
     id:int = 0
-    speed:int
 
-    def __init__(self, max_passenger:int, method:str, current_node:Node, route:Route):
-        self.route = route
-        self.agents = []
+    def __init__(self, speed:float, current_node:Node, path:list[Edge]=[]):
         self.current_node = current_node
-        self.max_passenger = max_passenger
-        self.method = method
+        self.speed = speed
+        self.path = path
         self.id = Transportation.id
         Transportation.id += 1
+    
+    def transport(self, current_time:int):
+        pass
+
+
+class RoutedTransportation(Transportation):
+    agents:list
+    expected_contact_rate:float = 5.0
+    no_infected_agents:int = 0
+
+    def __init__(self, method:str, speed:float, max_passenger:int, suggested_passenger:int, current_node:Node, route:Route):
+        super().__init__(speed=speed, current_node=current_node)
+        self.route = route
+        self.agents = []
+        self.max_passenger = max_passenger
+        self.suggested_passenger = suggested_passenger
+        self.method = method
     
     def is_full(self) -> bool:
         return len(self.agents) >= self.max_passenger
 
     def occupancy(self) -> float:
-        return (len(self.agents) / self.max_passenger)*100
+        return len(self.agents) / self.max_passenger
+    
+    def get_contact_rate(self) -> float:
+        return self.expected_contact_rate * (len(self.agents)/self.suggested_passenger)
+    
+    def get_infected_density(self) -> float:
+        if (self.agents):
+            return self.no_infected_agents / len(self.agents)
+        else:
+            return 0
     
     def transport(self, current_time:int):
         next_edge = self.route.next_edge(self.current_edge)
@@ -82,22 +139,3 @@ class Transportation:
         self.current_edge = next_edge
         travel_time = self.current_edge.distance / self.speed
         manager.emit(current_time + math.ceil(travel_time), manager.TransportationEvent(manager.TRANSPORTATION_ARRIVED, self))
-
-
-class PublicTransportation(Transportation):
-    speed:int = 150
-
-    def __init__(self, current_node:Node, route:Route):
-        super().__init__(max_passenger=random.choice([15, 20, 25, 30, 35, 40]), method='public', current_node=current_node, route=route)
-        self.speed = np.random.normal(loc=PublicTransportation.speed, scale=20)
-
-
-class RailTransportation(Transportation):
-    speed:int = 600
-
-    def __init__(self, current_node:Node, route:Route):
-        super().__init__(max_passenger=1500, method='rail', current_node=current_node, route=route)
-
-
-if __name__ == '__main__':
-    pass

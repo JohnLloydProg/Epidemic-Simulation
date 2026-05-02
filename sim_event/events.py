@@ -1,13 +1,16 @@
 from agents.agent import WorkingAgent, Agent
 from agents.core import Firm
 from objects import InitialParameters
-from transport.transportation import Route, Transportation
+from transport.transportation import Route, RoutedTransportation, Transportation
 from simulation import next_occurrence_of_hour
 import functools
 import sim_event.manager as manager
 import random
 import time
 import traceback
+import logging
+
+logger = logging.getLogger('events')
 
 def timer(func):
     """A decorator that measures the execution time of a function."""
@@ -33,13 +36,27 @@ def try_catch_wrapper(func):
     return wrapper
 
 @try_catch_wrapper
-def go_work(agents:list[WorkingAgent], routing_cache:dict, time:int):
+def go_work(agents:list[WorkingAgent], routing_cache:dict, time:int, initial_parameters:InitialParameters):
     for agent in agents:
+        agent.check_for_infection(
+            initial_parameters.sample_infection_establishment_CPC(),
+            initial_parameters.sample_incubation_period(),
+            agent.current_establishment.contact_rate(), 
+            agent.current_establishment.infected_density(),
+            time - agent.arrival_time, time
+            )
         agent.set_checkpoints(agent.firm, routing_cache, time)
 
 @try_catch_wrapper
-def go_home(agents:list[Agent],  routing_cache:dict, time:int):
+def go_home(agents:list[Agent],  routing_cache:dict, time:int, initial_parameters:InitialParameters):
     for agent in agents:
+        agent.check_for_infection(
+            initial_parameters.sample_infection_establishment_CPC(),
+            initial_parameters.sample_incubation_period(),
+            agent.current_establishment.contact_rate(), 
+            agent.current_establishment.infected_density(),
+            time - agent.arrival_time, time
+            )
         agent.set_checkpoints(agent.household, routing_cache, time)
 
 @try_catch_wrapper
@@ -66,30 +83,41 @@ def agent_arrival(agents:list[Agent], time:int):
         agent.arrival(time)
 
 @try_catch_wrapper
-def transportation_spawn(routes:list[Route], time:int) -> list[Transportation]:
+def transportation_spawn(routes:list[Route], is_peak_hours:bool, time:int) -> list[RoutedTransportation]:
     transportations = []
     for route in routes:
-        transport = route.generate_transportation(current_time=time)
-        for agent in list(transport.current_node.agents):
-            if (agent.state != 'waiting'):
-                continue
+        transports = route.generate_transportation(current_time=time, is_peak_hours=is_peak_hours)
+        for transport in transports:
+            for agent in list(transport.current_node.agents):
+                if (agent.state != 'waiting'):
+                    continue
 
-            current_leg = agent.checkpoints[0]
-            if (current_leg.mode == 'ride' and current_leg.route == transport.route):
-                if (not transport.is_full()):
-                    agent.ride_transportation(transport)
-                    agent.set_state('travelling')
-        transport.transport(time)
-        transportations.append(transport)
+                current_leg = agent.checkpoints[0]
+                if (current_leg.mode == 'ride' and current_leg.end_node in transport.route.ordered_nodes):
+                    current_index = transport.route.ordered_nodes.index(transport.current_node)
+                    for node in transport.route.ordered_nodes[current_index:]:
+                        if (not transport.is_full() and current_leg.end_node == node):
+                            agent.ride_transportation(transport, time)
+                            agent.set_state('travelling')
+                            break
+            transport.transport(time)
+        transportations.extend(transports)
     return transportations
 
 @try_catch_wrapper
-def transport_arrived(transportations:list[Transportation], time:int):
+def transport_arrived(transportations:list[RoutedTransportation], time:int, initial_parameters:InitialParameters):
     for transport in transportations:
         transport.current_node = transport.current_edge.get_adjacent_node(transport.current_node)
         for agent in list(transport.agents):
             if(transport.current_node == agent.checkpoints[0].end_node):
                 agent.alight_transportation()
+                agent.check_for_infection(
+                    initial_parameters.sample_infection_establishment_CPC(),
+                    initial_parameters.sample_incubation_period(),
+                    transport.get_contact_rate(), 
+                    transport.get_infected_density(),
+                    time - agent.boarding_time, time
+                    )
                 agent.arrival(time)
 
         for agent in list(transport.current_node.agents):
@@ -101,7 +129,7 @@ def transport_arrived(transportations:list[Transportation], time:int):
                 current_index = transport.route.ordered_nodes.index(transport.current_node)
                 for node in transport.route.ordered_nodes[current_index:]:
                     if (not transport.is_full() and current_leg.end_node == node):
-                        agent.ride_transportation(transport)
+                        agent.ride_transportation(transport, time)
                         agent.set_state('travelling')
                         break
             

@@ -44,6 +44,7 @@ class Agent:
     current_establishment:Establishment
     commuting:bool
     arrival_time:int = 0
+    boarding_time:int = 0
     checkpoints:list[Checkpoint]
     current_node:Node = None
     transportation:Transportation = None
@@ -63,22 +64,25 @@ class Agent:
         self.id = Agent.id
         Agent.id += 1
     
-    def ride_transportation(self, transportation:Transportation):
+    def ride_transportation(self, transportation:Transportation, time:int):
         if (not transportation.is_full()):
             self.transportation = transportation
+            self.boarding_time = time
             transportation.agents.append(self)
-            self.current_node.agents.remove(self)
-            self.current_node = None
+            if (self.SEIR_compartment == 'I'):
+                transportation.no_infected_agents += 1
     
     def alight_transportation(self):
         if (self.transportation):
             self.transportation.agents.remove(self)
+            if (self.SEIR_compartment == 'I'):
+                self.transportation.no_infected_agents -= 1
             self.transportation = None
     
     def set_state(self, state:Literal['home', 'travelling', 'waiting', 'working', 'consuming']):
         self.state = state
     
-    def check_for_infection(self, chance_per_contact:float, contact_rate:float, infected_density:float, duration:int, time:int, incubation_period:int):
+    def check_for_infection(self, chance_per_contact:float, incubation_period:int, contact_rate:float, infected_density:float, duration:int, time:int):
         if (self.SEIR_compartment != 'S'):
             return
         
@@ -115,6 +119,7 @@ class Agent:
             cached_checkpoint = routing_cache.get((self.current_node.id, destination.node.id), [])
             if (cached_checkpoint): 
                 self.checkpoints = list(cached_checkpoint)
+                self.copy_checkpoints = self.checkpoints.copy()
                 self.set_state('travelling')
                 self.move(time)
             else:
@@ -122,15 +127,16 @@ class Agent:
             
 
     def arrival(self, time:int):
-        self.current_node = self.checkpoints[0].end_node
+        finished_checkpoint = self.checkpoints.pop(0)
+        self.current_node = finished_checkpoint.end_node
         self.current_node.agents.append(self)
-        removed_checkpoint = self.checkpoints.pop(0)
-        self.checkpoint_log.append((time, removed_checkpoint))
+        self.checkpoint_log.append((time, finished_checkpoint, len(self.checkpoints)))
         if (self.checkpoints):
             self.move(time)
             return
 
         if (self.current_node == self.destination.node):
+            self.arrival_time = time
             self.current_establishment = self.destination
             self.current_establishment.add_agent(self)
             if (isinstance(self.destination, Firm)):

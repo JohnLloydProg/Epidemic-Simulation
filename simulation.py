@@ -46,7 +46,7 @@ def daily_work(agents:list[Agent], time:int) -> set[int]:
         if (agent.SEIR_compartment == 'D' or (agent.SEIR_compartment == 'I' and agent.symptomatic)):
             continue
         work_event = manager.AgentEvent(manager.AGENT_GO_WORK, agent)
-        manager.emit(next_occurrence_of_hour(time, agent.working_hours[0] - 1), work_event)
+        manager.emit(next_occurrence_of_hour(time, agent.working_hours[0] - 1.5), work_event)
         will_work.add(agent.id)
     return will_work
 
@@ -67,6 +67,7 @@ class Simulation:
     logger = logging.getLogger('simulation')
     quarantine = None
     batch_size:int = 1000
+    peak_hour:bool = False
 
     def __init__(self, initial_parameters:InitialParameters, headless=True):
         logging.basicConfig(handlers=[logging.FileHandler("logfile.txt", 'w'), logging.StreamHandler(sys.stdout)], level=logging.ERROR if os.environ.get('DEBUG', 'False') == 'True' else logging.WARNING)
@@ -172,12 +173,12 @@ class Simulation:
                         futures.append(executor.submit(agent_arrival_partial, agent_batch))
                 elif (event.type == manager.AGENT_GO_WORK):
                     self.logger.info(f"Handling agent go work for {len(event_agents)} agents at time {time}.")
-                    go_work_partial = partial(events.go_work, routing_cache=self.routing_table, time=time)
+                    go_work_partial = partial(events.go_work, routing_cache=self.routing_table, time=time, initial_parameters=self.initial_parameters)
                     for agent_batch in agent_batches:
                         futures.append(executor.submit(go_work_partial, agent_batch))
                 elif (event.type == manager.AGENT_GO_HOME):
                     self.logger.info(f"Handling agent go home for {len(event_agents)} agents at time {time}.")
-                    go_home_partial = partial(events.go_home, routing_cache=self.routing_table, time=time)
+                    go_home_partial = partial(events.go_home, routing_cache=self.routing_table, time=time, initial_parameters=self.initial_parameters)
                     for agent_batch in agent_batches:
                         futures.append(executor.submit(go_home_partial, agent_batch))
             elif (isinstance(event, manager.TransportationEvent)):
@@ -185,7 +186,7 @@ class Simulation:
                 transportation_batches = [event_transportations[i:i+30] for i in range(0, len(event_transportations), 30)]
                 if (event.type == manager.TRANSPORTATION_ARRIVED):
                     self.logger.info(f"Handling transportation arrival for {len(event_transportations)} transportations at time {time}.")
-                    transport_arrived_partial = partial(events.transport_arrived, time=time)
+                    transport_arrived_partial = partial(events.transport_arrived, time=time,  initial_parameters=self.initial_parameters)
                     for transportation_batch in transportation_batches:
                         futures.append(executor.submit(transport_arrived_partial, transportation_batch))
                 elif (event.type == manager.TRANSPORTATION_DESPAWN):
@@ -195,7 +196,7 @@ class Simulation:
             elif (isinstance(event, manager.RouteEvent)):
                 if (event.type == manager.TRANSPORTATION_SPAWN):
                     self.logger.info(f"Handling transportation spawn for {len(event.get_routes())} routes at time {time}.")
-                    self.transportations.extend(events.transportation_spawn(event.get_routes(), time))
+                    self.transportations.extend(events.transportation_spawn(event.get_routes(), self.peak_hour, time))
         return futures
     
     def get_agent_states(self) -> dict[str, int]:
@@ -230,6 +231,7 @@ class Simulation:
                 hour = (time // 60) % 24
                 day = time // (60 * 24)
                 time_record = time_ns()
+                self.peak_hour = (8 >= hour >= 6) or (20 >= hour >= 17)
 
                 if (hour == 0 and minute == 0):
                     status = self.generate_status(time)
@@ -313,9 +315,10 @@ class Simulation:
                     draw_time = time_ns()
                     self.window.fill((255, 255, 255))
                     self.graph.draw(self.window, self.font,  self.layer)
-                    for route in self.routes:
+                    routes = sorted(self.routes, key=lambda route:route.get_average_occupancy(), reverse=True)
+                    for route in routes:
                         route.draw(self.window, self.graph)
-                    text = self.font.render(f"time: {time} (Day {day} {hour}:{minute}) {round(delta, 2)}ms per step {len(manager._events.values())} events", False, (0, 0, 0))
+                    text = self.font.render(f"time: {time} (Day {day} {hour}:{minute}) {self.peak_hour} {round(delta, 2)}ms per step {len(manager._events.values())} events", False, (0, 0, 0))
                     state_text = ''
                     for state in ['home', 'travelling', 'waiting', 'working', 'consuming']:
                         state_text += f'{state}: {states.get(state, 0)}, '
@@ -339,5 +342,5 @@ class Simulation:
 if __name__ == '__main__':
     load_dotenv()
     print(datetime.now().isoformat())
-    Simulation(InitialParameters(365, {'I':1}), False)
+    Simulation(InitialParameters(365, {'I':2000}), False)
     print(datetime.now().isoformat())

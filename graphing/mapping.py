@@ -1,7 +1,7 @@
 from functools import lru_cache
 from graphing.core import Node, Edge
 from graphing.graph import Graph, RegionGraph
-from transport.transportation import Route, PublicTransportation, RailTransportation
+from transport.transportation import Route, TrainRoute
 from sim_event import manager
 import pandas as pd
 import heapq
@@ -218,9 +218,9 @@ def load_graph() -> tuple[RegionGraph, Graph, list[Route]]:
         except Exception as e:
             print(f"Error finding path for route {i}: {e}")
             print(f"Node 1: {(city_graph.layer, int(route_xl['Node 1']))}, Node 2: {(city_graph.layer, int(route_xl['Node 2']))}")
-            continue
-        route = Route(node, edges, city_graph, PublicTransportation, random.randint(2, 4))
-        return_route = Route(reverse_node, reversed_edges, city_graph, PublicTransportation, random.randint(2, 4))
+            continue # Interval
+        route = Route(node, edges, city_graph, int(route_xl['Interval']), int(route_xl['Peak Interval']))
+        return_route = Route(reverse_node, reversed_edges, city_graph, int(route_xl['Interval']), int(route_xl['Peak Interval']))
         routes.append(route)
         routes.append(return_route)
 
@@ -239,8 +239,8 @@ def load_graph() -> tuple[RegionGraph, Graph, list[Route]]:
         path = [railway_graph.get_edge(edge_id) for edge_id in edge_ids]
         reverse_path = path.copy()
         reverse_path.reverse()
-        route = Route(node, path, railway_graph, RailTransportation, random.randint(4, 8))
-        return_route = Route(reverse_node, reverse_path, railway_graph, RailTransportation, random.randint(4, 8))
+        route = TrainRoute(node, path, railway_graph, int(route_xl['Interval']), int(route_xl['Peak Interval']))
+        return_route = TrainRoute(reverse_node, reverse_path, railway_graph, int(route_xl['Interval']), int(route_xl['Peak Interval']))
         routes.append(route)
         routes.append(return_route)
     
