@@ -203,6 +203,11 @@ class Simulation:
                     transport_arrived_partial = partial(events.transport_arrived, time=time,  initial_parameters=self.initial_parameters)
                     for transportation_batch in transportation_batches:
                         futures.append(executor.submit(transport_arrived_partial, transportation_batch))
+                elif (event.type == manager.PRIVATE_TRANSPORTATION_ARRIVED):
+                    self.logger.info(f"Handling private transportation arrival for {len(event_transportations)} transportations at time {time}.")
+                    private_transport_arrived_partial = partial(events.private_transportation_arrived, time=time)
+                    for transportation_batch in transportation_batches:
+                        futures.append(executor.submit(private_transport_arrived_partial, transportation_batch))
                 elif (event.type == manager.TRANSPORTATION_DESPAWN):
                     self.logger.info(f"Handling transportation despawn for {len(event_transportations)} transportations at time {time}.")
                     for transport in event_transportations:
@@ -222,9 +227,8 @@ class Simulation:
     def get_travelling_mode(self) -> dict[str, int]:
         travel_modes = {}
         for agent in self.agents:
-            if (agent.state in {'travelling', 'waiting'} and agent.checkpoints):
-                _id = (agent.checkpoints[0].mode, agent.transportation.method if agent.transportation else None)
-                travel_modes[_id] = travel_modes.get(_id, 0) + 1
+            if (agent.transportation):
+                travel_modes[agent.transportation.method] = travel_modes.get(agent.transportation.method, 0) + 1
         return travel_modes
             
     
@@ -316,9 +320,9 @@ class Simulation:
                     if (time_ns() - simultation_time >= self.simulation_ns_per_time_unit):
                         futures = self.handle_events(time, agent_executor)
                         states = self.get_agent_states()
-                        travel_modes = self.get_travelling_mode()
 
                         wait(futures)
+                        travel_modes = self.get_travelling_mode()
                         simultation_time = time_ns()
                         delta = (time_ns() - time_record) / (10**6)
                         time += self.time_step

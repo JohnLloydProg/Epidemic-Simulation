@@ -45,7 +45,10 @@ def go_work(agents:list[WorkingAgent], routing_cache:dict, time:int, initial_par
             agent.current_establishment.infected_density(),
             time - agent.arrival_time, time
             )
-        agent.set_checkpoints(agent.firm, routing_cache, time)
+        if (agent.commuting):
+            agent.set_checkpoints(agent.firm, routing_cache, time)
+        else:
+            agent.set_path(agent.firm, time)
 
 @try_catch_wrapper
 def go_home(agents:list[Agent],  routing_cache:dict, time:int, initial_parameters:InitialParameters):
@@ -57,7 +60,10 @@ def go_home(agents:list[Agent],  routing_cache:dict, time:int, initial_parameter
             agent.current_establishment.infected_density(),
             time - agent.arrival_time, time
             )
-        agent.set_checkpoints(agent.household, routing_cache, time)
+        if (agent.commuting):
+            agent.set_checkpoints(agent.household, routing_cache, time)
+        else:
+            agent.set_path(agent.household, time)
 
 @try_catch_wrapper
 def infected(agents:list[Agent], time:int, initial_parameters:InitialParameters):
@@ -135,3 +141,14 @@ def transport_arrived(transportations:list[RoutedTransportation], time:int, init
             
         transport.transport(time)
 
+@try_catch_wrapper
+def private_transportation_arrived(transportations:list[Transportation], time:int):
+    for transport in transportations:
+        transport.current_node = transport.current_edge.get_adjacent_node(transport.current_node)
+        agent:Agent = transport.agents[0]  # Private transportation can only have one agent
+        if (transport.current_node == agent.destination.node):
+            agent.alight_transportation()
+            agent.arrival(time)
+        else:
+            transport.transport(time)
+        

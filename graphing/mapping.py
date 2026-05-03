@@ -147,7 +147,7 @@ def load_graph() -> tuple[RegionGraph, Graph, list[Route]]:
             if (pd.isna(i)):
                 print(f"Skipping node with NaN index in {graph.layer} graph.")
                 continue
-            graph.add_node(int(node_xl['X-Coordinate']), int(node_xl['Y-Coordinate']), i)
+            graph.add_node(int(node_xl['X-Coordinate']), int(node_xl['Y-Coordinate']), int(i))
         
         edges = pd.read_excel(f"{map_path}/{graph.layer}/edges.xlsx", index_col=0)
         for i in range(len(edges)):

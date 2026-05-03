@@ -89,38 +89,41 @@ class TrainRoute(Route):
 
 
 class Transportation:
-    current_edge:Edge = None
     id:int = 0
+    agents:list
+    no_infected_agents:int = 0
+    current_edge:Edge = None
 
-    def __init__(self, speed:float, current_node:Node, path:list[Edge]=[]):
+    def __init__(self, method:str, speed:float, max_passenger:int, current_node:Node, path:list[Edge]=[]):
+        self.method = method
         self.current_node = current_node
         self.speed = speed
         self.path = path
         self.id = Transportation.id
-        Transportation.id += 1
-    
-    def transport(self, current_time:int):
-        pass
-
-
-class RoutedTransportation(Transportation):
-    agents:list
-    expected_contact_rate:float = 5.0
-    no_infected_agents:int = 0
-
-    def __init__(self, method:str, speed:float, max_passenger:int, suggested_passenger:int, current_node:Node, route:Route):
-        super().__init__(speed=speed, current_node=current_node)
-        self.route = route
         self.agents = []
         self.max_passenger = max_passenger
-        self.suggested_passenger = suggested_passenger
-        self.method = method
+        self.path = path.copy()
+        Transportation.id += 1
     
     def is_full(self) -> bool:
         return len(self.agents) >= self.max_passenger
 
     def occupancy(self) -> float:
         return len(self.agents) / self.max_passenger
+    
+    def transport(self, current_time:int):
+        self.current_edge = self.path.pop(0)
+        travel_time = self.current_edge.distance / self.speed
+        manager.emit(current_time + math.ceil(travel_time), manager.TransportationEvent(manager.PRIVATE_TRANSPORTATION_ARRIVED, self))
+
+
+class RoutedTransportation(Transportation):
+    expected_contact_rate:float = 5.0
+
+    def __init__(self, method:str, speed:float, max_passenger:int, suggested_passenger:int, current_node:Node, route:Route):
+        super().__init__(method=method, speed=speed, max_passenger=max_passenger, current_node=current_node)
+        self.route = route
+        self.suggested_passenger = suggested_passenger
     
     def get_contact_rate(self) -> float:
         return self.expected_contact_rate * (len(self.agents)/self.suggested_passenger)

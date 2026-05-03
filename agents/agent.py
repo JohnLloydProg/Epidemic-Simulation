@@ -91,6 +91,36 @@ class Agent:
             self.SEIR_compartment = 'E'
             infection_event = manager.AgentEvent(manager.AGENT_INFECTED, self)
             manager.emit(time + incubation_period, infection_event)
+    
+    def set_path(self, destination:Establishment, time:int):
+        self.current_establishment.remove_agent(self)
+        self.destination = destination
+        self.current_node = self.current_establishment.node
+        if (self.current_node.id == destination.node.id):
+            self.current_establishment = self.destination
+            self.current_establishment.add_agent(self)
+            
+            if (isinstance(self.destination, Firm)):
+                next_event = manager.AgentEvent(manager.AGENT_GO_HOME, self)
+                if (isinstance(self, WorkingAgent) and self.destination == self.firm):
+                    manager.emit(next_occurrence_of_hour(time, self.working_hours[1]), next_event)
+                    self.set_state('working')
+                else:
+                    manager.emit(time + random.randint(30, 120), next_event)
+                    self.set_state('consuming')
+            elif (isinstance(self.destination, Household)):
+                self.set_state('home')
+            self.destination.add_agent(self)
+            self.current_node = None
+        else:
+            path = shortest_edge_path(self.current_node.id, destination.node.id, self.city, self.railway)
+            if (not path):
+                raise ValueError(f"No path found from node {self.current_node.id} to node {destination.node.id}.")
+            
+            self.transportation = Transportation(method='private', speed=500, max_passenger=1, current_node=self.current_node, path=path)
+            self.ride_transportation(self.transportation, time)
+            self.set_state('travelling')
+            self.transportation.transport(time)
 
     def set_checkpoints(self, destination:Establishment, routing_cache:dict, time:int):
         self.checkpoint_log = []
@@ -127,15 +157,18 @@ class Agent:
             
 
     def arrival(self, time:int):
-        finished_checkpoint = self.checkpoints.pop(0)
-        self.current_node = finished_checkpoint.end_node
-        self.current_node.agents.append(self)
-        self.checkpoint_log.append((time, finished_checkpoint, len(self.checkpoints)))
-        if (self.checkpoints):
-            self.move(time)
-            return
+        if (self.commuting and self.state == 'travelling'):
+            finished_checkpoint = self.checkpoints.pop(0)
+            self.current_node = finished_checkpoint.end_node
+            self.current_node.agents.append(self)
+            self.checkpoint_log.append((time, finished_checkpoint, len(self.checkpoints)))
+            if (self.checkpoints):
+                self.move(time)
+                return
 
         if (self.current_node == self.destination.node):
+            if (not self.commuting):
+                print('Arrived at destination by private transportation.')
             self.arrival_time = time
             self.current_establishment = self.destination
             self.current_establishment.add_agent(self)
