@@ -71,27 +71,37 @@ class Simulation:
     peak_hour:bool = False
 
     def __init__(self, initial_parameters:InitialParameters, headless=True):
+        """Initialized logging and event manager"""
         logging.basicConfig(handlers=[logging.FileHandler("logfile.txt", 'w'), logging.StreamHandler(sys.stdout)], level=logging.ERROR if os.environ.get('DEBUG', 'False') == 'True' else logging.WARNING)
         self.logger.info(f'Initializing simulation with headless = {headless}...')
         manager.init()
+        
+        """Initialize simulation parameters"""
         self.initial_parameters = initial_parameters
         self.time_step = int(os.environ.get('TIME_STEP', '2'))
         self.agents = []
         self.transportations = []
         self.headless = headless
+
+        """Load environment and initialize route spawning events"""
         environment = load_graph()
         self.graph = environment[0]
         self.railway_graph = environment[1]
         self.routes = environment[2]
         for route in self.routes:
             manager.emit(3, manager.RouteEvent(manager.TRANSPORTATION_SPAWN, route))
+
+        """Build routing cache for agents"""
         establishment = self.graph.get_firms()
         establishment.extend(self.graph.get_households())
         self.routing_table = build_routing_cache(establishment, self.graph, self.railway_graph, self.routes)
+
+        """Generate agents"""
         print('Generating agents...')
         self.generate_agents()
         self.logger.info(f'Simulation initialized with {len(self.agents)} agents.')
         
+        """Mainly for visualization purposes"""
         if (not headless):
             pg.init()
             self.clock = pg.time.Clock()
@@ -101,6 +111,7 @@ class Simulation:
         self.run()
     
     def generate_agents(self):
+        """Generate agents based on households"""
         self.logger.info('generating agents...')
         for household in self.graph.get_households():
             for _ in range(household.resident_count):
@@ -108,6 +119,7 @@ class Simulation:
                 household.resident_agents.append(agent)
                 self.agents.append(agent)
         
+        """Assign firms to agents"""
         self.logger.info('assigning firms to agents...')
         firms = self.graph.get_firms()
         for agent in self.agents:
@@ -119,12 +131,13 @@ class Simulation:
             agent.firm = firm
             firm.resident_agents.append(agent)
         
-        #firm analysis
+        """Firm occupancy ratios"""
         occupany_ratios = []
         for firm in firms:
             occupany_ratios.append((len(firm.resident_agents) / firm.max_capacity) * 100)
         self.logger.info(f'Firm occupancy ratios: min={min(occupany_ratios)}%, max={max(occupany_ratios)}%, avg={sum(occupany_ratios)/len(occupany_ratios)}%, std={math.sqrt(sum((x - (sum(occupany_ratios)/len(occupany_ratios)))**2 for x in occupany_ratios)/len(occupany_ratios))}%')
 
+        """Assign initial SEIR compartments to agents. Assignment here is done randomly"""
         self.logger.info('assigning initial infections...')
         assigned = set()
         for compartment in self.compartments:
@@ -234,6 +247,7 @@ class Simulation:
                 time_record = time_ns()
                 self.peak_hour = (8 >= hour >= 6) or (20 >= hour >= 17)
 
+                """Daily routines and quarantine measures. Here daily status generation occurs"""
                 if (hour == 0 and minute == 0):
                     status = self.generate_status(time)
                     day_delta = (time_ns() - simulation_day_time) / (10**9)
@@ -264,6 +278,7 @@ class Simulation:
                                         agents = random.sample(firm.resident_agents, max_capacity)
                                     will_work.update(daily_work(agents, time))
 
+                    """Errand runs for agents"""
                     if (self.quarantine in {ENHANCED_CQ, MODIFIED_ENHANCED_CQ}):
                         compartments_not_allowed = {'D', 'I'}
                         for household in self.graph.get_households():
@@ -278,7 +293,7 @@ class Simulation:
                                     suply_run = manager.AgentEvent(manager.AGENT_GO_SHOPPING, agent)
                                     manager.emit(time + (random.randrange(10, 21) * 60), suply_run)
 
-
+                """Pygame event handling"""
                 if (not self.headless):
                     for event in pg.event.get():
                         if (event.type == pg.QUIT):
@@ -297,6 +312,7 @@ class Simulation:
                                 
                         self.graph.map_dragging(event)
 
+                    """Handle events and update agent states"""
                     if (time_ns() - simultation_time >= self.simulation_ns_per_time_unit):
                         futures = self.handle_events(time, agent_executor)
                         states = self.get_agent_states()
@@ -312,6 +328,7 @@ class Simulation:
                     wait(futures)
                     time += self.time_step
                 
+                """Visualization and metrics. Here the drawing is done."""
                 if (not self.headless and time_ns() - draw_time >= (10**9)//60):
                     draw_time = time_ns()
                     self.window.fill((255, 255, 255))
