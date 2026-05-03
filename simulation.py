@@ -62,6 +62,7 @@ class Simulation:
     font:pg.font.Font
     infection_chances:list[float] = []
     routing_table:dict[tuple, list]
+    transportation_cache:dict[int, set] = {}
     simulation_multiplier = 5
     simulation_ns_per_time_unit = (10**9)//simulation_multiplier # 1/<number of minutes in simulation per 1 second in real time>
     logger = logging.getLogger('simulation')
