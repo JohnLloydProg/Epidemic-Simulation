@@ -51,7 +51,6 @@ class Agent:
     symptomatic:bool = False
     tested:bool = False
     state:str = 'home'
-    checkpoint_log:list[tuple[int, Checkpoint]]
 
     def __init__(self, city:RegionGraph, railway:Graph, household:Household, compartment:str='S'):
         self.SEIR_compartment = compartment
@@ -96,6 +95,7 @@ class Agent:
         self.current_establishment.remove_agent(self)
         self.destination = destination
         self.current_node = self.current_establishment.node
+        self.current_node.agents.append(self)
         if (self.current_node.id == destination.node.id):
             self.current_establishment = self.destination
             self.current_establishment.add_agent(self)
@@ -111,6 +111,7 @@ class Agent:
             elif (isinstance(self.destination, Household)):
                 self.set_state('home')
             self.destination.add_agent(self)
+            self.current_node.agents.remove(self)
             self.current_node = None
         else:
             path = shortest_edge_path(self.current_node.id, destination.node.id, self.city, self.railway)
@@ -123,7 +124,6 @@ class Agent:
             self.transportation.transport(time)
 
     def set_checkpoints(self, destination:Establishment, routing_cache:dict, time:int):
-        self.checkpoint_log = []
         self.current_establishment.remove_agent(self)
         self.destination = destination
         self.current_node = self.current_establishment.node
@@ -149,26 +149,25 @@ class Agent:
             cached_checkpoint = routing_cache.get((self.current_node.id, destination.node.id), [])
             if (cached_checkpoint): 
                 self.checkpoints = list(cached_checkpoint)
-                self.copy_checkpoints = self.checkpoints.copy()
                 self.set_state('travelling')
                 self.move(time)
             else:
                 print('NO DATA ON CACHE')
             
 
-    def arrival(self, time:int):
+    def arrival(self, time:int, current_node:Node=None):
         if (self.commuting and self.state == 'travelling'):
             finished_checkpoint = self.checkpoints.pop(0)
             self.current_node = finished_checkpoint.end_node
             self.current_node.agents.append(self)
-            self.checkpoint_log.append((time, finished_checkpoint, len(self.checkpoints)))
             if (self.checkpoints):
                 self.move(time)
                 return
+        else:
+            self.current_node = current_node
+            self.current_node.agents.append(self)
 
         if (self.current_node == self.destination.node):
-            if (not self.commuting):
-                print('Arrived at destination by private transportation.')
             self.arrival_time = time
             self.current_establishment = self.destination
             self.current_establishment.add_agent(self)
@@ -201,7 +200,7 @@ class Agent:
             else:
                 total_distance = sum(edge.distance for edge in shortest_edge_path(current_checkpoint.start_node.id, current_checkpoint.end_node.id, self.city, self.railway))
                 walking_time = math.ceil(total_distance / 75)  # Assuming walking speed is 1 unit per time
-
+            self.set_state('travelling')
             manager.emit(time + round(walking_time), manager.AgentEvent(manager.AGENT_ARRIVAL, self))
         elif (current_checkpoint.mode == 'ride'):
             self.set_state('waiting')

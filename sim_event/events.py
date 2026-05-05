@@ -148,7 +148,7 @@ def private_transportation_arrived(transportations:list[Transportation], time:in
         agent:Agent = transport.agents[0]  # Private transportation can only have one agent
         if (transport.current_node == agent.destination.node):
             agent.alight_transportation()
-            agent.arrival(time)
+            agent.arrival(time, transport.current_node)
         else:
             transport.transport(time)
         

@@ -227,8 +227,13 @@ class Simulation:
     def get_travelling_mode(self) -> dict[str, int]:
         travel_modes = {}
         for agent in self.agents:
+            if (agent.state != 'travelling'):
+                continue
+            
             if (agent.transportation):
                 travel_modes[agent.transportation.method] = travel_modes.get(agent.transportation.method, 0) + 1
+            else:
+                travel_modes['walking'] = travel_modes.get('walking', 0) + 1
         return travel_modes
             
     
