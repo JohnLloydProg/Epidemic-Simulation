@@ -2,8 +2,8 @@ from functools import lru_cache
 from graphing.core import Node, Edge
 from graphing.graph import Graph, RegionGraph
 from transport.transportation import Route, TrainRoute
-from sim_event import manager
 import pandas as pd
+import manager
 import heapq
 import random
 import math
@@ -124,7 +124,7 @@ def shortest_path(start_node:Node, end_node:Node, routes:list[Route]) -> list[tu
                     neighbor_node = current_route.ordered_nodes[idx + 1]
                     edge_to_take = current_route.path[idx]
 
-                    ride_cost = edge_to_take.distance / current_route.transport_class.speed
+                    ride_cost = edge_to_take.distance / current_route.expected_speed
                     heapq.heappush(open_set, State(neighbor_node, current_state.cost + ride_cost, current_route, current_state))
                 
             # 2. Alight (Switch to walking)

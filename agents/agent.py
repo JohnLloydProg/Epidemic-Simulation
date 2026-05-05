@@ -1,5 +1,4 @@
 from typing import Literal
-from sim_event import manager
 from functools import lru_cache
 from objects import InitialParameters
 from transport.transportation import Transportation, Route
@@ -13,8 +12,9 @@ from agents.core import Establishment
 import logging
 import random
 import math
+import manager
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("Agent")
 
 @lru_cache(maxsize=128, typed=False)
 def compute_for_chance_of_infection(chance_per_contact:float, contact_rate:float, infected_density:float, duration:int) -> float:
@@ -90,7 +90,7 @@ class Agent:
         chance_infection = compute_for_chance_of_infection(chance_per_contact, contact_rate, infected_density, duration)
         if (random.random() <= chance_infection):
             self.SEIR_compartment = 'E'
-            infection_event = manager.AgentEvent(manager.AGENT_INFECTED, self)
+            infection_event = manager.Event(manager.AGENT_INFECTED, self)
             manager.emit(time + incubation_period, infection_event)
     
     def set_path(self, destination:Establishment, time:int):
@@ -103,7 +103,7 @@ class Agent:
             self.current_establishment.add_agent(self)
             
             if (isinstance(self.destination, Firm)):
-                next_event = manager.AgentEvent(manager.AGENT_GO_HOME, self)
+                next_event = manager.Event(manager.AGENT_GO_HOME, self)
                 if (isinstance(self, WorkingAgent) and self.destination == self.firm):
                     manager.emit(next_occurrence_of_hour(time, self.working_hours[1]), next_event)
                     self.set_state('working')
@@ -135,7 +135,7 @@ class Agent:
             self.current_establishment.add_agent(self)
             
             if (isinstance(self.destination, Firm)):
-                next_event = manager.AgentEvent(manager.AGENT_GO_HOME, self)
+                next_event = manager.Event(manager.AGENT_GO_HOME, self)
                 if (isinstance(self, WorkingAgent) and self.destination == self.firm):
                     manager.emit(next_occurrence_of_hour(time, self.working_hours[1]), next_event)
                     self.set_state('working')
@@ -174,7 +174,7 @@ class Agent:
             self.current_establishment = self.destination
             self.current_establishment.add_agent(self)
             if (isinstance(self.destination, Firm)):
-                next_event = manager.AgentEvent(manager.AGENT_GO_HOME, self)
+                next_event = manager.Event(manager.AGENT_GO_HOME, self)
                 if (isinstance(self, WorkingAgent) and self.destination == self.firm):
                     manager.emit(next_occurrence_of_hour(time, self.working_hours[1]), next_event)
                     self.set_state('working')
@@ -203,7 +203,7 @@ class Agent:
                 total_distance = sum(edge.distance for edge in shortest_edge_path(current_checkpoint.start_node.id, current_checkpoint.end_node.id, self.city, self.railway))
                 walking_time = math.ceil(total_distance / 75)  # Assuming walking speed is 1 unit per time
             self.set_state('travelling')
-            manager.emit(time + round(walking_time), manager.AgentEvent(manager.AGENT_ARRIVAL, self))
+            manager.emit(time + round(walking_time), manager.Event(manager.AGENT_ARRIVAL, self))
         elif (current_checkpoint.mode == 'ride'):
             self.set_state('waiting')
 
@@ -214,3 +214,53 @@ class WorkingAgent(Agent):
     def __init__(self, city:RegionGraph, railway:Graph, household:Household, working_hours:tuple[int, int], compartment:str = 'S'):
         super().__init__(city, railway, household, compartment)
         self.working_hours = working_hours
+
+
+def handle_agent_events(event:manager.Event, routing_cache:dict, initial_parameters:InitialParameters, time:int):
+    agents:list[Agent] = event.get_objects()
+    if (event.type == manager.AGENT_ARRIVAL):
+        logger.info(f"Handling agent arrival for {len(event.get_objects())} agents at time {time}.")
+        for agent in agents:
+            agent.arrival(time)
+    elif (event.type == manager.AGENT_REMOVED):
+        for agent in agents:
+            recover_chance = initial_parameters.sample_recovery_chance()
+            # TO ADD: Recovery chance depending on age, health condition, etc.
+            if (random.random() <= recover_chance):
+                agent.SEIR_compartment = 'R'
+            else:
+                agent.SEIR_compartment = 'D'
+    elif (event.type == manager.AGENT_INFECTED):
+        for agent in agents:
+            agent.SEIR_compartment = 'I'
+            agent.symptomatic = random.random() < 0.6  # 60% chance to be symptomatic
+            remove_event = manager.Event(manager.AGENT_REMOVED, agent)
+            manager.emit(time + round(initial_parameters.sample_infected_duration()), remove_event)
+    elif (event.type == manager.AGENT_GO_HOME):
+        logger.info(f"Handling agent go home for {len(event.get_objects())} agents at time {time}.")
+        for agent in agents:
+            agent.check_for_infection(
+                initial_parameters.sample_infection_establishment_CPC(),
+                initial_parameters.sample_incubation_period(),
+                agent.current_establishment.contact_rate(), 
+                agent.current_establishment.infected_density(),
+                time - agent.arrival_time, time
+                )
+            if (agent.commuting):
+                agent.set_checkpoints(agent.household, routing_cache, time)
+            else:
+                agent.set_path(agent.household, time)
+    elif (event.type == manager.AGENT_GO_WORK):
+        logger.info(f"Handling agent go work for {len(event.get_objects())} agents at time {time}.")
+        for agent in agents:
+            agent.check_for_infection(
+                initial_parameters.sample_infection_establishment_CPC(),
+                initial_parameters.sample_incubation_period(),
+                agent.current_establishment.contact_rate(), 
+                agent.current_establishment.infected_density(),
+                time - agent.arrival_time, time
+                )
+            if (agent.commuting):
+                agent.set_checkpoints(agent.firm, routing_cache, time)
+            else:
+                agent.set_path(agent.firm, time)

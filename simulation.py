@@ -1,19 +1,17 @@
 from objects import InitialParameters, Status
 from const import ENHANCED_CQ, MODIFIED_ENHANCED_CQ, GENERAL_CQ, MODIFIED_GENERAL_CQ
-from concurrent.futures import ThreadPoolExecutor, wait, Future
-from functools import partial
 from multiprocessing import Process
 from graphing.mapping import load_graph
 from graphing.graph import RegionGraph
-from agents.agent import Agent, WorkingAgent, next_occurrence_of_hour
-from transport.transportation import Transportation
+from agents.agent import Agent, WorkingAgent, next_occurrence_of_hour, handle_agent_events
+from transport.transportation import Transportation, handle_route_events, handle_transportation_events
 from routing_table import build_routing_cache
 from time import time_ns
 from datetime import datetime
 from dotenv import load_dotenv
+import manager
 import random
 import pygame as pg
-from sim_event import manager, events
 import logging
 import math
 import os
@@ -40,12 +38,12 @@ def printProgressBar (iteration, total, prefix = '', suffix = '', decimals = 1, 
     if iteration == total: 
         print()
 
-def daily_work(agents:list[Agent], time:int) -> set[int]:
+def daily_work(agents:list[WorkingAgent], time:int) -> set[int]:
     will_work = set()
     for agent in agents:
         if (agent.SEIR_compartment == 'D' or (agent.SEIR_compartment == 'I' and agent.symptomatic)):
             continue
-        work_event = manager.AgentEvent(manager.AGENT_GO_WORK, agent)
+        work_event = manager.Event(manager.AGENT_GO_WORK, agent)
         manager.emit(next_occurrence_of_hour(time, agent.working_hours[0] - 1.5), work_event)
         will_work.add(agent.id)
     return will_work
@@ -60,14 +58,11 @@ class Simulation:
     clock:pg.time.Clock
     window:pg.Surface
     font:pg.font.Font
-    infection_chances:list[float] = []
     routing_table:dict[tuple, list]
-    transportation_cache:dict[int, set] = {}
     simulation_multiplier = 5
     simulation_ns_per_time_unit = (10**9)//simulation_multiplier # 1/<number of minutes in simulation per 1 second in real time>
     logger = logging.getLogger('simulation')
     quarantine = None
-    batch_size:int = 1000
     peak_hour:bool = False
 
     def __init__(self, initial_parameters:InitialParameters, headless=True):
@@ -89,7 +84,7 @@ class Simulation:
         self.railway_graph = environment[1]
         self.routes = environment[2]
         for route in self.routes:
-            manager.emit(3, manager.RouteEvent(manager.TRANSPORTATION_SPAWN, route))
+            manager.emit(3, manager.Event(manager.TRANSPORTATION_SPAWN, route))
 
         """Build routing cache for agents"""
         establishment = self.graph.get_firms()
@@ -150,10 +145,10 @@ class Simulation:
                 
                 if (compartment == 'I'):
                     agent.symptomatic = random.random() < 0.6
-                    remove_event = manager.AgentEvent(manager.AGENT_REMOVED, agent)
+                    remove_event = manager.Event(manager.AGENT_REMOVED, agent)
                     manager.emit(math.ceil(self.initial_parameters.sample_infected_duration()), remove_event)
                 elif (compartment == 'E'):
-                    infection_event = manager.AgentEvent(manager.AGENT_INFECTED, agent)
+                    infection_event = manager.Event(manager.AGENT_INFECTED, agent)
                     manager.emit(math.ceil(self.initial_parameters.sample_incubation_period()), infection_event)
                 
                 assigned.add(agent.id)
@@ -167,35 +162,9 @@ class Simulation:
 
     def handle_events(self, time:int):
         for event in manager.get(time):
-            if (isinstance(event, manager.AgentEvent)):
-                if (event.type == manager.AGENT_INFECTED):
-                    events.infected(event.get_agents(), time, self.initial_parameters)
-                elif (event.type == manager.AGENT_REMOVED):
-                    events.remove_agents(event.get_agents(), time, self.initial_parameters)
-                elif (event.type == manager.AGENT_ARRIVAL):
-                    self.logger.info(f"Handling agent arrival for {len(event.get_agents())} agents at time {time}.")
-                    events.agent_arrival(event.get_agents(), time)
-                elif (event.type == manager.AGENT_GO_WORK):
-                    self.logger.info(f"Handling agent go work for {len(event.get_agents())} agents at time {time}.")
-                    events.go_work(event.get_agents(), self.routing_table, time, self.initial_parameters)
-                elif (event.type == manager.AGENT_GO_HOME):
-                    self.logger.info(f"Handling agent go home for {len(event.get_agents())} agents at time {time}.")
-                    events.go_home(event.get_agents(), self.routing_table, time, self.initial_parameters)
-            elif (isinstance(event, manager.TransportationEvent)):
-                if (event.type == manager.TRANSPORTATION_ARRIVED):
-                    self.logger.info(f"Handling transportation arrival for {len(event.get_transportations())} transportations at time {time}.")
-                    events.transport_arrived(event.get_transportations(), time, self.initial_parameters)
-                elif (event.type == manager.PRIVATE_TRANSPORTATION_ARRIVED):
-                    self.logger.info(f"Handling private transportation arrival for {len(event.get_transportations())} transportations at time {time}.")
-                    events.private_transportation_arrived(event.get_transportations(), time)
-                elif (event.type == manager.TRANSPORTATION_DESPAWN):
-                    self.logger.info(f"Handling transportation despawn for {len(event.get_transportations())} transportations at time {time}.")
-                    for transport in event.get_transportations():
-                        self.transportations.remove(transport)
-            elif (isinstance(event, manager.RouteEvent)):
-                if (event.type == manager.TRANSPORTATION_SPAWN):
-                    self.logger.info(f"Handling transportation spawn for {len(event.get_routes())} routes at time {time}.")
-                    self.transportations.extend(events.transportation_spawn(event.get_routes(), self.peak_hour, time))
+            handle_agent_events(event, self.routing_table, self.initial_parameters, time)
+            handle_transportation_events(event, self.transportations, self.initial_parameters, time)
+            handle_route_events(event, self.transportations, self.peak_hour, time)
     
     def get_agent_states(self) -> dict[str, int]:
         states = {}
@@ -271,7 +240,7 @@ class Simulation:
                             if (agent.id in will_work):
                                 agent.errand_run = True
                             else:
-                                suply_run = manager.AgentEvent(manager.AGENT_GO_SHOPPING, agent)
+                                suply_run = manager.Event(manager.AGENT_GO_SHOPPING, agent)
                                 manager.emit(time + (random.randrange(10, 21) * 60), suply_run)
 
             """Pygame event handling"""
