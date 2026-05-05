@@ -114,7 +114,8 @@ def transportation_spawn(routes:list[Route], is_peak_hours:bool, time:int) -> li
 def transport_arrived(transportations:list[RoutedTransportation], time:int, initial_parameters:InitialParameters):
     for transport in transportations:
         transport.current_node = transport.current_edge.get_adjacent_node(transport.current_node)
-        for agent in list(transport.agents):
+        agents:list[Agent] = list(transport.agents)
+        for agent in agents:
             if(transport.current_node == agent.checkpoints[0].end_node):
                 agent.alight_transportation()
                 agent.check_for_infection(
@@ -126,7 +127,8 @@ def transport_arrived(transportations:list[RoutedTransportation], time:int, init
                     )
                 agent.arrival(time)
 
-        for agent in list(transport.current_node.agents):
+        agents:list[Agent] = list(transport.current_node.agents)
+        for agent in agents:
             if (agent.state != 'waiting'):
                 continue
 
