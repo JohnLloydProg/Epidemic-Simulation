@@ -70,6 +70,8 @@ class Agent:
             transportation.agents.append(self)
             if (self.SEIR_compartment == 'I'):
                 transportation.no_infected_agents += 1
+            self.current_node.agents.remove(self)
+            self.current_node = None
     
     def alight_transportation(self):
         if (self.transportation):
