@@ -165,58 +165,37 @@ class Simulation:
         status = Status(time, seir)
         return status
 
-    def handle_events(self, time:int, executor:ThreadPoolExecutor) -> list[Future]:
-        futures:list[Future] = []
-
+    def handle_events(self, time:int):
         for event in manager.get(time):
             if (isinstance(event, manager.AgentEvent)):
-                event_agents = event.get_agents()
-                agent_batches = [event_agents[i:i+self.batch_size] for i in range(0, len(event_agents), self.batch_size)]
                 if (event.type == manager.AGENT_INFECTED):
-                    infected_partial = partial(events.infected, initial_parameters=self.initial_parameters, time=time)
-                    for agent_batch in agent_batches:
-                        futures.append(executor.submit(infected_partial, agent_batch))
+                    events.infected(event.get_agents(), time, self.initial_parameters)
                 elif (event.type == manager.AGENT_REMOVED):
-                    remove_agents_partial = partial(events.remove_agents, initial_parameters=self.initial_parameters, time=time)
-                    for agent_batch in agent_batches:
-                        futures.append(executor.submit(remove_agents_partial, agent_batch))
+                    events.remove_agents(event.get_agents(), time, self.initial_parameters)
                 elif (event.type == manager.AGENT_ARRIVAL):
-                    self.logger.info(f"Handling agent arrival for {len(event_agents)} agents at time {time}.")
-                    agent_arrival_partial = partial(events.agent_arrival, time=time)
-                    for agent_batch in agent_batches:
-                        futures.append(executor.submit(agent_arrival_partial, agent_batch))
+                    self.logger.info(f"Handling agent arrival for {len(event.get_agents())} agents at time {time}.")
+                    events.agent_arrival(event.get_agents(), time)
                 elif (event.type == manager.AGENT_GO_WORK):
-                    self.logger.info(f"Handling agent go work for {len(event_agents)} agents at time {time}.")
-                    go_work_partial = partial(events.go_work, routing_cache=self.routing_table, time=time, initial_parameters=self.initial_parameters)
-                    for agent_batch in agent_batches:
-                        futures.append(executor.submit(go_work_partial, agent_batch))
+                    self.logger.info(f"Handling agent go work for {len(event.get_agents())} agents at time {time}.")
+                    events.go_work(event.get_agents(), self.routing_table, time, self.initial_parameters)
                 elif (event.type == manager.AGENT_GO_HOME):
-                    self.logger.info(f"Handling agent go home for {len(event_agents)} agents at time {time}.")
-                    go_home_partial = partial(events.go_home, routing_cache=self.routing_table, time=time, initial_parameters=self.initial_parameters)
-                    for agent_batch in agent_batches:
-                        futures.append(executor.submit(go_home_partial, agent_batch))
+                    self.logger.info(f"Handling agent go home for {len(event.get_agents())} agents at time {time}.")
+                    events.go_home(event.get_agents(), self.routing_table, time, self.initial_parameters)
             elif (isinstance(event, manager.TransportationEvent)):
-                event_transportations = event.get_transportations()
-                transportation_batches = [event_transportations[i:i+30] for i in range(0, len(event_transportations), 30)]
                 if (event.type == manager.TRANSPORTATION_ARRIVED):
-                    self.logger.info(f"Handling transportation arrival for {len(event_transportations)} transportations at time {time}.")
-                    transport_arrived_partial = partial(events.transport_arrived, time=time,  initial_parameters=self.initial_parameters)
-                    for transportation_batch in transportation_batches:
-                        futures.append(executor.submit(transport_arrived_partial, transportation_batch))
+                    self.logger.info(f"Handling transportation arrival for {len(event.get_transportations())} transportations at time {time}.")
+                    events.transport_arrived(event.get_transportations(), time, self.initial_parameters)
                 elif (event.type == manager.PRIVATE_TRANSPORTATION_ARRIVED):
-                    self.logger.info(f"Handling private transportation arrival for {len(event_transportations)} transportations at time {time}.")
-                    private_transport_arrived_partial = partial(events.private_transportation_arrived, time=time)
-                    for transportation_batch in transportation_batches:
-                        futures.append(executor.submit(private_transport_arrived_partial, transportation_batch))
+                    self.logger.info(f"Handling private transportation arrival for {len(event.get_transportations())} transportations at time {time}.")
+                    events.private_transportation_arrived(event.get_transportations(), time)
                 elif (event.type == manager.TRANSPORTATION_DESPAWN):
-                    self.logger.info(f"Handling transportation despawn for {len(event_transportations)} transportations at time {time}.")
-                    for transport in event_transportations:
+                    self.logger.info(f"Handling transportation despawn for {len(event.get_transportations())} transportations at time {time}.")
+                    for transport in event.get_transportations():
                         self.transportations.remove(transport)
             elif (isinstance(event, manager.RouteEvent)):
                 if (event.type == manager.TRANSPORTATION_SPAWN):
                     self.logger.info(f"Handling transportation spawn for {len(event.get_routes())} routes at time {time}.")
                     self.transportations.extend(events.transportation_spawn(event.get_routes(), self.peak_hour, time))
-        return futures
     
     def get_agent_states(self) -> dict[str, int]:
         states = {}
@@ -248,123 +227,112 @@ class Simulation:
         states = self.get_agent_states()
 
         printProgressBar(0, 365, prefix = 'Progress:', suffix = 'Complete', length = 50)
-        with ThreadPoolExecutor() as agent_executor:
-            while ((time // (60 * 24) < self.initial_parameters.duration) and running):
-                minute = time % 60
-                hour = (time // 60) % 24
-                day = time // (60 * 24)
-                time_record = time_ns()
-                self.peak_hour = (8 >= hour >= 6) or (20 >= hour >= 17)
+        while ((time // (60 * 24) < self.initial_parameters.duration) and running):
+            minute = time % 60
+            hour = (time // 60) % 24
+            day = time // (60 * 24)
+            time_record = time_ns()
+            self.peak_hour = (8 >= hour >= 6) or (20 >= hour >= 17)
 
-                """Daily routines and quarantine measures. Here daily status generation occurs"""
-                if (hour == 0 and minute == 0):
-                    status = self.generate_status(time)
-                    day_delta = (time_ns() - simulation_day_time) / (10**9)
-                    printProgressBar(day, 365, prefix = 'Progress:', suffix = f'Complete {day_delta} seconds per Simulation Day', length = 50)
-                    simulation_day_time = time_ns()
-                    
-                    will_work:set[int] = set()
-                    if (not self.quarantine):
-                        agent_batches = [self.agents[i:i+self.batch_size] for i in range(0, len(self.agents), self.batch_size)]
-                        set_for_work_partial = partial(daily_work, time=time)
-                        futures:list[Future] = []
-                        for agent_batch in agent_batches:
-                            futures.append(agent_executor.submit(set_for_work_partial, agent_batch))
-
-                        for future in futures:
-                            will_work.update(future.result())
-                    elif (self.quarantine in {ENHANCED_CQ, MODIFIED_ENHANCED_CQ}):
-                        # implement covid tests
-                        for firm in self.graph.get_firms():
-                            if (firm.essential):
-                                will_work.update(daily_work(firm.resident_agents, time))
-                            else:
-                                if (self.quarantine == MODIFIED_ENHANCED_CQ):
-                                    max_capacity = int(0.5 * firm.max_capacity)
-                                    if (len(firm.resident_agents) < max_capacity):
-                                        agents = firm.resident_agents
-                                    else:
-                                        agents = random.sample(firm.resident_agents, max_capacity)
-                                    will_work.update(daily_work(agents, time))
-
-                    """Errand runs for agents"""
-                    if (self.quarantine in {ENHANCED_CQ, MODIFIED_ENHANCED_CQ}):
-                        compartments_not_allowed = {'D', 'I'}
-                        for household in self.graph.get_households():
-                            if (random.random() < 0.3):
-                                agents = list(filter(lambda agent: (agent.SEIR_compartment not in compartments_not_allowed or (agent.SEIR_compartment == 'I' and not agent.symptomatic)), household.resident_agents))
-                                if (not agents):
-                                    continue
-                                agent:WorkingAgent = random.choice(agents)
-                                if (agent.id in will_work):
-                                    agent.errand_run = True
-                                else:
-                                    suply_run = manager.AgentEvent(manager.AGENT_GO_SHOPPING, agent)
-                                    manager.emit(time + (random.randrange(10, 21) * 60), suply_run)
-
-                """Pygame event handling"""
-                if (not self.headless):
-                    for event in pg.event.get():
-                        if (event.type == pg.QUIT):
-                            agent_executor.shutdown(cancel_futures=True)
-                            running = False
-                            return
-                        elif (event.type == pg.KEYDOWN):
-                            if (event.key == pg.K_p and status):
-                                Process(None, status.display_report).start()
-                            elif (event.key == pg.K_UP and self.simulation_multiplier < 30):
-                                self.simulation_multiplier += 1
-                                self.simulation_ns_per_time_unit = (10**9)//self.simulation_multiplier
-                            elif (event.key == pg.K_DOWN and self.simulation_multiplier > 1):
-                                self.simulation_multiplier -= 1
-                                self.simulation_ns_per_time_unit = (10**9)//self.simulation_multiplier
-                                
-                        self.graph.map_dragging(event)
-
-                    """Handle events and update agent states"""
-                    if (time_ns() - simultation_time >= self.simulation_ns_per_time_unit):
-                        futures = self.handle_events(time, agent_executor)
-                        states = self.get_agent_states()
-
-                        wait(futures)
-                        travel_modes = self.get_travelling_mode()
-                        simultation_time = time_ns()
-                        delta = (time_ns() - time_record) / (10**6)
-                        time += self.time_step
-                else:
-                    futures = self.handle_events(time, agent_executor)
-
-                    wait(futures)
-                    time += self.time_step
+            """Daily routines and quarantine measures. Here daily status generation occurs"""
+            if (hour == 0 and minute == 0):
+                status = self.generate_status(time)
+                day_delta = (time_ns() - simulation_day_time) / (10**9)
+                printProgressBar(day, 365, prefix = 'Progress:', suffix = f'Complete {day_delta} seconds per Simulation Day', length = 50)
+                simulation_day_time = time_ns()
                 
-                """Visualization and metrics. Here the drawing is done."""
-                if (not self.headless and time_ns() - draw_time >= (10**9)//60):
-                    draw_time = time_ns()
-                    self.window.fill((255, 255, 255))
-                    self.graph.draw(self.window, self.font,  self.layer)
-                    routes = sorted(self.routes, key=lambda route:route.get_average_occupancy(), reverse=True)
-                    for route in routes:
-                        route.draw(self.window, self.graph)
-                    text = self.font.render(f"time: {time} (Day {day} {hour}:{minute}) {self.peak_hour} {round(delta, 2)}ms per step {len(manager._events.values())} events", False, (0, 0, 0))
-                    state_text = ''
-                    for state in ['home', 'travelling', 'waiting', 'working', 'consuming']:
-                        state_text += f'{state}: {states.get(state, 0)}, '
-                    states_text = self.font.render(f"States: {state_text}", False, (0, 0, 0))
-                    travel_text = self.font.render(f"Travel modes: {travel_modes}", False, (0, 0, 0))
-                    self.window.blit(states_text, states_text.get_rect(topleft=(20, 40)))
-                    self.window.blit(travel_text, travel_text.get_rect(topleft=(20, 60)))
-                    occupancies = {}
-                    for transpo in self.transportations:
-                        if (transpo.method in occupancies):
-                            occupancies[transpo.method] = round((occupancies[transpo.method] + transpo.occupancy()) / 2, 2)
+                will_work:set[int] = set()
+                if (not self.quarantine):
+                    will_work.update(daily_work(self.agents, time))
+
+                elif (self.quarantine in {ENHANCED_CQ, MODIFIED_ENHANCED_CQ}):
+                    # implement covid tests
+                    for firm in self.graph.get_firms():
+                        if (firm.essential):
+                            will_work.update(daily_work(firm.resident_agents, time))
                         else:
-                            occupancies[transpo.method] = transpo.occupancy()
-                    metric_text = self.font.render(f"Transportation: {len(self.transportations)}, avg. occupancy: {occupancies}", False, (0, 0, 0))
-                    pg.draw.circle(self.window, (0, 255, 0), pg.mouse.get_pos(), 5)
-                    self.window.blit(metric_text, metric_text.get_rect(topleft=(20, 20)))
-                    self.window.blit(text, text.get_rect(topright=(1060, 20)))
-                    pg.display.update()
-        
+                            if (self.quarantine == MODIFIED_ENHANCED_CQ):
+                                max_capacity = int(0.5 * firm.max_capacity)
+                                if (len(firm.resident_agents) < max_capacity):
+                                    agents = firm.resident_agents
+                                else:
+                                    agents = random.sample(firm.resident_agents, max_capacity)
+                                will_work.update(daily_work(agents, time))
+
+                """Errand runs for agents"""
+                if (self.quarantine in {ENHANCED_CQ, MODIFIED_ENHANCED_CQ}):
+                    compartments_not_allowed = {'D', 'I'}
+                    for household in self.graph.get_households():
+                        if (random.random() < 0.3):
+                            agents = list(filter(lambda agent: (agent.SEIR_compartment not in compartments_not_allowed or (agent.SEIR_compartment == 'I' and not agent.symptomatic)), household.resident_agents))
+                            if (not agents):
+                                continue
+                            agent:WorkingAgent = random.choice(agents)
+                            if (agent.id in will_work):
+                                agent.errand_run = True
+                            else:
+                                suply_run = manager.AgentEvent(manager.AGENT_GO_SHOPPING, agent)
+                                manager.emit(time + (random.randrange(10, 21) * 60), suply_run)
+
+            """Pygame event handling"""
+            if (not self.headless):
+                for event in pg.event.get():
+                    if (event.type == pg.QUIT):
+                        running = False
+                        return
+                    elif (event.type == pg.KEYDOWN):
+                        if (event.key == pg.K_p and status):
+                            Process(None, status.display_report).start()
+                        elif (event.key == pg.K_UP and self.simulation_multiplier < 30):
+                            self.simulation_multiplier += 1
+                            self.simulation_ns_per_time_unit = (10**9)//self.simulation_multiplier
+                        elif (event.key == pg.K_DOWN and self.simulation_multiplier > 1):
+                            self.simulation_multiplier -= 1
+                            self.simulation_ns_per_time_unit = (10**9)//self.simulation_multiplier
+                            
+                    self.graph.map_dragging(event)
+
+                """Handle events and update agent states"""
+                if (time_ns() - simultation_time >= self.simulation_ns_per_time_unit):
+                    self.handle_events(time)
+                    states = self.get_agent_states()
+
+                    travel_modes = self.get_travelling_mode()
+                    simultation_time = time_ns()
+                    delta = (time_ns() - time_record) / (10**6)
+                    time += self.time_step
+            else:
+                self.handle_events(time)
+                time += self.time_step
+            
+            """Visualization and metrics. Here the drawing is done."""
+            if (not self.headless and time_ns() - draw_time >= (10**9)//60):
+                draw_time = time_ns()
+                self.window.fill((255, 255, 255))
+                self.graph.draw(self.window, self.font,  self.layer)
+                routes = sorted(self.routes, key=lambda route:route.get_average_occupancy(), reverse=True)
+                for route in routes:
+                    route.draw(self.window, self.graph)
+                text = self.font.render(f"time: {time} (Day {day} {hour}:{minute}) {self.simulation_multiplier}x {round(delta, 2)}ms per step {len(manager._events.values())} events", False, (0, 0, 0))
+                state_text = ''
+                for state in ['home', 'travelling', 'waiting', 'working', 'consuming']:
+                    state_text += f'{state}: {states.get(state, 0)}, '
+                states_text = self.font.render(f"States: {state_text}", False, (0, 0, 0))
+                travel_text = self.font.render(f"Travel modes: {travel_modes}", False, (0, 0, 0))
+                self.window.blit(states_text, states_text.get_rect(topleft=(20, 40)))
+                self.window.blit(travel_text, travel_text.get_rect(topleft=(20, 60)))
+                occupancies = {}
+                for transpo in self.transportations:
+                    if (transpo.method in occupancies):
+                        occupancies[transpo.method] = round((occupancies[transpo.method] + transpo.occupancy()) / 2, 2)
+                    else:
+                        occupancies[transpo.method] = transpo.occupancy()
+                metric_text = self.font.render(f"Transportation: {len(self.transportations)}, avg. occupancy: {occupancies}", False, (0, 0, 0))
+                pg.draw.circle(self.window, (0, 255, 0), pg.mouse.get_pos(), 5)
+                self.window.blit(metric_text, metric_text.get_rect(topleft=(20, 20)))
+                self.window.blit(text, text.get_rect(topright=(1060, 20)))
+                pg.display.update()
+    
 
 if __name__ == '__main__':
     load_dotenv()
