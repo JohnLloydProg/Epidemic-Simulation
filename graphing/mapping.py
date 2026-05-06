@@ -3,10 +3,11 @@ from graphing.core import Node, Edge
 from graphing.graph import Graph, RegionGraph
 from transport.transportation import Route, TrainRoute
 import pandas as pd
-import manager
 import heapq
-import random
+import logging
 import math
+
+LOGGER = logging.getLogger('Mapping')
 
 
 class State:
@@ -140,12 +141,12 @@ def load_graph() -> tuple[RegionGraph, Graph, list[Route]]:
     graphs: list[Graph] = [city_graph, railway_graph]
     
     # Load nodes and edges for each graph
-    print('Generating nodes and edges for graphs...')
+    LOGGER.info('Generating nodes and edges for graphs...')
     for graph in graphs:
         nodes = pd.read_excel(f"{map_path}/{graph.layer}/nodes.xlsx", index_col=0)
         for i, node_xl in nodes.iterrows():
             if (pd.isna(i)):
-                print(f"Skipping node with NaN index in {graph.layer} graph.")
+                LOGGER.debug(f"Skipping node with NaN index in {graph.layer} graph.")
                 continue
             graph.add_node(int(node_xl['X-Coordinate']), int(node_xl['Y-Coordinate']), int(i))
         
@@ -155,11 +156,11 @@ def load_graph() -> tuple[RegionGraph, Graph, list[Route]]:
             try:
                 graph.add_edge(int(edge_xl['Distance (m)']), (graph.layer, int(edge_xl['Node 1'])), (graph.layer, int(edge_xl['Node 2'])))
             except Exception as e:
-                print(f"Error adding edge {i}: {e}")
-                print(f"Node 1: {(graph.layer, int(edge_xl['Node 1']))}, Node 2: {(graph.layer, int(edge_xl['Node 2']))}")
+                LOGGER.debug(f"Error adding edge {i}: {e}")
+                LOGGER.debug(f"Node 1: {(graph.layer, int(edge_xl['Node 1']))}, Node 2: {(graph.layer, int(edge_xl['Node 2']))}")
     
     # Load regions for the city graph
-    print('Generating regions for city map...')
+    LOGGER.info('Generating regions for city map...')
     regions = pd.read_excel(f'{map_path}/{city_graph.layer}/regions.xlsx', index_col=0)
     regions[['Map edge nodes within the region', 'Street Nodes within the Region']] = regions[['Map edge nodes within the region', 'Street Nodes within the Region']].astype(str)
 
@@ -173,10 +174,10 @@ def load_graph() -> tuple[RegionGraph, Graph, list[Route]]:
         try:
             city_graph.add_region(node_ids, math.ceil(int(region_xl['Alloted Residential Units']) * 0.1), math.ceil(int(region_xl['Alloted Business Units']) * 0.1))
         except Exception as e:
-            print(f"Error adding region {i}: {e}")
-            print(f"Node IDs: {node_ids}")
+            LOGGER.debug(f"Error adding region {i}: {e}")
+            LOGGER.debug(f"Node IDs: {node_ids}")
     
-    print('Generating transfer edges between city graph and railway graph...')
+    LOGGER.info('Generating transfer edges between city graph and railway graph...')
     # Load transfer edges between city and railway graph
     transfer_edges = pd.read_excel(f"{map_path}/transfer.xlsx", index_col=0)
     for i in range(len(transfer_edges)):
@@ -194,11 +195,11 @@ def load_graph() -> tuple[RegionGraph, Graph, list[Route]]:
             city_node.edges.append(transfer_edge)
             railway_node.edges.append(transfer_edge)
         except Exception as e:
-            print(f"Error adding transfer edge {i}: {e}")
-            print(f"City Node ID: {(city_graph.layer, int(edge_xl['City Node']))}, Railway Node ID: {(railway_graph.layer, int(edge_xl['Railway Node']))}")
+            LOGGER.debug(f"Error adding transfer edge {i}: {e}")
+            LOGGER.debug(f"City Node ID: {(city_graph.layer, int(edge_xl['City Node']))}, Railway Node ID: {(railway_graph.layer, int(edge_xl['Railway Node']))}")
     
     # Load routes for transportation
-    print('Generating routes for city graph...')
+    LOGGER.info('Generating routes for city graph...')
     routes = []
 
     route_data = pd.read_excel(f"{map_path}/{city_graph.layer}/routes.xlsx", index_col=None)
@@ -209,15 +210,15 @@ def load_graph() -> tuple[RegionGraph, Graph, list[Route]]:
         node = city_graph.get_node(node_id)
         reverse_node = city_graph.get_node(reverse_node_id)
         if not node:
-            print(f"Error loading route {i}: Node {node_id} not found in city graph.")
+            LOGGER.debug(f"Error loading route {i}: Node {node_id} not found in city graph.")
             continue
         try:
             edges = shortest_edge_path((city_graph.layer, int(route_xl['Node 1'])), (city_graph.layer, int(route_xl['Node 2'])), city_graph, railway_graph)
             reversed_edges = edges.copy()
             reversed_edges.reverse()
         except Exception as e:
-            print(f"Error finding path for route {i}: {e}")
-            print(f"Node 1: {(city_graph.layer, int(route_xl['Node 1']))}, Node 2: {(city_graph.layer, int(route_xl['Node 2']))}")
+            LOGGER.debug(f"Error finding path for route {i}: {e}")
+            LOGGER.debug(f"Node 1: {(city_graph.layer, int(route_xl['Node 1']))}, Node 2: {(city_graph.layer, int(route_xl['Node 2']))}")
             continue # Interval
         route = Route(node, edges, city_graph, int(route_xl['Interval']), int(route_xl['Peak Interval']))
         return_route = Route(reverse_node, reversed_edges, city_graph, int(route_xl['Interval']), int(route_xl['Peak Interval']))
@@ -232,7 +233,7 @@ def load_graph() -> tuple[RegionGraph, Graph, list[Route]]:
         node = railway_graph.get_node(node_id)
         reverse_node = railway_graph.get_node(reverse_node_id)
         if not node:
-            print(f"Error loading route {i}: Node {node_id} not found in railway graph.")
+            LOGGER.debug(f"Error loading route {i}: Node {node_id} not found in railway graph.")
             continue
         edge_ids = route_xl['Path'].split(',')
         edge_ids = [(railway_graph.layer, int(edge_id.strip())) for edge_id in edge_ids]
@@ -244,7 +245,7 @@ def load_graph() -> tuple[RegionGraph, Graph, list[Route]]:
         routes.append(route)
         routes.append(return_route)
     
-    print('Graph ready!')
+    LOGGER.info('Graph ready!')
     return (city_graph, railway_graph, routes)
 
 

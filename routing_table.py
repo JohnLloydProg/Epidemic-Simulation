@@ -5,11 +5,12 @@ from transport.transportation import Route
 from transport.checkpoint import generate_checkpoints, Checkpoint
 from graphing.mapping import shortest_path, load_graph
 from agents.core import Establishment
-import copy
+import logging
 import pickle
 import os
 
 CACHE_FILE_NAME = 'routing_table.pkl'
+LOGGER = logging.getLogger('RoutingTable')
 
 
 worker_city:RegionGraph = None
@@ -17,10 +18,10 @@ worker_routes:list[Route] = None
 
 def save_dehydrated_cache(dehydrated_cache: dict):
     """Saves the primitive dictionary to a file."""
-    print(f"Saving routing cache to {CACHE_FILE_NAME}...")
+    LOGGER.info(f"Saving routing cache to {CACHE_FILE_NAME}...")
     with open(CACHE_FILE_NAME, 'wb') as f:
         pickle.dump(dehydrated_cache, f)
-    print("Save complete!")
+    LOGGER.info("Save complete!")
 
 def rehydrate_cache(dehydrated_cache:dict, city:RegionGraph, railway:Graph, routes:list[Route]):
     route_lookup = {route.id:route for route in routes}
@@ -76,22 +77,22 @@ def compute_single_path(pair:tuple[tuple[str, int], tuple[str, int]]):
 
 def build_routing_cache(establishments:list[Establishment], city:RegionGraph, railway:Graph, routes:list[Route]) -> dict[tuple, list[Checkpoint]]:
     if os.path.exists(CACHE_FILE_NAME):
-        print(f"Found existing {CACHE_FILE_NAME}! Loading from disk...")
+        LOGGER.info(f"Found existing {CACHE_FILE_NAME}! Loading from disk...")
         with open(CACHE_FILE_NAME, 'rb') as f:
             pickled_cache = pickle.load(f)
-        print(f'Done reading file.')
+        LOGGER.info(f'Done reading file.')
         return rehydrate_cache(pickled_cache, city, railway, routes)
 
-    print("Gathering origin-destination pairs...")
+    LOGGER.info("Gathering origin-destination pairs...")
     est_node_ids = list(set([est.node.id for est in establishments]))
     
     pairs_to_compute = list(itertools.permutations(est_node_ids, 2))
-    print(f"Total paths to compute: {len(pairs_to_compute)}")
+    LOGGER.info(f"Total paths to compute: {len(pairs_to_compute)}")
 
     pickled_cache = {}
     
 
-    print("Igniting multiprocessing pool...")
+    LOGGER.info("Igniting multiprocessing pool...")
     with multiprocessing.Pool(initializer=init_worker) as pool:
         
         results = pool.imap_unordered(compute_single_path, pairs_to_compute, chunksize=100)
@@ -101,5 +102,5 @@ def build_routing_cache(establishments:list[Establishment], city:RegionGraph, ra
     
     save_dehydrated_cache(pickled_cache)
 
-    print("Routing cache built successfully!")
+    LOGGER.info("Routing cache built successfully!")
     return rehydrate_cache(pickled_cache, city, railway, routes)

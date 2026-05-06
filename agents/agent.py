@@ -14,7 +14,7 @@ import random
 import math
 import manager
 
-logger = logging.getLogger("Agent")
+LOGGER = logging.getLogger("Agent")
 
 @lru_cache(maxsize=128, typed=False)
 def compute_for_chance_of_infection(chance_per_contact:float, contact_rate:float, infected_density:float, duration:int) -> float:
@@ -219,7 +219,7 @@ class WorkingAgent(Agent):
 def handle_agent_events(event:manager.Event, routing_cache:dict, initial_parameters:InitialParameters, time:int):
     agents:list[Agent] = event.get_objects()
     if (event.type == manager.AGENT_ARRIVAL):
-        logger.info(f"Handling agent arrival for {len(event.get_objects())} agents at time {time}.")
+        LOGGER.debug(f"Handling agent arrival for {len(event.get_objects())} agents at time {time}.")
         for agent in agents:
             agent.arrival(time)
     elif (event.type == manager.AGENT_REMOVED):
@@ -237,7 +237,7 @@ def handle_agent_events(event:manager.Event, routing_cache:dict, initial_paramet
             remove_event = manager.Event(manager.AGENT_REMOVED, agent)
             manager.emit(time + round(initial_parameters.sample_infected_duration()), remove_event)
     elif (event.type == manager.AGENT_GO_HOME):
-        logger.info(f"Handling agent go home for {len(event.get_objects())} agents at time {time}.")
+        LOGGER.debug(f"Handling agent go home for {len(event.get_objects())} agents at time {time}.")
         for agent in agents:
             agent.check_for_infection(
                 initial_parameters.sample_infection_establishment_CPC(),
@@ -251,7 +251,7 @@ def handle_agent_events(event:manager.Event, routing_cache:dict, initial_paramet
             else:
                 agent.set_path(agent.household, time)
     elif (event.type == manager.AGENT_GO_WORK):
-        logger.info(f"Handling agent go work for {len(event.get_objects())} agents at time {time}.")
+        LOGGER.debug(f"Handling agent go work for {len(event.get_objects())} agents at time {time}.")
         for agent in agents:
             agent.check_for_infection(
                 initial_parameters.sample_infection_establishment_CPC(),

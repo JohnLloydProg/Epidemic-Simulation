@@ -8,7 +8,7 @@ import random
 import logging
 import manager
 
-logger = logging.getLogger('Transportation')
+LOGGER = logging.getLogger('Transportation')
 
 
 class Route:
@@ -153,7 +153,7 @@ class RoutedTransportation(Transportation):
 def handle_route_events(event:manager.Event, transportations:list[Transportation], is_peak_hours:bool, time:int):
     routes:list[Route] = event.get_objects()
     if (event.type == manager.TRANSPORTATION_SPAWN):
-        logger.info(f"Handling transportation spawn for {len(routes)} routes at time {time}.")
+        LOGGER.debug(f"Handling transportation spawn for {len(routes)} routes at time {time}.")
         for route in routes:
             transports = route.generate_transportation(current_time=time, is_peak_hours=is_peak_hours)
             for transport in transports:
@@ -176,7 +176,7 @@ def handle_route_events(event:manager.Event, transportations:list[Transportation
 def handle_transportation_events(event:manager.Event, transportations:list[Transportation], initial_parameters:InitialParameters, time:int):
     _transportations:list[Transportation] = event.get_objects()
     if (event.type == manager.TRANSPORTATION_ARRIVED):
-        logger.info(f"Handling transportation arrival for {len(event.get_objects())} transportations at time {time}.")
+        LOGGER.debug(f"Handling transportation arrival for {len(event.get_objects())} transportations at time {time}.")
         for transport in _transportations:
             transport.current_node = transport.current_edge.get_adjacent_node(transport.current_node)
             for agent in list(transport.agents):
@@ -206,7 +206,7 @@ def handle_transportation_events(event:manager.Event, transportations:list[Trans
                 
             transport.transport(time)
     elif (event.type == manager.PRIVATE_TRANSPORTATION_ARRIVED):
-        logger.info(f"Handling private transportation arrival for {len(event.get_objects())} transportations at time {time}.")
+        LOGGER.debug(f"Handling private transportation arrival for {len(event.get_objects())} transportations at time {time}.")
         for transport in _transportations:
             transport.current_node = transport.current_edge.get_adjacent_node(transport.current_node)
             agent = transport.agents[0]
@@ -216,6 +216,6 @@ def handle_transportation_events(event:manager.Event, transportations:list[Trans
             else:
                 transport.transport(time)
     elif (event.type == manager.TRANSPORTATION_DESPAWN):
-        logger.info(f"Handling transportation despawn for {len(event.get_objects())} transportations at time {time}.")
+        LOGGER.debug(f"Handling transportation despawn for {len(event.get_objects())} transportations at time {time}.")
         for transport in _transportations:
             transportations.remove(transport)
