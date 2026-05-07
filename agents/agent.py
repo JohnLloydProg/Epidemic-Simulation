@@ -15,6 +15,15 @@ import math
 import manager
 
 LOGGER = logging.getLogger("Agent")
+AGE_RANGE_DISTRIBUTION = {
+    (0, 4):0.077, (5, 9):0.095, (10, 14):0.010,
+    (15, 19):0.098, (20, 24):0.092, (25, 29):0.089,
+    (30, 34):0.082, (35, 39):0.072, (40, 44):0.063,
+    (45, 49):0.055, (50, 54):0.047, (55, 59):0.041,
+    (60, 64):0.033, (65, 69):0.025, (70, 74):0.017,
+    (75, 79):0.009, (80, 84):0.005, (85, 89):0.002,
+    (90, 94):0.0005, (95, 99):0.0005, (100, 104):0.0001
+}
 
 @lru_cache(maxsize=128, typed=False)
 def compute_for_chance_of_infection(chance_per_contact:float, contact_rate:float, infected_density:float, duration:int) -> float:
@@ -53,7 +62,8 @@ class Agent:
     tested:bool = False
     state:str = 'home'
 
-    def __init__(self, city:RegionGraph, railway:Graph, household:Household, compartment:str='S'):
+    def __init__(self, age:int, city:RegionGraph, railway:Graph, household:Household, compartment:str='S'):
+        self.age = age
         self.SEIR_compartment = compartment
         self.household = household
         self.current_establishment = household
@@ -155,8 +165,9 @@ class Agent:
                 if ((self.errand_run or random.random() < 0.5)  and not self.consumed):
                     next_event = manager.Event(manager.AGENT_GO_SHOPPING, self)
                     self.consumed = False
-                    if (random.random() < 0.25):
-                        target_time = next_occurrence_of_hour(time, 12)
+                    mid_day_break_time = random.gauss(12, 0.2)
+                    if (random.random() < 0.25 and mid_day_break_time > time % 1440):
+                        target_time = next_occurrence_of_hour(time, )
                 manager.emit(target_time, next_event)
                 self.set_state('working')
             else:
@@ -197,8 +208,8 @@ class WorkingAgent(Agent):
     errand_run:bool = False
     finished_work:bool = False
 
-    def __init__(self, city:RegionGraph, railway:Graph, household:Household, working_hours:tuple[int, int], compartment:str = 'S'):
-        super().__init__(city, railway, household, compartment)
+    def __init__(self, age:int, city:RegionGraph, railway:Graph, household:Household, working_hours:tuple[int, int], compartment:str = 'S'):
+        super().__init__(age, city, railway, household, compartment)
         self.working_hours = working_hours
 
 
