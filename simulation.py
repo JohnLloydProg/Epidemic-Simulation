@@ -19,29 +19,10 @@ import sys
 
 LOGGER = logging.getLogger('Simulation')
 
-def printProgressBar (iteration, total, prefix = '', suffix = '', decimals = 1, length = 100, fill = '█', printEnd = "\r"):
-    """
-    Call in a loop to create terminal progress bar
-    @params:
-        iteration   - Required  : current iteration (Int)
-        total       - Required  : total iterations (Int)
-        prefix      - Optional  : prefix string (Str)
-        suffix      - Optional  : suffix string (Str)
-        decimals    - Optional  : positive number of decimals in percent complete (Int)
-        length      - Optional  : character length of bar (Int)
-        fill        - Optional  : bar fill character (Str)
-        printEnd    - Optional  : end character (e.g. "\r", "\r\n") (Str)
-    """
-    percent = ("{0:." + str(decimals) + "f}").format(100 * (iteration / float(total)))
-    filledLength = int(length * iteration // total)
-    bar = fill * filledLength + '-' * (length - filledLength)
-    print(f'\r{prefix} |{bar}| {percent}% {suffix}', end = printEnd)
-    if iteration == total: 
-        print()
-
 def daily_work(agents:list[WorkingAgent], time:int) -> set[int]:
     will_work = set()
     for agent in agents:
+        agent.finished_work = False
         if (agent.SEIR_compartment == 'D' or (agent.SEIR_compartment == 'I' and agent.symptomatic)):
             continue
         work_event = manager.Event(manager.AGENT_GO_WORK, agent)
@@ -79,13 +60,15 @@ class Simulation:
     compartments = ['S', 'E', 'I', 'R', 'D']
     layer = 'city'
     agents:list[Agent]
+    working_agents:list[WorkingAgent]
+    non_working_agents:list[Agent]
     transportations:list[Transportation]
     graph:RegionGraph
     clock:pg.time.Clock
     window:pg.Surface
     font:pg.font.Font
     routing_table:dict[tuple, list]
-    simulation_multiplier = 5
+    simulation_multiplier = 25
     simulation_ns_per_time_unit = (10**9)//simulation_multiplier # 1/<number of minutes in simulation per 1 second in real time>
     quarantine = None
     peak_hour:bool = False
@@ -100,6 +83,8 @@ class Simulation:
         self.initial_parameters = initial_parameters
         self.time_step = int(os.environ.get('TIME_STEP', '2'))
         self.agents = []
+        self.working_agents = []
+        self.non_working_agents = []
         self.transportations = []
         self.headless = headless
 
@@ -134,14 +119,19 @@ class Simulation:
         LOGGER.info('generating agents...')
         for household in self.graph.get_households():
             for _ in range(household.resident_count):
-                agent = WorkingAgent(self.graph, self.railway_graph, household, (8, 17))
+                if (random.random() < 0.7):
+                    agent = WorkingAgent(self.graph, self.railway_graph, household, (8, 17))
+                    self.working_agents.append(agent)
+                else:
+                    agent = Agent(self.graph, self.railway_graph, household)
+                    self.non_working_agents.append(agent)
                 household.resident_agents.append(agent)
                 self.agents.append(agent)
         
         """Assign firms to agents"""
         LOGGER.info('assigning firms to agents...')
         firms = self.graph.get_firms()
-        for agent in self.agents:
+        for agent in self.working_agents:
             firm = random.choice(firms)
             tries = 0
             while (len(firm.resident_agents) >= firm.max_capacity and tries < 4):
@@ -193,7 +183,7 @@ class Simulation:
         running = True
         states = get_agent_states(self.agents)
 
-        printProgressBar(0, 365, prefix = 'Progress:', suffix = 'Complete', length = 50)
+        LOGGER.info('Starting simulation...')
         while ((time // (60 * 24) < self.initial_parameters.duration) and running):
             minute = time % 60
             hour = (time // 60) % 24
@@ -205,12 +195,21 @@ class Simulation:
             if (hour == 0 and minute == 0):
                 status = generate_status(self.agents, time)
                 day_delta = (time_ns() - simulation_day_time) / (10**9)
-                printProgressBar(day, 365, prefix = 'Progress:', suffix = f'Complete {day_delta} seconds per Simulation Day', length = 50)
+                LOGGER.info(f"Day {day}/{self.initial_parameters.duration} completed in {day_delta} seconds.")
                 simulation_day_time = time_ns()
+
+                """Update quarantine measures if specified"""
+                if (day in self.initial_parameters.quarantine_schedule):
+                    self.quarantine = self.initial_parameters.quarantine_schedule[day]
+                    LOGGER.info(f"Quarantine measure {self.quarantine} activated for day {day}.")
+
+                for agent in self.non_working_agents:
+                    if (random.random() < 0.3):
+                        manager.emit(next_occurrence_of_hour(time, random.randrange(10, 15)), manager.Event(manager.AGENT_GO_SHOPPING, agent))
                 
                 will_work:set[int] = set()
                 if (not self.quarantine):
-                    will_work.update(daily_work(self.agents, time))
+                    will_work.update(daily_work(self.working_agents, time))
 
                 elif (self.quarantine in {ENHANCED_CQ, MODIFIED_ENHANCED_CQ}):
                     # implement covid tests
@@ -278,6 +277,7 @@ class Simulation:
                     for route in routes:
                         route.draw(self.window, self.graph)
                     text = self.font.render(f"time: {time} (Day {day} {hour}:{minute}) {self.simulation_multiplier}x {round(delta, 2)}ms per step {len(manager._events.values())} events", False, (0, 0, 0))
+                    quarantine_text = self.font.render(f"Quarantine: {self.quarantine if self.quarantine else 'None'}", False, (0, 0, 0))
                     state_text = ''
                     for state in ['home', 'travelling', 'waiting', 'working', 'consuming']:
                         state_text += f'{state}: {states.get(state, 0)}, '
@@ -295,6 +295,7 @@ class Simulation:
                     pg.draw.circle(self.window, (0, 255, 0), pg.mouse.get_pos(), 5)
                     self.window.blit(metric_text, metric_text.get_rect(topleft=(20, 20)))
                     self.window.blit(text, text.get_rect(topright=(1060, 20)))
+                    self.window.blit(quarantine_text, quarantine_text.get_rect(topright=(1060, 40)))
                     pg.display.update()
             else:
                 self.handle_events(time)
@@ -304,5 +305,5 @@ class Simulation:
 if __name__ == '__main__':
     load_dotenv()
     print(datetime.now().isoformat())
-    Simulation(InitialParameters(365, {'I':2000}), False)
+    Simulation(InitialParameters(365, {'I':2000}, {2: ENHANCED_CQ}), False)
     print(datetime.now().isoformat())

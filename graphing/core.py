@@ -56,11 +56,11 @@ class Region:
     
     def add_firm(self):
         connected_nodes = list(filter(lambda node: len(node.edges) > 0, self.nodes))
-        firm = Firm(random.choice(connected_nodes), random.choices(['micro', 'small', 'medium', 'large'], weights=[0.84, 0.13, 0.02, 0.01])[0])
+        firm = Firm(random.choice(connected_nodes), self, random.choices(['micro', 'small', 'medium', 'large'], weights=[0.84, 0.13, 0.02, 0.01])[0])
         self.firms.append(firm)
 
     def add_household(self):
         connected_nodes = list(filter(lambda node: len(node.edges) > 0, self.nodes))
-        household = Household(random.choice(connected_nodes))
+        household = Household(random.choice(connected_nodes), self)
         self.households.append(household)
         

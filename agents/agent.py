@@ -5,7 +5,7 @@ from transport.transportation import Transportation, Route
 from transport.checkpoint import Checkpoint, generate_checkpoints
 from const import QUARANTINE_CR_PERCENTAGE
 from graphing.graph import Graph, RegionGraph
-from graphing.core import Node, Edge
+from graphing.core import Node, Region
 from graphing.mapping import shortest_edge_path
 from agents.core import Household, Firm
 from agents.core import Establishment
@@ -48,6 +48,7 @@ class Agent:
     checkpoints:list[Checkpoint]
     current_node:Node = None
     transportation:Transportation = None
+    consumed:bool = False
     symptomatic:bool = False
     tested:bool = False
     state:str = 'home'
@@ -99,22 +100,7 @@ class Agent:
         self.current_node = self.current_establishment.node
         self.current_node.agents.append(self)
         if (self.current_node.id == destination.node.id):
-            self.current_establishment = self.destination
-            self.current_establishment.add_agent(self)
-            
-            if (isinstance(self.destination, Firm)):
-                next_event = manager.Event(manager.AGENT_GO_HOME, self)
-                if (isinstance(self, WorkingAgent) and self.destination == self.firm):
-                    manager.emit(next_occurrence_of_hour(time, self.working_hours[1]), next_event)
-                    self.set_state('working')
-                else:
-                    manager.emit(time + random.randint(30, 120), next_event)
-                    self.set_state('consuming')
-            elif (isinstance(self.destination, Household)):
-                self.set_state('home')
-            self.destination.add_agent(self)
-            self.current_node.agents.remove(self)
-            self.current_node = None
+            self.arrived_at_destination(time)
         else:
             path = shortest_edge_path(self.current_node.id, destination.node.id, self.city, self.railway)
             if (not path):
@@ -131,22 +117,7 @@ class Agent:
         self.current_node = self.current_establishment.node
         self.current_node.agents.append(self)
         if (self.current_node.id == destination.node.id):
-            self.current_establishment = self.destination
-            self.current_establishment.add_agent(self)
-            
-            if (isinstance(self.destination, Firm)):
-                next_event = manager.Event(manager.AGENT_GO_HOME, self)
-                if (isinstance(self, WorkingAgent) and self.destination == self.firm):
-                    manager.emit(next_occurrence_of_hour(time, self.working_hours[1]), next_event)
-                    self.set_state('working')
-                else:
-                    manager.emit(time + random.randint(30, 120), next_event)
-                    self.set_state('consuming')
-            elif (isinstance(self.destination, Household)):
-                self.set_state('home')
-            self.destination.add_agent(self)
-            self.current_node.agents.remove(self)
-            self.current_node = None
+            self.arrived_at_destination(time)
         else:
             cached_checkpoint = routing_cache.get((self.current_node.id, destination.node.id), [])
             if (cached_checkpoint): 
@@ -168,24 +139,38 @@ class Agent:
         else:
             self.current_node = current_node
             self.current_node.agents.append(self)
-
+        
         if (self.current_node == self.destination.node):
-            self.arrival_time = time
-            self.current_establishment = self.destination
-            self.current_establishment.add_agent(self)
-            if (isinstance(self.destination, Firm)):
+            self.arrived_at_destination(time)
+
+    def arrived_at_destination(self, time:int):
+        self.arrival_time = time
+        self.current_establishment = self.destination
+        self.current_establishment.add_agent(self)
+        if (isinstance(self.destination, Firm)):
+            if (isinstance(self, WorkingAgent) and self.destination == self.firm):
+                manager.emit(next_occurrence_of_hour(time, self.working_hours[1])-2, manager.Event(manager.AGENT_FINISHED_WORK, self))
                 next_event = manager.Event(manager.AGENT_GO_HOME, self)
-                if (isinstance(self, WorkingAgent) and self.destination == self.firm):
-                    manager.emit(next_occurrence_of_hour(time, self.working_hours[1]), next_event)
-                    self.set_state('working')
+                target_time = next_occurrence_of_hour(time, self.working_hours[1])
+                if ((self.errand_run or random.random() < 0.5)  and not self.consumed):
+                    next_event = manager.Event(manager.AGENT_GO_SHOPPING, self)
+                    self.consumed = False
+                    if (random.random() < 0.25):
+                        target_time = next_occurrence_of_hour(time, 12)
+                manager.emit(target_time, next_event)
+                self.set_state('working')
+            else:
+                self.consumed = True
+                if (isinstance(self, WorkingAgent) and not self.finished_work):
+                    manager.emit(time + 30, manager.Event(manager.AGENT_GO_WORK, self))
                 else:
-                    manager.emit(time + random.randint(30, 120), next_event)
-                    self.set_state('consuming')
-            elif (isinstance(self.destination, Household)):
-                self.set_state('home')
-            self.destination.add_agent(self)
-            self.current_node.agents.remove(self)
-            self.current_node = None
+                    manager.emit(time + random.randint(30, 120), manager.Event(manager.AGENT_GO_HOME, self))
+                self.set_state('consuming')
+        elif (isinstance(self.destination, Household)):
+            self.set_state('home')
+        self.destination.add_agent(self)
+        self.current_node.agents.remove(self)
+        self.current_node = None
     
     def move(self, time:int):
         if (not self.checkpoints):
@@ -210,6 +195,7 @@ class Agent:
 class WorkingAgent(Agent):
     firm:Firm = None
     errand_run:bool = False
+    finished_work:bool = False
 
     def __init__(self, city:RegionGraph, railway:Graph, household:Household, working_hours:tuple[int, int], compartment:str = 'S'):
         super().__init__(city, railway, household, compartment)
@@ -239,6 +225,7 @@ def handle_agent_events(event:manager.Event, routing_cache:dict, initial_paramet
     elif (event.type == manager.AGENT_GO_HOME):
         LOGGER.debug(f"Handling agent go home for {len(event.get_objects())} agents at time {time}.")
         for agent in agents:
+            # Might change to firm event instead chaging agents state to finished work 
             agent.check_for_infection(
                 initial_parameters.sample_infection_establishment_CPC(),
                 initial_parameters.sample_incubation_period(),
@@ -250,6 +237,26 @@ def handle_agent_events(event:manager.Event, routing_cache:dict, initial_paramet
                 agent.set_checkpoints(agent.household, routing_cache, time)
             else:
                 agent.set_path(agent.household, time)
+    elif (event.type == manager.AGENT_GO_SHOPPING):
+        LOGGER.debug(f"Handling agent go shopping for {len(event.get_objects())} agents at time {time}.")
+        for agent in agents:
+            agent.check_for_infection(
+                initial_parameters.sample_infection_establishment_CPC(),
+                initial_parameters.sample_incubation_period(),
+                agent.current_establishment.contact_rate(), 
+                agent.current_establishment.infected_density(),
+                time - agent.arrival_time, time
+                )
+            
+            choices:list[Firm] = agent.city.get_close_firms(agent.current_establishment.region)
+            if (isinstance(agent, WorkingAgent) and agent.firm in choices):
+                choices.remove(agent.firm)
+            destination = random.choice(choices)
+
+            if (agent.commuting):
+                agent.set_checkpoints(destination, routing_cache, time)
+            else:
+                agent.set_path(destination, time)
     elif (event.type == manager.AGENT_GO_WORK):
         LOGGER.debug(f"Handling agent go work for {len(event.get_objects())} agents at time {time}.")
         for agent in agents:
@@ -264,3 +271,8 @@ def handle_agent_events(event:manager.Event, routing_cache:dict, initial_paramet
                 agent.set_checkpoints(agent.firm, routing_cache, time)
             else:
                 agent.set_path(agent.firm, time)
+    elif (event.type == manager.AGENT_FINISHED_WORK):
+        LOGGER.debug(f"Handling agent finished work for {len(event.get_objects())} agents at time {time}.")
+        for agent in agents:
+            agent.finished_work = True
+            

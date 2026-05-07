@@ -32,11 +32,12 @@ class InitialParameters:
     vat:float = 0.12
     contact_range:int = 4
 
-    def __init__(self, duration:int, no_per_comparment:dict[str, int]):
+    def __init__(self, duration:int, no_per_comparment:dict[str, int], quarantine_schedule:dict[int, int] = {}):
         self.incubation_period_in_hours = (int(os.environ.get('INCUBATION_PERIOD_IN_HOURS_MEAN', 12)), int(os.environ.get('INCUBATION_PERIOD_IN_HOURS_STD', 5)))
         self.infected_duration_in_hours = (int(os.environ.get('INFECTED_DURATION_IN_HOURS_MEAN', 168)), int(os.environ.get('INFECTED_DURATION_IN_HOURS_STD', 24)))
         self.duration = duration
         self.no_per_compartment = no_per_comparment
+        self.quarantine_schedule = quarantine_schedule
         self.chance_per_contact_on_edge = (float(os.environ.get('CHANCE_PER_CONTACT_ON_EDGE_MEAN', 0.04)), float(os.environ.get('CHANCE_PER_CONTACT_ON_EDGE_STD', 0.02)))
         self.chance_per_contact_on_establishment = (float(os.environ.get('CHANCE_PER_CONTACT_ON_ESTABLISHMENT_MEAN', 0.1)), float(os.environ.get('CHANCE_PER_CONTACT_ON_ESTABLISHMENT_STD', 0.05)))
         self.recovery_chance = (float(os.environ.get('RECOVERY_CHANCE_MEAN', 0.9)), float(os.environ.get('RECOVERY_CHANCE_STD', 0.05)))

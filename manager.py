@@ -13,6 +13,7 @@ TRANSPORTATION_SPAWN = 9
 TRANSPORTATION_DESPAWN = 10
 PRIVATE_TRANSPORTATION_MOVE = 11
 PRIVATE_TRANSPORTATION_ARRIVED = 12
+AGENT_FINISHED_WORK = 13
 
 _events:dict[int, list['Event']] = {}
 _time_step = 0
@@ -20,10 +21,10 @@ _time_step = 0
 class Event:
     _objects:dict
 
-    def __init__(self, type:int, object):
+    def __init__(self, type:int, object=None):
         self.type = type
         self._object = object
-        self._objects = {object.id:object}
+        self._objects = {object.id:object} if object is not None else {}
 
     def extends(self, event:'Event'):
         if (self.type != event.type):
