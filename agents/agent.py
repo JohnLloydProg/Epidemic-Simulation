@@ -35,6 +35,15 @@ def compute_for_chance_of_infection(chance_per_contact:float, contact_rate:float
     return round(1 - chance_of_not_infected, 4)
 
 @lru_cache(maxsize=128, typed=False)
+def compute_mortality_rate(age:int) -> float:
+    exponent = (-10.2 + (0.106 * age))
+    try:
+        p_mortality = 1 / (1 + math.exp(-exponent))
+    except OverflowError:
+        p_mortality = 0.0
+    return round(p_mortality, 4)
+
+@lru_cache(maxsize=128, typed=False)
 def next_occurrence_of_hour(current_time, target_hour):
     MIN_PER_DAY = 1440
     current_minute_within_day = current_time % MIN_PER_DAY
@@ -159,15 +168,18 @@ class Agent:
         self.current_establishment.add_agent(self)
         if (isinstance(self.destination, Firm)):
             if (isinstance(self, WorkingAgent) and self.destination == self.firm):
-                manager.emit(next_occurrence_of_hour(time, self.working_hours[1])-2, manager.Event(manager.AGENT_FINISHED_WORK, self))
+                time_out = next_occurrence_of_hour(time, self.working_hours[1] - random.gauss(0, 0.5))
+                if (not self.clocked_in):
+                    manager.emit(time_out-2, manager.Event(manager.AGENT_FINISHED_WORK, self))
+                    self.clocked_in = True
+                target_time = time_out
                 next_event = manager.Event(manager.AGENT_GO_HOME, self)
-                target_time = next_occurrence_of_hour(time, self.working_hours[1])
                 if ((self.errand_run or random.random() < 0.5)  and not self.consumed):
                     next_event = manager.Event(manager.AGENT_GO_SHOPPING, self)
                     self.consumed = False
-                    mid_day_break_time = random.gauss(12, 0.2)
-                    if (random.random() < 0.25 and mid_day_break_time > time % 1440):
-                        target_time = next_occurrence_of_hour(time, )
+                    mid_day_break_time = 12 - random.gauss(0, 0.5)
+                    if (random.random() < 0.25 and mid_day_break_time > (time % 1440)/60):
+                        target_time = next_occurrence_of_hour(time, mid_day_break_time)
                 manager.emit(target_time, next_event)
                 self.set_state('working')
             else:
@@ -207,6 +219,7 @@ class WorkingAgent(Agent):
     firm:Firm = None
     errand_run:bool = False
     finished_work:bool = False
+    clocked_in:bool = False
 
     def __init__(self, age:int, city:RegionGraph, railway:Graph, household:Household, working_hours:tuple[int, int], compartment:str = 'S'):
         super().__init__(age, city, railway, household, compartment)
@@ -221,12 +234,12 @@ def handle_agent_events(event:manager.Event, routing_cache:dict, initial_paramet
             agent.arrival(time)
     elif (event.type == manager.AGENT_REMOVED):
         for agent in agents:
-            recover_chance = initial_parameters.sample_recovery_chance()
+            mortality_rate = compute_mortality_rate(agent.age)
             # TO ADD: Recovery chance depending on age, health condition, etc.
-            if (random.random() <= recover_chance):
-                agent.SEIR_compartment = 'R'
-            else:
+            if (random.random() <= mortality_rate):
                 agent.SEIR_compartment = 'D'
+            else:
+                agent.SEIR_compartment = 'R'
     elif (event.type == manager.AGENT_INFECTED):
         for agent in agents:
             agent.SEIR_compartment = 'I'

@@ -22,6 +22,7 @@ LOGGER = logging.getLogger('Simulation')
 def daily_work(agents:list[WorkingAgent], time:int) -> set[int]:
     will_work = set()
     for agent in agents:
+        agent.clocked_in = False
         agent.finished_work = False
         if (agent.SEIR_compartment == 'D' or (agent.SEIR_compartment == 'I' and agent.symptomatic)):
             continue
@@ -121,7 +122,7 @@ class Simulation:
             for _ in range(household.resident_count):
                 age_range = random.choices(list(AGE_RANGE_DISTRIBUTION.keys()), weights=list(AGE_RANGE_DISTRIBUTION.values()))[0]
                 age = random.randint(age_range[0], age_range[1])
-                if (random.random() < 0.947 and age >= 15 and age <= 65):
+                if (random.random() < 0.947 and age >= 23 and age <= 65):
                     work_range = random.choices([(8, 17), (20, 5), (15, 23), (10, 19), (13, 22)], weights=[0.6, 0.075, 0.075, 0.125, 0.125])[0]
                     agent = WorkingAgent(age, self.graph, self.railway_graph, household, work_range)
                     self.working_agents.append(agent)
@@ -207,7 +208,7 @@ class Simulation:
                     LOGGER.info(f"Quarantine measure {self.quarantine} activated for day {day}.")
 
                 for agent in self.non_working_agents:
-                    if (random.random() < 0.3 and agent.age <= 65):
+                    if (random.random() < 0.3 and agent.age <= 65 and agent.age >= 4 and agent.SEIR_compartment != 'D'):
                         manager.emit(next_occurrence_of_hour(time, random.randrange(10, 15)), manager.Event(manager.AGENT_GO_SHOPPING, agent))
                 
                 will_work:set[int] = set()
