@@ -5,7 +5,7 @@ from transport.transportation import Transportation, Route
 from transport.checkpoint import Checkpoint, generate_checkpoints
 from const import QUARANTINE_CR_PERCENTAGE
 from graphing.graph import Graph, RegionGraph
-from graphing.core import Node, Region
+from graphing.core import Node, Region, Edge
 from graphing.mapping import shortest_edge_path
 from agents.core import Household, Firm
 from agents.core import Establishment
@@ -121,14 +121,17 @@ class Agent:
         if (self.current_node.id == destination.node.id):
             self.arrived_at_destination(time)
         else:
-            path = shortest_edge_path(self.current_node.id, destination.node.id, self.city, self.railway)
+            path:list[Edge] = shortest_edge_path(self.current_node.id, self.destination.node.id, self.city, self.railway)
             if (not path):
-                raise ValueError(f"No path found from node {self.current_node.id} to node {destination.node.id}.")
+                raise ValueError(f"No path found from node {self.current_node.id} to node {self.destination.node.id}.")
+
+            if (self.current_node not in path[0].nodes or self.destination.node not in path[-1].nodes):
+                raise ValueError(f"Invalid path: {[(edge.nodes[0].id, edge.nodes[1].id) for edge in path]} for current node {self.current_node.id} and destination node {destination.node.id}.")
             
-            self.transportation = Transportation(method='private', speed=500, max_passenger=1, current_node=self.current_node, path=path)
-            self.ride_transportation(self.transportation, time)
+            transport = Transportation(method='private', speed=500, max_passenger=1, current_node=self.current_node, path=list(path))
+            self.ride_transportation(transport, time)
             self.set_state('travelling')
-            self.transportation.transport(time)
+            transport.transport(time)
 
     def set_checkpoints(self, destination:Establishment, routing_cache:dict, time:int):
         self.current_establishment.remove_agent(self)
@@ -154,8 +157,7 @@ class Agent:
             self.current_node.agents.append(self)
             if (self.checkpoints):
                 self.move(time)
-                return
-        else:
+        elif (current_node):
             self.current_node = current_node
             self.current_node.agents.append(self)
         
@@ -170,6 +172,8 @@ class Agent:
             if (isinstance(self, WorkingAgent) and self.destination == self.firm):
                 time_out = next_occurrence_of_hour(time, self.working_hours[1] - random.gauss(0, 0.5))
                 if (not self.clocked_in):
+                    while (time_out - 2 < time):
+                        time_out += 5
                     manager.emit(time_out-2, manager.Event(manager.AGENT_FINISHED_WORK, self))
                     self.clocked_in = True
                 target_time = time_out
@@ -191,7 +195,6 @@ class Agent:
                 self.set_state('consuming')
         elif (isinstance(self.destination, Household)):
             self.set_state('home')
-        self.destination.add_agent(self)
         self.current_node.agents.remove(self)
         self.current_node = None
     

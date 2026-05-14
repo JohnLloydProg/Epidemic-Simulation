@@ -22,20 +22,20 @@ LOGGER = logging.getLogger('Simulation')
 def daily_work(agents:list[WorkingAgent], time:int) -> set[int]:
     will_work = set()
     for agent in agents:
-        agent.clocked_in = False
-        agent.finished_work = False
         if (agent.SEIR_compartment == 'D' or (agent.SEIR_compartment == 'I' and agent.symptomatic)):
             continue
+        agent.clocked_in = False
+        agent.finished_work = False
         work_event = manager.Event(manager.AGENT_GO_WORK, agent)
         manager.emit(next_occurrence_of_hour(time, agent.working_hours[0] - random.gauss(1, 0.5)), work_event)
         will_work.add(agent.id)
     return will_work
 
-def generate_status(agents:list[Agent], time:int) -> Status:
+def generate_status(agents:list[Agent], time:int, active_cases:list[tuple[int, int]]) -> Status:
     seir = {compartment:0 for compartment in Simulation.compartments}
     for agent in agents:
         seir[agent.SEIR_compartment] += 1
-    status = Status(time, seir)
+    status = Status(time, seir, active_cases)
     return status
 
 def get_agent_states(agents:list[Agent]) -> dict[str, int]:
@@ -69,6 +69,7 @@ class Simulation:
     window:pg.Surface
     font:pg.font.Font
     routing_table:dict[tuple, list]
+    active_cases:list[tuple[int, int]]
     simulation_multiplier = 25
     simulation_ns_per_time_unit = (10**9)//simulation_multiplier # 1/<number of minutes in simulation per 1 second in real time>
     quarantine = None
@@ -88,6 +89,7 @@ class Simulation:
         self.non_working_agents = []
         self.transportations = []
         self.headless = headless
+        self.active_cases = []
 
         """Load environment and initialize route spawning events"""
         environment = load_graph()
@@ -197,7 +199,8 @@ class Simulation:
 
             """Daily routines and quarantine measures. Here daily status generation occurs"""
             if (hour == 0 and minute == 0):
-                status = generate_status(self.agents, time)
+                status = generate_status(self.agents, time, self.active_cases)
+                self.active_cases.append((time, status.SEIR_compartments['I']))
                 day_delta = (time_ns() - simulation_day_time) / (10**9)
                 LOGGER.info(f"Day {day}/{self.initial_parameters.duration} completed in {day_delta} seconds.")
                 simulation_day_time = time_ns()
@@ -228,21 +231,6 @@ class Simulation:
                                 else:
                                     agents = random.sample(firm.resident_agents, max_capacity)
                                 will_work.update(daily_work(agents, time))
-
-                """Errand runs for agents"""
-                if (self.quarantine in {ENHANCED_CQ, MODIFIED_ENHANCED_CQ}):
-                    compartments_not_allowed = {'D', 'I'}
-                    for household in self.graph.get_households():
-                        if (random.random() < 0.3):
-                            agents = list(filter(lambda agent: (agent.SEIR_compartment not in compartments_not_allowed or (agent.SEIR_compartment == 'I' and not agent.symptomatic)), household.resident_agents))
-                            if (not agents):
-                                continue
-                            agent:WorkingAgent = random.choice(agents)
-                            if (agent.id in will_work):
-                                agent.errand_run = True
-                            else:
-                                suply_run = manager.Event(manager.AGENT_GO_SHOPPING, agent)
-                                manager.emit(time + (random.randrange(10, 21) * 60), suply_run)
 
             if (not self.headless):
                 """Pygame event handling"""
@@ -309,5 +297,5 @@ class Simulation:
 if __name__ == '__main__':
     load_dotenv()
     print(datetime.now().isoformat())
-    Simulation(InitialParameters(365, {'I':2000}, {2: ENHANCED_CQ}), False)
+    Simulation(InitialParameters(365, {'I':2000}, {2: ENHANCED_CQ}), True)
     print(datetime.now().isoformat())
