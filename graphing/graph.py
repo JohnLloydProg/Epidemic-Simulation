@@ -103,14 +103,6 @@ class RegionGraph(Graph):
 
         self.regions[region.id] = region
     
-    def get_close_firms(self, region:Region) -> list[Firm]:
-        close_firms  = list(region.firms)
-        for _region in self.regions.values():
-            for node in region.nodes:
-                if (node in _region.nodes and _region != region):
-                    close_firms.extend(_region.firms)
-        return close_firms
-
     def get_firms(self) -> list[Firm]:
         firms = []
         for region in self.regions.values():

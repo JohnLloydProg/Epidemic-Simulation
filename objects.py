@@ -32,14 +32,14 @@ class InitialParameters:
     vat:float = 0.12
     contact_range:int = 4
 
-    def __init__(self, duration:int, no_per_comparment:dict[str, int], quarantine_schedule:dict[int, int] = {}):
-        self.incubation_period_in_hours = (float(os.environ.get('INCUBATION_PERIOD_IN_HOURS_SHAPE', 165.84)), float(os.environ.get('INCUBATION_PERIOD_IN_HOURS_RATE', 25.2)))
-        self.infected_duration_in_hours = (float(os.environ.get('INFECTED_DURATION_IN_HOURS_SHAPE', 7.11)), float(os.environ.get('INFECTED_DURATION_IN_HOURS_RATE', 0.037)))
+    def __init__(self, duration:int, no_per_comparment:dict[str, int]):
+        self.incubation_period_in_hours = (int(os.environ.get('INCUBATION_PERIOD_IN_HOURS_MEAN', 12)), int(os.environ.get('INCUBATION_PERIOD_IN_HOURS_STD', 5)))
+        self.infected_duration_in_hours = (int(os.environ.get('INFECTED_DURATION_IN_HOURS_MEAN', 168)), int(os.environ.get('INFECTED_DURATION_IN_HOURS_STD', 24)))
         self.duration = duration
         self.no_per_compartment = no_per_comparment
-        self.quarantine_schedule = quarantine_schedule
-        self.chance_per_contact_on_transport = (float(os.environ.get('CHANCE_PER_CONTACT_ON_TRANSPORT_MEAN', 0.03)), float(os.environ.get('CHANCE_PER_CONTACT_ON_TRANSPORT_STD', 0.00577)))
-        self.chance_per_contact_on_establishment = (float(os.environ.get('CHANCE_PER_CONTACT_ON_ESTABLISHMENT_MEAN', 0.03)), float(os.environ.get('CHANCE_PER_CONTACT_ON_ESTABLISHMENT_STD', 0.00577)))
+        self.chance_per_contact_on_edge = (float(os.environ.get('CHANCE_PER_CONTACT_ON_EDGE_MEAN', 0.04)), float(os.environ.get('CHANCE_PER_CONTACT_ON_EDGE_STD', 0.02)))
+        self.chance_per_contact_on_establishment = (float(os.environ.get('CHANCE_PER_CONTACT_ON_ESTABLISHMENT_MEAN', 0.1)), float(os.environ.get('CHANCE_PER_CONTACT_ON_ESTABLISHMENT_STD', 0.05)))
+        self.recovery_chance = (float(os.environ.get('RECOVERY_CHANCE_MEAN', 0.9)), float(os.environ.get('RECOVERY_CHANCE_STD', 0.05)))
     
     def sample_infection_establishment_CPC(self) -> float:
         result = -1
@@ -47,21 +47,27 @@ class InitialParameters:
             result = np.random.normal(loc=self.chance_per_contact_on_establishment[0], scale=self.chance_per_contact_on_establishment[1])
         return result
     
-    def sample_infection_transport_CPC(self) -> float:
+    def sample_infection_edge_CPC(self) -> float:
         result = -1
         while (result < 0):
-            result = np.random.normal(loc=self.chance_per_contact_on_transport[0], scale=self.chance_per_contact_on_transport[1])
+            result = np.random.normal(loc=self.chance_per_contact_on_edge[0], scale=self.chance_per_contact_on_edge[1])
         return result
 
     def sample_incubation_period(self) -> int:
         result = -1
         while (result <= 0):
-            result = np.random.gamma(shape=self.incubation_period_in_hours[0], scale=1.0/self.incubation_period_in_hours[1]) * 60
+            result = np.random.normal(loc=self.incubation_period_in_hours[0], scale=self.incubation_period_in_hours[1]) * 60
         return result
 
     def sample_infected_duration(self) -> int:
         result = -1
         while (result <= 0):
-            result = np.random.gamma(shape=self.infected_duration_in_hours[0], scale=1.0/self.infected_duration_in_hours[1]) * 60
+            result = np.random.normal(loc=self.infected_duration_in_hours[0], scale=self.infected_duration_in_hours[1]) * 60
+        return result
+    
+    def sample_recovery_chance(self) -> float:
+        result = -1
+        while (result < 0):
+            result = np.random.normal(loc=self.recovery_chance[0], scale=self.recovery_chance[1])
         return result
 
