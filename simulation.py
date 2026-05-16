@@ -3,7 +3,7 @@ from const import ENHANCED_CQ, MODIFIED_ENHANCED_CQ, GENERAL_CQ, MODIFIED_GENERA
 from multiprocessing import Process
 from graphing.mapping import load_graph
 from graphing.graph import RegionGraph
-from agents.agent import AGE_RANGE_DISTRIBUTION, Agent, WorkingAgent, next_occurrence_of_hour, handle_agent_events
+from agents.agent import Agent, WorkingAgent, next_occurrence_of_hour, handle_agent_events
 from transport.transportation import Transportation, handle_route_events, handle_transportation_events
 from routing_table import build_routing_cache
 from time import time_ns
@@ -17,7 +17,31 @@ import math
 import os
 import sys
 
+import firebase_admin
+from firebase_admin import credentials
+from firebase_admin import firestore
+
 LOGGER = logging.getLogger('Simulation')
+
+def printProgressBar (iteration, total, prefix = '', suffix = '', decimals = 1, length = 100, fill = '█', printEnd = "\r"):
+    """
+    Call in a loop to create terminal progress bar
+    @params:
+        iteration   - Required  : current iteration (Int)
+        total       - Required  : total iterations (Int)
+        prefix      - Optional  : prefix string (Str)
+        suffix      - Optional  : suffix string (Str)
+        decimals    - Optional  : positive number of decimals in percent complete (Int)
+        length      - Optional  : character length of bar (Int)
+        fill        - Optional  : bar fill character (Str)
+        printEnd    - Optional  : end character (e.g. "\r", "\r\n") (Str)
+    """
+    percent = ("{0:." + str(decimals) + "f}").format(100 * (iteration / float(total)))
+    filledLength = int(length * iteration // total)
+    bar = fill * filledLength + '-' * (length - filledLength)
+    print(f'\r{prefix} |{bar}| {percent}% {suffix}', end = printEnd)
+    if iteration == total: 
+        print()
 
 def daily_work(agents:list[WorkingAgent], time:int) -> set[int]:
     will_work = set()
@@ -27,7 +51,7 @@ def daily_work(agents:list[WorkingAgent], time:int) -> set[int]:
         agent.clocked_in = False
         agent.finished_work = False
         work_event = manager.Event(manager.AGENT_GO_WORK, agent)
-        manager.emit(next_occurrence_of_hour(time, agent.working_hours[0] - random.gauss(1, 0.5)), work_event)
+        manager.emit(next_occurrence_of_hour(time, agent.working_hours[0] - 1.5), work_event)
         will_work.add(agent.id)
     return will_work
 
@@ -61,8 +85,6 @@ class Simulation:
     compartments = ['S', 'E', 'I', 'R', 'D']
     layer = 'city'
     agents:list[Agent]
-    working_agents:list[WorkingAgent]
-    non_working_agents:list[Agent]
     transportations:list[Transportation]
     graph:RegionGraph
     clock:pg.time.Clock
@@ -75,7 +97,7 @@ class Simulation:
     quarantine = None
     peak_hour:bool = False
 
-    def __init__(self, initial_parameters:InitialParameters, headless=True):
+    def __init__(self, initial_parameters:InitialParameters, headless=True, collection_id="Simulation_Data"):
         """Initialized logging and event manager"""
         logging.basicConfig(handlers=[logging.FileHandler("logfile.txt", 'w'), logging.StreamHandler(sys.stdout)], level=logging.INFO if os.environ.get('DEBUG', 'False') == 'True' else logging.DEBUG)
         LOGGER.info(f'Initializing simulation with headless = {headless}...')
@@ -85,11 +107,12 @@ class Simulation:
         self.initial_parameters = initial_parameters
         self.time_step = int(os.environ.get('TIME_STEP', '2'))
         self.agents = []
-        self.working_agents = []
-        self.non_working_agents = []
         self.transportations = []
         self.headless = headless
         self.active_cases = []
+
+        #For Collection ID name in Firestore
+        self.collection_id = collection_id
 
         """Load environment and initialize route spawning events"""
         environment = load_graph()
@@ -122,22 +145,14 @@ class Simulation:
         LOGGER.info('generating agents...')
         for household in self.graph.get_households():
             for _ in range(household.resident_count):
-                age_range = random.choices(list(AGE_RANGE_DISTRIBUTION.keys()), weights=list(AGE_RANGE_DISTRIBUTION.values()))[0]
-                age = random.randint(age_range[0], age_range[1])
-                if (random.random() < 0.947 and age >= 23 and age <= 65):
-                    work_range = random.choices([(8, 17), (20, 5), (15, 23), (10, 19), (13, 22)], weights=[0.6, 0.075, 0.075, 0.125, 0.125])[0]
-                    agent = WorkingAgent(age, self.graph, self.railway_graph, household, work_range)
-                    self.working_agents.append(agent)
-                else:
-                    agent = Agent(age, self.graph, self.railway_graph, household)
-                    self.non_working_agents.append(agent)
+                agent = WorkingAgent(self.graph, self.railway_graph, household, (8, 17))
                 household.resident_agents.append(agent)
                 self.agents.append(agent)
         
         """Assign firms to agents"""
         LOGGER.info('assigning firms to agents...')
         firms = self.graph.get_firms()
-        for agent in self.working_agents:
+        for agent in self.agents:
             firm = random.choice(firms)
             tries = 0
             while (len(firm.resident_agents) >= firm.max_capacity and tries < 4):
@@ -189,7 +204,32 @@ class Simulation:
         running = True
         states = get_agent_states(self.agents)
 
-        LOGGER.info('Starting simulation...')
+        #Logging to FireStore
+        last_logged_day = None # Changed this to track the day instead of the hour
+
+        def log_data_to_firestore(day, seir_data):
+            """Synchronously logs the daily SEIR data to the specified collection."""
+            try:
+                doc_id = str(day) 
+                doc_ref = db.collection(self.collection_id).document(doc_id)
+                
+                total_population = seir_data['S'] + seir_data['E'] + seir_data['I'] + seir_data['R'] + seir_data['D']
+
+                # Removed the "Hour_XX" nesting. Now it just saves straight to the day!
+                doc_ref.set({
+                    "S": seir_data['S'],
+                    "E": seir_data['E'],
+                    "I": seir_data['I'],
+                    "R": seir_data['R'],
+                    "D": seir_data['D'],
+                    "Total": total_population
+                }, merge=True)
+            except Exception as e:
+                print(f"Firestore Sync Error: {e}")
+
+        # -------------------------------------------------------------------------------
+
+        printProgressBar(0, 365, prefix = 'Progress:', suffix = 'Complete', length = 50)
         while ((time // (60 * 24) < self.initial_parameters.duration) and running):
             minute = time % 60
             hour = (time // 60) % 24
@@ -202,21 +242,12 @@ class Simulation:
                 status = generate_status(self.agents, time, self.active_cases)
                 self.active_cases.append((time, status.SEIR_compartments['I']))
                 day_delta = (time_ns() - simulation_day_time) / (10**9)
-                LOGGER.info(f"Day {day}/{self.initial_parameters.duration} completed in {day_delta} seconds.")
+                printProgressBar(day, 365, prefix = 'Progress:', suffix = f'Complete {day_delta} seconds per Simulation Day', length = 50)
                 simulation_day_time = time_ns()
-
-                """Update quarantine measures if specified"""
-                if (day in self.initial_parameters.quarantine_schedule):
-                    self.quarantine = self.initial_parameters.quarantine_schedule[day]
-                    LOGGER.info(f"Quarantine measure {self.quarantine} activated for day {day}.")
-
-                for agent in self.non_working_agents:
-                    if (random.random() < 0.3 and agent.age <= 65 and agent.age >= 4 and agent.SEIR_compartment != 'D'):
-                        manager.emit(next_occurrence_of_hour(time, random.randrange(10, 15)), manager.Event(manager.AGENT_GO_SHOPPING, agent))
                 
                 will_work:set[int] = set()
                 if (not self.quarantine):
-                    will_work.update(daily_work(self.working_agents, time))
+                    will_work.update(daily_work(self.agents, time))
 
                 elif (self.quarantine in {ENHANCED_CQ, MODIFIED_ENHANCED_CQ}):
                     # implement covid tests
@@ -269,7 +300,6 @@ class Simulation:
                     for route in routes:
                         route.draw(self.window, self.graph)
                     text = self.font.render(f"time: {time} (Day {day} {hour}:{minute}) {self.simulation_multiplier}x {round(delta, 2)}ms per step {len(manager._events.values())} events", False, (0, 0, 0))
-                    quarantine_text = self.font.render(f"Quarantine: {self.quarantine if self.quarantine else 'None'}", False, (0, 0, 0))
                     state_text = ''
                     for state in ['home', 'travelling', 'waiting', 'working', 'consuming']:
                         state_text += f'{state}: {states.get(state, 0)}, '
@@ -287,15 +317,38 @@ class Simulation:
                     pg.draw.circle(self.window, (0, 255, 0), pg.mouse.get_pos(), 5)
                     self.window.blit(metric_text, metric_text.get_rect(topleft=(20, 20)))
                     self.window.blit(text, text.get_rect(topright=(1060, 20)))
-                    self.window.blit(quarantine_text, quarantine_text.get_rect(topright=(1060, 40)))
                     pg.display.update()
+
+                    #Time Logging
+                    current_time_marker = str(day) # Only need to track the day now
+
+                    # Trigger ONLY at Hour 23 (11 PM) and Minute 58
+                    if hour == 23 and minute == 58 and last_logged_day != current_time_marker:
+                        last_logged_day = current_time_marker
+                        
+                        actual_log_time = (day * 24 * 60) + (hour * 60) + minute 
+                        current_status = generate_status(self.agents, actual_log_time)
+                        
+                        # Pass just the day and the data
+                        log_data_to_firestore(day, current_status.SEIR_compartments)
+                        
+                        # Print statement updated to show the exact minute (23:58)
+                        print(f"Time: {actual_log_time} (Day {day}, {hour:02d}:{minute:02d}) | SEIR Data: {current_status.SEIR_compartments}")
+                    #---------------------------------------------------------------------------------------
+
             else:
                 self.handle_events(time)
                 time += self.time_step
     
 
 if __name__ == '__main__':
+
+    #Firestore credentials
+    cred = credentials.Certificate('epidemicsimulation-firebase-adminsdk-fbsvc-96a4aeb7e2.json')
+    app = firebase_admin.initialize_app(cred)
+    db = firestore.client()
+
     load_dotenv()
     print(datetime.now().isoformat())
-    Simulation(InitialParameters(365, {'I':2000}, {2: ENHANCED_CQ}), True)
+    Simulation(InitialParameters(365, {'I':2000}), True, collection_id="Sim_Baseline_365_Days")
     print(datetime.now().isoformat())
