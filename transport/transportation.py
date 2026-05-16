@@ -7,6 +7,7 @@ import math
 import random
 import logging
 import manager
+import traceback
 
 LOGGER = logging.getLogger('Transportation')
 
@@ -180,7 +181,11 @@ def handle_transportation_events(event:manager.Event, transportations:list[Trans
         for transport in _transportations:
             transport.current_node = transport.current_edge.get_adjacent_node(transport.current_node)
             for agent in list(transport.agents):
-                if(transport.current_node == agent.checkpoints[0].end_node):
+                if (agent.state != 'travelling'):
+                    transport.agents.remove(agent)
+                    continue
+
+                if (transport.current_node.id == agent.checkpoints[0].end_node.id):
                     agent.alight_transportation()
                     agent.check_for_infection(
                         initial_parameters.sample_infection_establishment_CPC(),
@@ -199,7 +204,7 @@ def handle_transportation_events(event:manager.Event, transportations:list[Trans
                 if (current_leg.mode == 'ride' and current_leg.end_node in transport.route.ordered_nodes):
                     current_index = transport.route.ordered_nodes.index(transport.current_node)
                     for node in transport.route.ordered_nodes[current_index:]:
-                        if (not transport.is_full() and current_leg.end_node == node):
+                        if (not transport.is_full() and current_leg.end_node == node and not agent.transportation):
                             agent.ride_transportation(transport, time)
                             agent.set_state('travelling')
                             break
@@ -208,9 +213,12 @@ def handle_transportation_events(event:manager.Event, transportations:list[Trans
     elif (event.type == manager.PRIVATE_TRANSPORTATION_ARRIVED):
         LOGGER.debug(f"Handling private transportation arrival for {len(event.get_objects())} transportations at time {time}.")
         for transport in _transportations:
+            if (not transport.agents):
+                continue
+
             transport.current_node = transport.current_edge.get_adjacent_node(transport.current_node)
             agent = transport.agents[0]
-            if (transport.current_node == agent.destination.node):
+            if (transport.current_node.id == agent.destination.node.id):
                 agent.alight_transportation()
                 agent.arrival(time, transport.current_node)
             else:

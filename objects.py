@@ -4,10 +4,11 @@ import os
 
 
 class Status:
-    def __init__(self, time:int, SEIR_compartments:dict[str, int]):
+    def __init__(self, time:int, SEIR_compartments:dict[str, int], active_cases:list[tuple[int, int]]):
         self.time = time
         self.SEIR_compartments = SEIR_compartments
-    
+        self.active_cases = active_cases
+
     # Returns the time in (day, hour, minute)
     def get_formatted_time(self) -> tuple[int, int, int]:
         minute = self.time % 60
@@ -16,15 +17,37 @@ class Status:
         return (day, hour, minute)
 
     def display_report(self):
-        x = []
-        y = []
-        for item, value in self.SEIR_compartments.items():
-            x.append(item)
-            y.append(value)
+        x = list(self.SEIR_compartments.keys())
+        y = list(self.SEIR_compartments.values())
 
         x_np = np.array(x)
         y_np = np.array(y)
-        plt.bar(x_np, y_np)
+
+        fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 5))
+
+        ax1.bar(x_np, y_np)
+        ax1.set_title('SEIR Distribution (Bar)')
+        ax1.set_ylabel('Number of Agents')
+        ax1.set_xlabel('Compartment')
+
+        x_active = []
+        y_active = []
+
+        for case in self.active_cases:
+            x_active.append(case[0])
+            y_active.append(case[1])
+
+        # --- Graph 2: Line Chart ---
+        # Adding a marker 'o' makes the data points clearly visible on the line
+        ax2.plot(x_active, y_active, marker='o', linestyle='-')
+        ax2.set_title('SEIR Distribution (Line)')
+        ax2.set_ylabel('Number of Agents')
+        ax2.set_xlabel('Compartment')
+
+        # tight_layout() prevents the labels from overlapping
+        plt.tight_layout()
+
+        # Render the window
         plt.show()
 
 class InitialParameters:
