@@ -80,7 +80,7 @@ class Simulation:
 
     def __init__(self, initial_parameters:InitialParameters, headless=True, collection_id="Simulation_Data"):
         logging.basicConfig(handlers=[logging.FileHandler("logfile.txt", 'w'), logging.StreamHandler(sys.stdout)], 
-                            level=logging.INFO if os.environ.get('DEBUG', 'False') == 'True' else logging.DEBUG)
+                            level=logging.DEBUG if os.environ.get('DEBUG', 'False') == 'True' else logging.INFO)
         LOGGER.info(f'Initializing simulation with headless = {headless}...')
         manager.init()
         
