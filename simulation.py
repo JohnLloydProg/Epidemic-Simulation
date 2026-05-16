@@ -77,7 +77,7 @@ class Simulation:
 
     def __init__(self, initial_parameters:InitialParameters, headless=True):
         """Initialized logging and event manager"""
-        logging.basicConfig(handlers=[logging.FileHandler("logfile.txt", 'w'), logging.StreamHandler(sys.stdout)], level=logging.INFO if os.environ.get('DEBUG', 'False') == 'True' else logging.DEBUG)
+        logging.basicConfig(handlers=[logging.FileHandler("logfile.txt", 'w'), logging.StreamHandler(sys.stdout)], level=logging.DEBUG if os.environ.get('DEBUG', 'False') == 'True' else logging.INFO)
         LOGGER.info(f'Initializing simulation with headless = {headless}...')
         manager.init()
         
@@ -297,5 +297,5 @@ class Simulation:
 if __name__ == '__main__':
     load_dotenv()
     print(datetime.now().isoformat())
-    Simulation(InitialParameters(365, {'I':2000}, {2: ENHANCED_CQ}), True)
+    Simulation(InitialParameters(365, {'I':2000}, {2: ENHANCED_CQ}), False)
     print(datetime.now().isoformat())
