@@ -388,5 +388,5 @@ if __name__ == '__main__':
 
     load_dotenv()
     print(f"Simulation Start: {datetime.now().isoformat()}")
-    Simulation(InitialParameters(365, {'I':3}), True, "BaseSim365")
+    Simulation(InitialParameters(30, {'I':3}), True, "BaseSim365")
     print(f"Simulation End: {datetime.now().isoformat()}")
