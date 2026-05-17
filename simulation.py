@@ -377,7 +377,7 @@ class Simulation:
     
 
 if __name__ == '__main__':
-    cred = credentials.Certificate('./firebase_cred/epidemicsimulation-firebase-adminsdk-fbsvc-81103feabb.json')
+    cred = credentials.Certificate('/firebase_cred/epidemicsimulation-firebase-adminsdk-fbsvc-81103feabb.json')
     firebase_admin.initialize_app(cred)
     db = firestore.client()
 
