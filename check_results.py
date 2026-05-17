@@ -8,9 +8,15 @@ if __name__ == "__main__":
     cred = credentials.Certificate('epidemicsimulation-firebase-adminsdk-fbsvc-81103feabb.json')
     firebase_admin.initialize_app(cred)
     db = firestore.client()
+    sim_groups = db.collections()
+    sim_groups_dict = {}
 
-    simulation_group = input("Enter the simulation group name: ")
-    collection = db.collection(simulation_group)
+    for i, sim_group in enumerate(sim_groups):
+        print(f'[{i}] {sim_group.id}')
+        sim_groups_dict[i] = sim_group.id
+    simulation_group = int(input("Enter the simulation group name: "))
+    
+    collection = db.collection(sim_groups_dict[simulation_group])
     docs = collection.list_documents()
     
     for sim in docs:
@@ -29,7 +35,7 @@ if __name__ == "__main__":
         for case in active_cases:
             x_active.append(case[0])
             y_active.append(case[1])
-        plt.plot(x_active, y_active, marker='o', linestyle='-')
+        plt.plot(x_active, y_active, marker='o', linestyle='-', label=sim.id)
 
 
     # --- Graph 2: Line Chart ---
