@@ -12,26 +12,28 @@ if __name__ == "__main__":
     simulation_group = input("Enter the simulation group name: ")
     collection = db.collection(simulation_group)
     docs = collection.list_documents()
-    active_cases:list[tuple[int, int]] = []
+    
     for sim in docs:
         print(f"Simulation ID: {sim.id}")
         sim_ref = collection.document(sim.id)
         sim_data = sim_ref.get().to_dict()
+        active_cases:list[tuple[int, int]] = []
         for time, data in sim_data.items():
             active_cases.append((int(time), data['I']))
-    
-    active_cases.sort(key=lambda d: d[0])
+        
+        active_cases.sort(key=lambda d: d[0])
 
-    x_active = []
-    y_active = []
+        x_active = []
+        y_active = []
 
-    for case in active_cases:
-        x_active.append(case[0])
-        y_active.append(case[1])
+        for case in active_cases:
+            x_active.append(case[0])
+            y_active.append(case[1])
+        plt.plot(x_active, y_active, marker='o', linestyle='-')
+
 
     # --- Graph 2: Line Chart ---
     # Adding a marker 'o' makes the data points clearly visible on the line
-    plt.plot(x_active, y_active, marker='o', linestyle='-')
     plt.suptitle('SEIR Distribution (Line)')
     plt.ylabel('Number of Agents')
     plt.xlabel('Compartment')

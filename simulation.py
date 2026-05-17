@@ -77,6 +77,7 @@ class Simulation:
     simulation_ns_per_time_unit = (10**9)//simulation_multiplier 
     quarantine = None
     peak_hour:bool = False
+    step_counter = 0
 
     def __init__(self, initial_parameters:InitialParameters, headless=True, collection_id="Simulation_Data"):
         logging.basicConfig(handlers=[logging.FileHandler("logfile.txt", 'w'), logging.StreamHandler(sys.stdout)], 
@@ -179,20 +180,23 @@ class Simulation:
                 assigned.add(agent.id)
 
     def handle_events(self, time:int):
+        self.step_counter += 1
+
         """Tick-based events"""
-        for transportation in self.transportations:
-            for agent in transportation.agents:
-                if (agent.state != 'travelling'):
-                    continue
+        if (self.step_counter == 2):
+            for transportation in self.transportations:
+                for agent in transportation.agents:
+                    if (agent.state != 'travelling'):
+                        continue
 
-                agent.check_for_infection(
-                    self.initial_parameters.sample_infection_establishment_CPC(),
-                    self.initial_parameters.sample_incubation_period(),
-                    transportation.get_contact_rate(), 
-                    transportation.get_infected_density(),
-                    2/10, time
-                    )
-
+                    agent.check_for_infection(
+                        self.initial_parameters.sample_infection_establishment_CPC(),
+                        self.initial_parameters.sample_incubation_period(),
+                        transportation.get_contact_rate(), 
+                        transportation.get_infected_density(),
+                        4/10, time
+                        )
+            self.step_counter = 0
 
         """Event based handling"""
         for event in manager.get(time):
