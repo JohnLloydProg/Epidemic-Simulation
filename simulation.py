@@ -16,6 +16,7 @@ import logging
 import math
 import os
 import sys
+import uuid
 
 import firebase_admin
 from firebase_admin import credentials
@@ -95,7 +96,7 @@ class Simulation:
         self.headless = headless
         self.active_cases = []
         self.collection_id = collection_id
-        self.simulation_id = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        self.simulation_id = str(uuid.uuid4())
 
         """Load environment and initialize route spawning events"""
         environment = load_graph()
