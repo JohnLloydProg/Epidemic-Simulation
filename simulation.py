@@ -145,7 +145,7 @@ class Simulation:
         for agent in self.working_agents:
             firm = random.choice(firms)
             tries = 0
-            while (len(firm.resident_agents) >= firm.max_capacity and tries < 4):
+            while (len(firm.resident_agents) >= firm.max_capacity):
                 firm = random.choice(firms)
                 tries += 1
             agent.firm = firm
@@ -190,7 +190,7 @@ class Simulation:
                     self.initial_parameters.sample_incubation_period(),
                     transportation.get_contact_rate(), 
                     transportation.get_infected_density(),
-                    2/15, time
+                    2/10, time
                     )
 
 
@@ -303,6 +303,9 @@ class Simulation:
                             max_capacity = int(0.5 * firm.max_capacity)
                             agents = random.sample(firm.resident_agents, min(len(firm.resident_agents), max_capacity))
                             will_work.update(daily_work(agents, time))
+            
+            if (status.SEIR_compartments['I'] == 0):
+                running = False
 
             if (not self.headless):
                 """Pygame event handling"""
