@@ -50,12 +50,15 @@ class Route:
                 passenger = random.choice([(10, 10), (12, 12), (15, 15), (15, 20) ])
                 max_passenger = passenger[1]
                 suggested_passenger = passenger[0]
+                expected_contact_rate = 3.5
                 method = 'jeep'
             else:
                 max_passenger = 50
                 suggested_passenger = 40
+                expected_contact_rate = 4.5
                 method = 'bus'
             transportation = RoutedTransportation(method, self.expected_speed, max_passenger, suggested_passenger, self.spawn_node, self)
+            transportation.expected_contact_rate = expected_contact_rate
             _transportations.append(transportation)
             self.transportations.append(transportation)
         return _transportations
@@ -91,6 +94,7 @@ class TrainRoute(Route):
         spawn_interval = self.spawn_time if not is_peak_hours else self.peak_spawn
         manager.emit(current_time + spawn_interval, manager.Event(manager.TRANSPORTATION_SPAWN, self))
         transportation = RoutedTransportation('rail', self.expected_speed, 2000, 1300, self.spawn_node, self)
+        transportation.expected_contact_rate = 8.5
         self.transportations.append(transportation)
         return [transportation]
 
@@ -187,13 +191,6 @@ def handle_transportation_events(event:manager.Event, transportations:list[Trans
 
                 if (transport.current_node.id == agent.checkpoints[0].end_node.id):
                     agent.alight_transportation()
-                    agent.check_for_infection(
-                        initial_parameters.sample_infection_establishment_CPC(),
-                        initial_parameters.sample_incubation_period(),
-                        transport.get_contact_rate(), 
-                        transport.get_infected_density(),
-                        time - agent.boarding_time, time
-                        )
                     agent.arrival(time)
 
             for agent in list(transport.current_node.agents):

@@ -258,7 +258,7 @@ def handle_agent_events(event:manager.Event, routing_cache:dict, initial_paramet
                 initial_parameters.sample_incubation_period(),
                 agent.current_establishment.contact_rate(), 
                 agent.current_establishment.infected_density(),
-                time - agent.arrival_time, time
+                (time - agent.arrival_time)/60, time
                 )
             if (agent.commuting):
                 agent.set_checkpoints(agent.household, routing_cache, time)
@@ -272,7 +272,7 @@ def handle_agent_events(event:manager.Event, routing_cache:dict, initial_paramet
                 initial_parameters.sample_incubation_period(),
                 agent.current_establishment.contact_rate(), 
                 agent.current_establishment.infected_density(),
-                time - agent.arrival_time, time
+                (time - agent.arrival_time)/60, time
                 )
             
             choices:list[Firm] = agent.city.get_close_firms(agent.current_establishment.region)
@@ -292,7 +292,7 @@ def handle_agent_events(event:manager.Event, routing_cache:dict, initial_paramet
                 initial_parameters.sample_incubation_period(),
                 agent.current_establishment.contact_rate(), 
                 agent.current_establishment.infected_density(),
-                time - agent.arrival_time, time
+                (time - agent.arrival_time)/60, time
                 )
             if (agent.commuting):
                 agent.set_checkpoints(agent.firm, routing_cache, time)

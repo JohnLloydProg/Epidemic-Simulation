@@ -38,7 +38,7 @@ class Establishment:
 
 
 class Household(Establishment):
-    def __init__(self, node, region, max_contact_rate:float=10.0):
+    def __init__(self, node, region, max_contact_rate:float=3.5):
         resident_count = random.choices([1, 2, 3, 4, 5], weights=[0.45, 0.35, 0.05, 0.05, 0.05])[0]
         super().__init__(node, region, resident_count, max_contact_rate)
         self.resident_count:int = resident_count
@@ -49,7 +49,7 @@ class Firm(Establishment):
     essential:bool
     resident_agents:list
     
-    def __init__(self, node, region, size:Literal['micro', 'small', 'medium', 'large'], max_contact_rate:float=4.0):
+    def __init__(self, node, region, size:Literal['micro', 'small', 'medium', 'large'], max_contact_rate:float=2.5):
         if (size == 'micro'):
             max_capacity = random.randrange(1, 9)
         elif (size == 'small'):

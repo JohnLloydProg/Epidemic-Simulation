@@ -93,7 +93,8 @@ class Simulation:
         self.transportations = []
         self.headless = headless
         self.active_cases = []
-        self.collection_id = collection_id 
+        self.collection_id = collection_id
+        self.simulation_id = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
         """Load environment and initialize route spawning events"""
         environment = load_graph()
@@ -160,7 +161,7 @@ class Simulation:
         LOGGER.info('assigning initial infections...')
         assigned = set()
         for compartment in self.compartments:
-            un_assigned_agents = list(filter(lambda agent: agent.id not in assigned, self.agents))
+            un_assigned_agents = list(filter(lambda agent: agent.id not in assigned, self.working_agents))
             if (len(un_assigned_agents) == 0):
                 break
             agents = random.sample(un_assigned_agents, self.initial_parameters.no_per_compartment.get(compartment, 0))
@@ -178,6 +179,22 @@ class Simulation:
                 assigned.add(agent.id)
 
     def handle_events(self, time:int):
+        """Tick-based events"""
+        for transportation in self.transportations:
+            for agent in transportation.agents:
+                if (agent.state != 'travelling'):
+                    continue
+
+                agent.check_for_infection(
+                    self.initial_parameters.sample_infection_establishment_CPC(),
+                    self.initial_parameters.sample_incubation_period(),
+                    transportation.get_contact_rate(), 
+                    transportation.get_infected_density(),
+                    2/15, time
+                    )
+
+
+        """Event based handling"""
         for event in manager.get(time):
             handle_agent_events(event, self.routing_table, self.initial_parameters, time)
             handle_transportation_events(event, self.transportations, self.initial_parameters, time)
@@ -197,15 +214,14 @@ class Simulation:
 
         def log_data_to_firestore(day, seir_data, occupancies_data, travelling_data):
             try:
-                doc_id = str(day) 
-                doc_ref = db.collection(self.collection_id).document(doc_id)
+                doc_ref = db.collection(self.collection_id).document(self.simulation_id)
                 total_population = sum(seir_data.values())
-                doc_ref.set({
+                doc_ref.set({str(day): {
                     **seir_data,
                     "Total": total_population,
                     "Vehicle_Occupancy": occupancies_data,
                     "Travelling_Agents": travelling_data
-                }, merge=True)
+                }}, merge=True)
             except Exception as e:
                 print(f"Firestore Sync Error: {e}")
 
@@ -364,5 +380,5 @@ if __name__ == '__main__':
 
     load_dotenv()
     print(f"Simulation Start: {datetime.now().isoformat()}")
-    Simulation(InitialParameters(365, {'I':2000}, {2: ENHANCED_CQ}), False, "Base Sim 365")
+    Simulation(InitialParameters(365, {'I':3}), True, "BaseSim365")
     print(f"Simulation End: {datetime.now().isoformat()}")
