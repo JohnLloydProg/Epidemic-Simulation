@@ -50,19 +50,12 @@ class Status:
         # Render the window
         plt.show()
 
-class InitialParameters:
-    income_tax:float = 0.1
-    vat:float = 0.12
-    contact_range:int = 4
-
-    def __init__(self, duration:int, no_per_comparment:dict[str, int], quarantine_schedule:dict[int, int] = {}):
-        self.incubation_period_in_hours = (float(os.environ.get('INCUBATION_PERIOD_IN_HOURS_SHAPE', 165.84)), float(os.environ.get('INCUBATION_PERIOD_IN_HOURS_RATE', 25.2)))
-        self.infected_duration_in_hours = (float(os.environ.get('INFECTED_DURATION_IN_HOURS_SHAPE', 7.11)), float(os.environ.get('INFECTED_DURATION_IN_HOURS_RATE', 0.037)))
-        self.duration = duration
-        self.no_per_compartment = no_per_comparment
-        self.quarantine_schedule = quarantine_schedule
-        self.chance_per_contact_on_transport = (float(os.environ.get('CHANCE_PER_CONTACT_ON_TRANSPORT_MEAN', 0.03)), float(os.environ.get('CHANCE_PER_CONTACT_ON_TRANSPORT_STD', 0.00577)))
-        self.chance_per_contact_on_establishment = (float(os.environ.get('CHANCE_PER_CONTACT_ON_ESTABLISHMENT_MEAN', 0.03)), float(os.environ.get('CHANCE_PER_CONTACT_ON_ESTABLISHMENT_STD', 0.00577)))
+class Disease:
+    def __init__(self, config:dict):
+        self.incubation_period_in_hours = (config.get('INCUBATION_PERIOD_IN_HOURS_SHAPE', 165.84), config.get('INCUBATION_PERIOD_IN_HOURS_RATE', 25.2))
+        self.infected_duration_in_hours = (config.get('INFECTED_DURATION_IN_HOURS_SHAPE', 7.11), config.get('INFECTED_DURATION_IN_HOURS_RATE', 0.037))
+        self.chance_per_contact_on_transport = (config.get('CHANCE_PER_CONTACT_ON_TRANSPORT_MEAN', 0.03), config.get('CHANCE_PER_CONTACT_ON_TRANSPORT_STD', 0.00577))
+        self.chance_per_contact_on_establishment = (config.get('CHANCE_PER_CONTACT_ON_ESTABLISHMENT_MEAN', 0.03), config.get('CHANCE_PER_CONTACT_ON_ESTABLISHMENT_STD', 0.00577))
     
     def sample_infection_establishment_CPC(self) -> float:
         result = -1

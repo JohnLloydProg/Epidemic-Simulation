@@ -39,9 +39,9 @@ class Event:
         return f"Event(type={self.type})"
 
 
-def init():
+def init(config:dict):
     global _time_step
-    _time_step = int(os.environ.get('TIME_STEP', '2'))
+    _time_step = config.get('TIME_STEP', 2)
 
 def get(time:int) -> list[Event]:
     counter = []

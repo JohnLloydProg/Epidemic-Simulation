@@ -40,7 +40,7 @@ if __name__ == "__main__":
 
     # --- Graph 2: Line Chart ---
     # Adding a marker 'o' makes the data points clearly visible on the line
-    plt.suptitle('SEIR Distribution (Line)')
-    plt.ylabel('Number of Agents')
-    plt.xlabel('Compartment')
+    plt.suptitle('Simulation Disease Spread (Line)')
+    plt.ylabel('Active Cases')
+    plt.xlabel('Days')
     plt.show()

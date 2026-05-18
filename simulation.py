@@ -1,4 +1,4 @@
-from objects import InitialParameters, Status
+from objects import Disease, Status
 from const import ENHANCED_CQ, MODIFIED_ENHANCED_CQ, GENERAL_CQ, MODIFIED_GENERAL_CQ
 from multiprocessing import Process
 from graphing.mapping import load_graph
@@ -17,6 +17,7 @@ import math
 import os
 import sys
 import uuid
+import json
 
 import firebase_admin
 from firebase_admin import credentials
@@ -74,32 +75,39 @@ class Simulation:
     font:pg.font.Font
     routing_table:dict[tuple, list]
     active_cases:list[tuple[int, int]]
+    no_per_compartment:dict
+    quarantine_schedule:dict
+    intervention_schedule:dict
     simulation_multiplier = 25
     simulation_ns_per_time_unit = (10**9)//simulation_multiplier 
     quarantine = None
     peak_hour:bool = False
     step_counter = 0
 
-    def __init__(self, initial_parameters:InitialParameters, headless=True, collection_id="Simulation_Data"):
+    def __init__(self, config:dict, headless=True):
         logging.basicConfig(handlers=[logging.FileHandler("logfile.txt", 'w'), logging.StreamHandler(sys.stdout)], 
                             level=logging.DEBUG if os.environ.get('DEBUG', 'False') == 'True' else logging.INFO)
         LOGGER.info(f'Initializing simulation with headless = {headless}...')
-        manager.init()
+        manager.init(config)
         
         """Initialize simulation parameters"""
-        self.initial_parameters = initial_parameters
-        self.time_step = int(os.environ.get('TIME_STEP', '2'))
+        self.disease = Disease(config)
+        self.time_step = config['TIME_STEP']
+        self.duration = config['DURATION']
+        self.no_per_compartment = config.get('SEIR_COUNT', {'I':4})
+        self.quarantine_schedule = config.get('QUARANTINE_SCHEDULES', {})
+        self.intervention_schedule = config.get('INTERVENTION_SCHEDULES', {})
         self.agents = []
         self.working_agents = []
         self.non_working_agents = []
         self.transportations = []
         self.headless = headless
         self.active_cases = []
-        self.collection_id = collection_id
+        self.collection_id = config["COLLECTION_ID"]
         self.simulation_id = str(uuid.uuid4())
 
         """Load environment and initialize route spawning events"""
-        environment = load_graph()
+        environment = load_graph(config)
         self.graph = environment[0]
         self.railway_graph = environment[1]
         self.routes = environment[2]
@@ -166,17 +174,17 @@ class Simulation:
             un_assigned_agents = list(filter(lambda agent: agent.id not in assigned, self.working_agents))
             if (len(un_assigned_agents) == 0):
                 break
-            agents = random.sample(un_assigned_agents, self.initial_parameters.no_per_compartment.get(compartment, 0))
+            agents = random.sample(un_assigned_agents, self.no_per_compartment.get(compartment, 0))
             for agent in agents:
                 agent.SEIR_compartment = compartment
                 
                 if (compartment == 'I'):
                     agent.symptomatic = random.random() < 0.6
                     remove_event = manager.Event(manager.AGENT_REMOVED, agent)
-                    manager.emit(math.ceil(self.initial_parameters.sample_infected_duration()), remove_event)
+                    manager.emit(math.ceil(self.disease.sample_infected_duration()), remove_event)
                 elif (compartment == 'E'):
                     infection_event = manager.Event(manager.AGENT_INFECTED, agent)
-                    manager.emit(math.ceil(self.initial_parameters.sample_incubation_period()), infection_event)
+                    manager.emit(math.ceil(self.disease.sample_incubation_period()), infection_event)
                 
                 assigned.add(agent.id)
 
@@ -191,8 +199,8 @@ class Simulation:
                         continue
 
                     agent.check_for_infection(
-                        self.initial_parameters.sample_infection_establishment_CPC(),
-                        self.initial_parameters.sample_incubation_period(),
+                        self.disease.sample_infection_establishment_CPC(),
+                        self.disease.sample_incubation_period(),
                         transportation.get_contact_rate(), 
                         transportation.get_infected_density(),
                         4/10, time
@@ -201,9 +209,9 @@ class Simulation:
 
         """Event based handling"""
         for event in manager.get(time):
-            handle_agent_events(event, self.routing_table, self.initial_parameters, time)
-            handle_transportation_events(event, self.transportations, self.initial_parameters, time)
-            handle_route_events(event, self.transportations, self.peak_hour, time)        
+            handle_agent_events(event, self.routing_table, self.disease, time)
+            handle_transportation_events(event, self.transportations, time)
+            handle_route_events(event, self.transportations, self.peak_hour, time, config)
     
     def run(self):
         time = 0
@@ -235,7 +243,7 @@ class Simulation:
         last_sampled_hour = None
         
         LOGGER.info('Starting simulation...')
-        while ((time // (60 * 24) < self.initial_parameters.duration) and running):
+        while ((time // (60 * 24) < self.duration) and running):
             minute = time % 60
             hour = (time // 60) % 24
             day = time // (60 * 24)
@@ -280,15 +288,15 @@ class Simulation:
             # --- DAILY ROUTINE ---
             if (hour == 0 and minute == 0):
                 status = generate_status(self.agents, time, self.active_cases)
-                self.active_cases.append((time, status.SEIR_compartments['I']))
+                self.active_cases.append((day, status.SEIR_compartments['I']))
                 day_delta = round((time_ns() - simulation_day_time) / (10**9), 2)
                 
-                LOGGER.info(f"Day {day}/{self.initial_parameters.duration} completed in {day_delta} seconds.")
+                LOGGER.info(f"Day {day}/{self.duration} completed in {day_delta} seconds.")
                 simulation_day_time = time_ns()
 
                 """Update quarantine measures if specified"""
-                if (day in self.initial_parameters.quarantine_schedule):
-                    self.quarantine = self.initial_parameters.quarantine_schedule[day]
+                if (day in self.quarantine_schedule):
+                    self.quarantine = self.quarantine_schedule[day]
                     LOGGER.info(f"Quarantine measure {self.quarantine} activated for day {day}.")
 
                 for agent in self.non_working_agents:
@@ -382,11 +390,19 @@ class Simulation:
     
 
 if __name__ == '__main__':
-    cred = credentials.Certificate('/firebase_cred/epidemicsimulation-firebase-adminsdk-fbsvc-81103feabb.json')
+    load_dotenv()
+    cert_path = f'/firebase_cred/{os.environ['CERT_FILE_NAME']}' if (os.environ.get('CLOUD', 'False') == 'True') else os.environ['CERT_FILE_NAME']
+    cred = credentials.Certificate(cert_path)
     firebase_admin.initialize_app(cred)
     db = firestore.client()
-
-    load_dotenv()
-    print(f"Simulation Start: {datetime.now().isoformat()}")
-    Simulation(InitialParameters(30, {'I':3}), True, "BaseSim365")
-    print(f"Simulation End: {datetime.now().isoformat()}")
+    
+    config_path = f'/firebase_cred/{os.environ['CONFIG_FILE_NAME']}' if (os.environ.get('CLOUD', 'False') == 'True') else os.environ['CONFIG_FILE_NAME']
+    with open(config_path) as f:
+        config = json.load(f)
+    
+    if (not config):
+        print("Configuration file not found! Simulation won't start.")
+    else:
+        print(f"Simulation Start: {datetime.now().isoformat()}")
+        Simulation(config, False)
+        print(f"Simulation End: {datetime.now().isoformat()}")

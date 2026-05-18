@@ -1,6 +1,6 @@
 from graphing.core import Edge, Node
 from graphing.graph import Graph
-from objects import InitialParameters
+from objects import Disease
 import pygame as pg
 import numpy as np
 import math
@@ -41,7 +41,7 @@ class Route:
     def __str__(self):
         return f"Route {self.id} from {self.spawn_node.id} to {self.path[-1].get_adjacent_node(self.path[-1].nodes[1]).id if self.path else self.spawn_node.id}"
     
-    def generate_transportation(self, current_time:int, is_peak_hours:bool) ->list['RoutedTransportation']:
+    def generate_transportation(self, current_time:int, is_peak_hours:bool, config:dict) ->list['RoutedTransportation']:
         spawn_interval = self.spawn_time if not is_peak_hours else self.peak_spawn
         manager.emit(current_time + spawn_interval, manager.Event(manager.TRANSPORTATION_SPAWN, self))
         _transportations = []
@@ -50,12 +50,12 @@ class Route:
                 passenger = random.choice([(10, 10), (12, 12), (15, 15), (15, 20) ])
                 max_passenger = passenger[1]
                 suggested_passenger = passenger[0]
-                expected_contact_rate = 3.5
+                expected_contact_rate = config['CONTACT_RATES'].get('JEEP', 3.5)
                 method = 'jeep'
             else:
                 max_passenger = 50
                 suggested_passenger = 40
-                expected_contact_rate = 4.5
+                expected_contact_rate = config['CONTACT_RATES'].get('BUS', 4.5)
                 method = 'bus'
             transportation = RoutedTransportation(method, self.expected_speed, max_passenger, suggested_passenger, self.spawn_node, self)
             transportation.expected_contact_rate = expected_contact_rate
@@ -90,11 +90,11 @@ class TrainRoute(Route):
     def __init__(self, spawn_node:Node, path:list[Edge], graph:Graph, spawn_time:int, peak_spawn:int):
         super().__init__(spawn_node, path, graph, spawn_time, peak_spawn)
 
-    def generate_transportation(self, current_time, is_peak_hours:bool):
+    def generate_transportation(self, current_time, is_peak_hours:bool, config:dict):
         spawn_interval = self.spawn_time if not is_peak_hours else self.peak_spawn
         manager.emit(current_time + spawn_interval, manager.Event(manager.TRANSPORTATION_SPAWN, self))
         transportation = RoutedTransportation('rail', self.expected_speed, 2000, 1300, self.spawn_node, self)
-        transportation.expected_contact_rate = 8.5
+        transportation.expected_contact_rate = config['CONTACT_RATES'].get('TRAIN', 8.5)
         self.transportations.append(transportation)
         return [transportation]
 
@@ -155,12 +155,12 @@ class RoutedTransportation(Transportation):
         manager.emit(current_time + math.ceil(travel_time), manager.Event(manager.TRANSPORTATION_ARRIVED, self))
 
 
-def handle_route_events(event:manager.Event, transportations:list[Transportation], is_peak_hours:bool, time:int):
+def handle_route_events(event:manager.Event, transportations:list[Transportation], is_peak_hours:bool, time:int, config:dict):
     routes:list[Route] = event.get_objects()
     if (event.type == manager.TRANSPORTATION_SPAWN):
         LOGGER.debug(f"Handling transportation spawn for {len(routes)} routes at time {time}.")
         for route in routes:
-            transports = route.generate_transportation(current_time=time, is_peak_hours=is_peak_hours)
+            transports = route.generate_transportation(current_time=time, is_peak_hours=is_peak_hours, config=config)
             for transport in transports:
                 for agent in list(transport.current_node.agents):
                     if (agent.state != 'waiting'):
@@ -178,7 +178,7 @@ def handle_route_events(event:manager.Event, transportations:list[Transportation
             transportations.extend(transports)
 
 
-def handle_transportation_events(event:manager.Event, transportations:list[Transportation], initial_parameters:InitialParameters, time:int):
+def handle_transportation_events(event:manager.Event, transportations:list[Transportation], time:int):
     _transportations:list[Transportation] = event.get_objects()
     if (event.type == manager.TRANSPORTATION_ARRIVED):
         LOGGER.debug(f"Handling transportation arrival for {len(event.get_objects())} transportations at time {time}.")

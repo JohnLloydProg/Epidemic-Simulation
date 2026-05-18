@@ -1,6 +1,6 @@
 from typing import Literal
 from functools import lru_cache
-from objects import InitialParameters
+from objects import Disease
 from transport.transportation import Transportation, Route
 from transport.checkpoint import Checkpoint, generate_checkpoints
 from const import QUARANTINE_CR_PERCENTAGE
@@ -229,7 +229,7 @@ class WorkingAgent(Agent):
         self.working_hours = working_hours
 
 
-def handle_agent_events(event:manager.Event, routing_cache:dict, initial_parameters:InitialParameters, time:int):
+def handle_agent_events(event:manager.Event, routing_cache:dict, disease:Disease, time:int):
     agents:list[Agent] = event.get_objects()
     if (event.type == manager.AGENT_ARRIVAL):
         LOGGER.debug(f"Handling agent arrival for {len(event.get_objects())} agents at time {time}.")
@@ -248,14 +248,14 @@ def handle_agent_events(event:manager.Event, routing_cache:dict, initial_paramet
             agent.SEIR_compartment = 'I'
             agent.symptomatic = random.random() < 0.6  # 60% chance to be symptomatic
             remove_event = manager.Event(manager.AGENT_REMOVED, agent)
-            manager.emit(time + round(initial_parameters.sample_infected_duration()), remove_event)
+            manager.emit(time + round(disease.sample_infected_duration()), remove_event)
     elif (event.type == manager.AGENT_GO_HOME):
         LOGGER.debug(f"Handling agent go home for {len(event.get_objects())} agents at time {time}.")
         for agent in agents:
             # Might change to firm event instead chaging agents state to finished work 
             agent.check_for_infection(
-                initial_parameters.sample_infection_establishment_CPC(),
-                initial_parameters.sample_incubation_period(),
+                disease.sample_infection_establishment_CPC(),
+                disease.sample_incubation_period(),
                 agent.current_establishment.contact_rate(), 
                 agent.current_establishment.infected_density(),
                 (time - agent.arrival_time)/60, time
@@ -268,8 +268,8 @@ def handle_agent_events(event:manager.Event, routing_cache:dict, initial_paramet
         LOGGER.debug(f"Handling agent go shopping for {len(event.get_objects())} agents at time {time}.")
         for agent in agents:
             agent.check_for_infection(
-                initial_parameters.sample_infection_establishment_CPC(),
-                initial_parameters.sample_incubation_period(),
+                disease.sample_infection_establishment_CPC(),
+                disease.sample_incubation_period(),
                 agent.current_establishment.contact_rate(), 
                 agent.current_establishment.infected_density(),
                 (time - agent.arrival_time)/60, time
@@ -288,8 +288,8 @@ def handle_agent_events(event:manager.Event, routing_cache:dict, initial_paramet
         LOGGER.debug(f"Handling agent go work for {len(event.get_objects())} agents at time {time}.")
         for agent in agents:
             agent.check_for_infection(
-                initial_parameters.sample_infection_establishment_CPC(),
-                initial_parameters.sample_incubation_period(),
+                disease.sample_infection_establishment_CPC(),
+                disease.sample_incubation_period(),
                 agent.current_establishment.contact_rate(), 
                 agent.current_establishment.infected_density(),
                 (time - agent.arrival_time)/60, time

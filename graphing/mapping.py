@@ -134,7 +134,7 @@ def shortest_path(start_node:Node, end_node:Node, routes:list[Route]) -> list[tu
     return []
 
 
-def load_graph() -> tuple[RegionGraph, Graph, list[Route]]:
+def load_graph(config:dict) -> tuple[RegionGraph, Graph, list[Route]]:
     map_path = './map/'
     city_graph = RegionGraph('city')
     railway_graph = Graph('railway')
@@ -172,7 +172,7 @@ def load_graph() -> tuple[RegionGraph, Graph, list[Route]]:
         nodes = nodes.strip(",")
         node_ids = [(city_graph.layer, int(node_id)) for node_id in nodes.split(",")]
         try:
-            city_graph.add_region(node_ids, math.ceil(int(region_xl['Alloted Residential Units']) * 0.15), math.ceil(int(region_xl['Alloted Business Units']) * 0.1))
+            city_graph.add_region(node_ids, math.ceil(int(region_xl['Alloted Residential Units']) * 0.15), math.ceil(int(region_xl['Alloted Business Units']) * 0.1), config)
         except Exception as e:
             LOGGER.debug(f"Error adding region {i}: {e}")
             LOGGER.debug(f"Node IDs: {node_ids}")
