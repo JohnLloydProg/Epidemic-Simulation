@@ -45,7 +45,7 @@ class Route:
         spawn_interval = self.spawn_time if not is_peak_hours else self.peak_spawn
         manager.emit(current_time + spawn_interval, manager.Event(manager.TRANSPORTATION_SPAWN, self))
         _transportations = []
-        for i in range(random.randint(2, 3)):
+        for i in range(random.randint(1, 2)):
             if (random.random() < 0.5):
                 passenger = random.choice([(10, 10), (12, 12), (15, 15), (15, 20) ])
                 max_passenger = passenger[1]

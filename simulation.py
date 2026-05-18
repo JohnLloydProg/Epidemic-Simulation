@@ -404,5 +404,5 @@ if __name__ == '__main__':
         print("Configuration file not found! Simulation won't start.")
     else:
         print(f"Simulation Start: {datetime.now().isoformat()}")
-        Simulation(config, False)
+        Simulation(config, True)
         print(f"Simulation End: {datetime.now().isoformat()}")
