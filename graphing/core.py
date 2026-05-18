@@ -7,7 +7,7 @@ class Node:
     radius:int = 10
     agents:list
     edges:list['Edge']
-    max_agents:int = 300
+    max_agents:int = 200
 
     def __init__(self, x:int, y:int, id:tuple[str, int]):
         self.id = id
