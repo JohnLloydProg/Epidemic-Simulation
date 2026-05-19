@@ -3,10 +3,13 @@ from firebase_admin import credentials
 from firebase_admin import firestore
 import matplotlib.pyplot as plt
 import math
+from dotenv import load_dotenv
+import os
 
 
 if __name__ == "__main__":
-    cred = credentials.Certificate('epidemicsimulation-firebase-adminsdk-fbsvc-81103feabb.json')
+    load_dotenv()
+    cred = credentials.Certificate(os.environ['CERT_FILE_NAME'])
     firebase_admin.initialize_app(cred)
     db = firestore.client()
     sim_groups = db.collections()
@@ -21,6 +24,7 @@ if __name__ == "__main__":
     docs = collection.list_documents()
 
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 5))
+    fig.canvas.manager.set_window_title(collection.id)
 
     average_cases:dict[int, list[int]] = {}
     

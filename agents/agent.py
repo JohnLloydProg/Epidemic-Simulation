@@ -68,6 +68,7 @@ class Agent:
     transportation:Transportation = None
     consumed:bool = False
     symptomatic:bool = False
+    isolate:bool = False
     tested:bool = False
     state:str = 'home'
 
@@ -232,7 +233,7 @@ class WorkingAgent(Agent):
 def handle_agent_events(event:manager.Event, routing_cache:dict, disease:Disease, time:int):
     agents:list[Agent] = event.get_objects()
     if (event.type == manager.AGENT_ARRIVAL):
-        LOGGER.debug(f"Handling agent arrival for {len(event.get_objects())} agents at time {time}.")
+        LOGGER.debug(f"Handling agent arrival for {len(agents)} agents at time {time}.")
         for agent in agents:
             agent.arrival(time)
     elif (event.type == manager.AGENT_REMOVED):
@@ -243,14 +244,17 @@ def handle_agent_events(event:manager.Event, routing_cache:dict, disease:Disease
                 agent.SEIR_compartment = 'D'
             else:
                 agent.SEIR_compartment = 'R'
+                agent.isolate = False
     elif (event.type == manager.AGENT_INFECTED):
         for agent in agents:
             agent.SEIR_compartment = 'I'
             agent.symptomatic = random.random() < 0.6  # 60% chance to be symptomatic
+            if (agent.symptomatic):
+                manager.emit(time + (random.randint(24, 48)*60), manager.Event(manager.AGENT_ISOLATE, agent))
             remove_event = manager.Event(manager.AGENT_REMOVED, agent)
             manager.emit(time + round(disease.sample_infected_duration()), remove_event)
     elif (event.type == manager.AGENT_GO_HOME):
-        LOGGER.debug(f"Handling agent go home for {len(event.get_objects())} agents at time {time}.")
+        LOGGER.debug(f"Handling agent go home for {len(agents)} agents at time {time}.")
         for agent in agents:
             if (isinstance(agent, WorkingAgent) and agent.current_establishment == agent.firm):
                 chance_per_contact = disease.sample_infection_firm_work_CPC()
@@ -269,7 +273,7 @@ def handle_agent_events(event:manager.Event, routing_cache:dict, disease:Disease
             else:
                 agent.set_path(agent.household, time)
     elif (event.type == manager.AGENT_GO_SHOPPING):
-        LOGGER.debug(f"Handling agent go shopping for {len(event.get_objects())} agents at time {time}.")
+        LOGGER.debug(f"Handling agent go shopping for {len(agents)} agents at time {time}.")
         for agent in agents:
             if (agent.current_establishment == agent.household):
                 chance_per_contact = disease.sample_infection_household_CPC()
@@ -293,7 +297,7 @@ def handle_agent_events(event:manager.Event, routing_cache:dict, disease:Disease
             else:
                 agent.set_path(destination, time)
     elif (event.type == manager.AGENT_GO_WORK):
-        LOGGER.debug(f"Handling agent go work for {len(event.get_objects())} agents at time {time}.")
+        LOGGER.debug(f"Handling agent go work for {len(agents)} agents at time {time}.")
         for agent in agents:
             if (agent.current_establishment == agent.household):
                 chance_per_contact = disease.sample_infection_household_CPC()
@@ -312,7 +316,11 @@ def handle_agent_events(event:manager.Event, routing_cache:dict, disease:Disease
             else:
                 agent.set_path(agent.firm, time)
     elif (event.type == manager.AGENT_FINISHED_WORK):
-        LOGGER.debug(f"Handling agent finished work for {len(event.get_objects())} agents at time {time}.")
+        LOGGER.debug(f"Handling agent finished work for {len(agents)} agents at time {time}.")
         for agent in agents:
             agent.finished_work = True
+    elif (event.type == manager.AGENT_ISOLATE):
+        LOGGER.debug(f'Handling agent isolation for {len(agents)} agents at time {time}.')
+        for agent in agents:
+            agent.isolate = True
             

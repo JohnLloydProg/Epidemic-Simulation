@@ -28,7 +28,7 @@ LOGGER = logging.getLogger('Simulation')
 def daily_work(agents:list[WorkingAgent], time:int, config:dict) -> set[int]:
     will_work = set()
     for agent in agents:
-        if (agent.SEIR_compartment == 'D' or (agent.SEIR_compartment == 'I' and agent.symptomatic and random.random() < config.get('AGENT_COMPLIANCE', 0.5))):
+        if (agent.SEIR_compartment == 'D' or (agent.isolate and random.random() < config.get('AGENT_COMPLIANCE', 0.5))):
             continue
         agent.clocked_in = False
         agent.finished_work = False
@@ -301,7 +301,7 @@ class Simulation:
                     LOGGER.info(f"Quarantine measure {self.quarantine} activated for day {day}.")
 
                 for agent in self.non_working_agents:
-                    if (random.random() < 0.3 and agent.age <= 65 and agent.age >= 4 and agent.SEIR_compartment != 'D'):
+                    if (random.random() < 0.3 and agent.age <= 65 and agent.age >= 4 and agent.SEIR_compartment != 'D' and not agent.isolate):
                         manager.emit(next_occurrence_of_hour(time, random.randrange(10, 15)), manager.Event(manager.AGENT_GO_SHOPPING, agent))
                 
                 will_work:set[int] = set()
