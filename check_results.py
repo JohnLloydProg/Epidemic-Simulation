@@ -2,6 +2,7 @@ import firebase_admin
 from firebase_admin import credentials
 from firebase_admin import firestore
 import matplotlib.pyplot as plt
+import math
 
 
 if __name__ == "__main__":
@@ -18,6 +19,10 @@ if __name__ == "__main__":
     
     collection = db.collection(sim_groups_dict[simulation_group])
     docs = collection.list_documents()
+
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 5))
+
+    average_cases:dict[int, list[int]] = {}
     
     for sim in docs:
         print(f"Simulation ID: {sim.id}")
@@ -35,12 +40,25 @@ if __name__ == "__main__":
         for case in active_cases:
             x_active.append(case[0])
             y_active.append(case[1])
-        plt.plot(x_active, y_active, marker='o', linestyle='-', label=sim.id)
-
+            if (case[0] not in average_cases):
+                average_cases[case[0]] = [case[1]]
+            else:
+                average_cases[case[0]].append(case[1])
+        ax1.plot(x_active, y_active, marker='o', linestyle='-', label=sim.id)
+    
+    ave_x = list(average_cases.keys())
+    ave_y = [sum(daily_cases)/len(daily_cases) for daily_cases in average_cases.values()]
+    ax2.plot(ave_y)
 
     # --- Graph 2: Line Chart ---
     # Adding a marker 'o' makes the data points clearly visible on the line
-    plt.suptitle('Simulation Disease Spread (Line)')
-    plt.ylabel('Active Cases')
-    plt.xlabel('Days')
+    ax1.set_title('Simulation Disease Spread (Line)')
+    ax1.set_ylabel('Active Cases')
+    ax1.set_xlabel('Days')
+
+    ax2.set_title('Average Simulation Disease Spread (Line)')
+    ax2.set_ylabel('Active Cases')
+    ax2.set_xlabel('Days')
+
+    plt.tight_layout()
     plt.show()

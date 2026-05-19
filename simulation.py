@@ -199,7 +199,7 @@ class Simulation:
                         continue
 
                     agent.check_for_infection(
-                        self.disease.sample_infection_establishment_CPC(),
+                        self.disease.sample_infection_transport_CPC(),
                         self.disease.sample_incubation_period(),
                         transportation.get_contact_rate(), 
                         transportation.get_infected_density(),

@@ -252,9 +252,13 @@ def handle_agent_events(event:manager.Event, routing_cache:dict, disease:Disease
     elif (event.type == manager.AGENT_GO_HOME):
         LOGGER.debug(f"Handling agent go home for {len(event.get_objects())} agents at time {time}.")
         for agent in agents:
-            # Might change to firm event instead chaging agents state to finished work 
+            if (isinstance(agent, WorkingAgent) and agent.current_establishment == agent.firm):
+                chance_per_contact = disease.sample_infection_firm_work_CPC()
+            else:
+                chance_per_contact = disease.sample_infection_firm_retail_CPC()
+
             agent.check_for_infection(
-                disease.sample_infection_establishment_CPC(),
+                chance_per_contact,
                 disease.sample_incubation_period(),
                 agent.current_establishment.contact_rate(), 
                 agent.current_establishment.infected_density(),
@@ -267,8 +271,12 @@ def handle_agent_events(event:manager.Event, routing_cache:dict, disease:Disease
     elif (event.type == manager.AGENT_GO_SHOPPING):
         LOGGER.debug(f"Handling agent go shopping for {len(event.get_objects())} agents at time {time}.")
         for agent in agents:
+            if (agent.current_establishment == agent.household):
+                chance_per_contact = disease.sample_infection_household_CPC()
+            else:
+                chance_per_contact = disease.sample_infection_firm_work_CPC()
             agent.check_for_infection(
-                disease.sample_infection_establishment_CPC(),
+                chance_per_contact,
                 disease.sample_incubation_period(),
                 agent.current_establishment.contact_rate(), 
                 agent.current_establishment.infected_density(),
@@ -287,8 +295,13 @@ def handle_agent_events(event:manager.Event, routing_cache:dict, disease:Disease
     elif (event.type == manager.AGENT_GO_WORK):
         LOGGER.debug(f"Handling agent go work for {len(event.get_objects())} agents at time {time}.")
         for agent in agents:
+            if (agent.current_establishment == agent.household):
+                chance_per_contact = disease.sample_infection_household_CPC()
+            else:
+                chance_per_contact = disease.sample_infection_firm_retail_CPC()
+
             agent.check_for_infection(
-                disease.sample_infection_establishment_CPC(),
+                chance_per_contact,
                 disease.sample_incubation_period(),
                 agent.current_establishment.contact_rate(), 
                 agent.current_establishment.infected_density(),
