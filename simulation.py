@@ -25,10 +25,10 @@ from firebase_admin import firestore
 
 LOGGER = logging.getLogger('Simulation')
 
-def daily_work(agents:list[WorkingAgent], time:int) -> set[int]:
+def daily_work(agents:list[WorkingAgent], time:int, config:dict) -> set[int]:
     will_work = set()
     for agent in agents:
-        if (agent.SEIR_compartment == 'D' or (agent.SEIR_compartment == 'I' and agent.symptomatic)):
+        if (agent.SEIR_compartment == 'D' or (agent.SEIR_compartment == 'I' and agent.symptomatic and random.random() < config.get('AGENT_COMPLIANCE', 0.5))):
             continue
         agent.clocked_in = False
         agent.finished_work = False
@@ -105,6 +105,7 @@ class Simulation:
         self.active_cases = []
         self.collection_id = config["COLLECTION_ID"]
         self.simulation_id = str(uuid.uuid4())
+        self.config = config
 
         """Load environment and initialize route spawning events"""
         environment = load_graph(config)
@@ -305,17 +306,17 @@ class Simulation:
                 
                 will_work:set[int] = set()
                 if (not self.quarantine):
-                    will_work.update(daily_work(self.working_agents, time))
+                    will_work.update(daily_work(self.working_agents, time, self.config))
 
                 elif (self.quarantine in {ENHANCED_CQ, MODIFIED_ENHANCED_CQ}):
                     # implement covid tests
                     for firm in self.graph.get_firms():
                         if (firm.essential):
-                            will_work.update(daily_work(firm.resident_agents, time))
+                            will_work.update(daily_work(firm.resident_agents, time, self.config))
                         elif (self.quarantine == MODIFIED_ENHANCED_CQ):
                             max_capacity = int(0.5 * firm.max_capacity)
                             agents = random.sample(firm.resident_agents, min(len(firm.resident_agents), max_capacity))
-                            will_work.update(daily_work(agents, time))
+                            will_work.update(daily_work(agents, time, self.config))
             
             if (status.SEIR_compartments['I'] == 0):
                 running = False
