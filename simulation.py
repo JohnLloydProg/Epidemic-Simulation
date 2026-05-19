@@ -181,6 +181,8 @@ class Simulation:
                 
                 if (compartment == 'I'):
                     agent.symptomatic = random.random() < 0.6
+                    if (agent.symptomatic):
+                        manager.emit(random.randint(24, 48)*60, manager.Event(manager.AGENT_ISOLATE, agent))
                     remove_event = manager.Event(manager.AGENT_REMOVED, agent)
                     manager.emit(math.ceil(self.disease.sample_infected_duration()), remove_event)
                 elif (compartment == 'E'):
