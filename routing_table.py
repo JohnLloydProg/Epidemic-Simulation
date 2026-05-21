@@ -23,7 +23,7 @@ def save_dehydrated_cache(dehydrated_cache: dict):
         pickle.dump(dehydrated_cache, f)
     LOGGER.info("Save complete!")
 
-def rehydrate_cache(dehydrated_cache:dict, city:RegionGraph, railway:Graph, routes:list[Route]):
+def rehydrate_cache(dehydrated_cache:dict, city:RegionGraph, railway:Graph, routes:list[Route]) -> dict[tuple, list[Checkpoint]]:
     route_lookup = {route.id:route for route in routes}
     routing_cache = {}
 

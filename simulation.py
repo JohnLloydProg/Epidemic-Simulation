@@ -4,7 +4,8 @@ from multiprocessing import Process
 from graphing.mapping import load_graph
 from graphing.graph import RegionGraph
 from agents.agent import AGE_RANGE_DISTRIBUTION, Agent, WorkingAgent, next_occurrence_of_hour, handle_agent_events
-from transport.transportation import Transportation, handle_route_events, handle_transportation_events
+from transport.transportation import Transportation, RoutedTransportation, handle_route_events, handle_transportation_events, BusRoute
+from interventions import Policy, LimitCapacity, handle_policy_events, RouteReduction
 from routing_table import build_routing_cache
 from time import time_ns
 from datetime import datetime
@@ -25,10 +26,10 @@ from firebase_admin import firestore
 
 LOGGER = logging.getLogger('Simulation')
 
-def daily_work(agents:list[WorkingAgent], time:int, config:dict) -> set[int]:
+def daily_work(agents:list[WorkingAgent], quarantine:bool, time:int, config:dict) -> set[int]:
     will_work = set()
     for agent in agents:
-        if (agent.SEIR_compartment == 'D' or (agent.isolate and random.random() < config.get('AGENT_COMPLIANCE', 0.5))):
+        if (agent.SEIR_compartment == 'D' or (agent.isolate and (random.random() < config.get('AGENT_COMPLIANCE', 0.5) or quarantine))):
             continue
         agent.clocked_in = False
         agent.finished_work = False
@@ -62,6 +63,12 @@ def get_travelling_mode(agents:list[Agent]) -> dict[str, int]:
             travel_modes['walking'] = travel_modes.get('walking', 0) + 1
     return travel_modes
 
+def get_transport_count(transportations:list[RoutedTransportation]):
+    transport_types = {}
+    for transport in transportations:
+        transport_types[transport.method] = transport_types.get(transport.method, 0) + 1
+    return transport_types
+
 class Simulation:
     compartments = ['S', 'E', 'I', 'R', 'D']
     layer = 'city'
@@ -75,12 +82,15 @@ class Simulation:
     font:pg.font.Font
     routing_table:dict[tuple, list]
     active_cases:list[tuple[int, int]]
+    designated_persons:list[Agent]
     no_per_compartment:dict
-    quarantine_schedule:dict
-    intervention_schedule:dict
+    policy_schedule:dict
     simulation_multiplier = 25
-    simulation_ns_per_time_unit = (10**9)//simulation_multiplier 
-    quarantine = None
+    simulation_ns_per_time_unit = (10**9)//simulation_multiplier
+    max_travel_distance = None
+    essential_only = False
+    company_capacity_ratio = 1
+    quarantine = False
     peak_hour:bool = False
     step_counter = 0
 
@@ -95,14 +105,14 @@ class Simulation:
         self.time_step = config['TIME_STEP']
         self.duration = config['DURATION']
         self.no_per_compartment = config.get('SEIR_COUNT', {'I':4})
-        self.quarantine_schedule = config.get('QUARANTINE_SCHEDULES', {})
-        self.intervention_schedule = config.get('INTERVENTION_SCHEDULES', {})
+        self.policy_schedule = config.get('POLICY_SCHEDULES', {})
         self.agents = []
         self.working_agents = []
         self.non_working_agents = []
         self.transportations = []
         self.headless = headless
         self.active_cases = []
+        self.designated_persons = []
         self.collection_id = config["COLLECTION_ID"]
         self.simulation_id = str(uuid.uuid4())
         self.config = config
@@ -114,6 +124,9 @@ class Simulation:
         self.routes = environment[2]
         for route in self.routes:
             manager.emit(3, manager.Event(manager.TRANSPORTATION_SPAWN, route))
+
+        policy = RouteReduction(1 * 24 * 60, 2 * 24 * 60, [route for route in self.routes if isinstance(route, BusRoute)])
+        manager.emit(policy.start_time, manager.Event(manager.IMPLEMENT_POLICY, policy))
 
         """Build routing cache for agents"""
         establishment = self.graph.get_firms()
@@ -212,9 +225,10 @@ class Simulation:
 
         """Event based handling"""
         for event in manager.get(time):
-            handle_agent_events(event, self.routing_table, self.disease, time)
+            handle_agent_events(event, self.routing_table, self.routes, self.max_travel_distance, self.disease, time)
             handle_transportation_events(event, self.transportations, time)
-            handle_route_events(event, self.transportations, self.peak_hour, time, config)
+            handle_route_events(event, self.transportations, self.peak_hour, time, self.config)
+            handle_policy_events(self, event, time)
     
     def run(self):
         time = 0
@@ -297,28 +311,18 @@ class Simulation:
                 LOGGER.info(f"Day {day}/{self.duration} completed in {day_delta} seconds.")
                 simulation_day_time = time_ns()
 
-                """Update quarantine measures if specified"""
-                if (day in self.quarantine_schedule):
-                    self.quarantine = self.quarantine_schedule[day]
-                    LOGGER.info(f"Quarantine measure {self.quarantine} activated for day {day}.")
-
                 for agent in self.non_working_agents:
                     if (random.random() < 0.3 and agent.age <= 65 and agent.age >= 4 and agent.SEIR_compartment != 'D' and not agent.isolate):
                         manager.emit(next_occurrence_of_hour(time, random.randrange(10, 15)), manager.Event(manager.AGENT_GO_SHOPPING, agent))
                 
                 will_work:set[int] = set()
-                if (not self.quarantine):
-                    will_work.update(daily_work(self.working_agents, time, self.config))
-
-                elif (self.quarantine in {ENHANCED_CQ, MODIFIED_ENHANCED_CQ}):
-                    # implement covid tests
-                    for firm in self.graph.get_firms():
-                        if (firm.essential):
-                            will_work.update(daily_work(firm.resident_agents, time, self.config))
-                        elif (self.quarantine == MODIFIED_ENHANCED_CQ):
-                            max_capacity = int(0.5 * firm.max_capacity)
-                            agents = random.sample(firm.resident_agents, min(len(firm.resident_agents), max_capacity))
-                            will_work.update(daily_work(agents, time, self.config))
+                for firm in self.graph.get_firms():
+                    if (not firm.essential and self.essential_only):
+                        continue
+                    
+                    max_capacity = firm.max_capacity if firm.essential else int(self.company_capacity_ratio * firm.max_capacity)
+                    agents = random.sample(firm.resident_agents, min(len(firm.resident_agents), max_capacity))
+                    will_work.update(daily_work(agents, self.quarantine, time, self.config))
             
             if (status.SEIR_compartments['I'] == 0):
                 running = False
@@ -361,7 +365,6 @@ class Simulation:
                         route.draw(self.window, self.graph)
                     
                     text = self.font.render(f"time: {time} (Day {day} {hour}:{minute}) {self.simulation_multiplier}x {round(delta, 2)}ms per step {len(manager._events.values())} events", False, (0, 0, 0))
-                    quarantine_text = self.font.render(f"Quarantine: {self.quarantine if self.quarantine else 'None'}", False, (0, 0, 0))
                     
                     state_text = ''
                     for state in ['home', 'travelling', 'waiting', 'working', 'consuming']:
@@ -369,21 +372,21 @@ class Simulation:
                     states_text = self.font.render(f"States: {state_text}", False, (0, 0, 0))
                     
                     travel_text = self.font.render(f"Travel modes: {travel_modes}", False, (0, 0, 0))
-                    occupancies = {}
+                    occupancies:dict[str, list] = {}
                     for transpo in self.transportations:
                         if (transpo.method in occupancies):
-                            occupancies[transpo.method] = round((occupancies[transpo.method] + transpo.occupancy()) / 2, 2)
+                            occupancies[transpo.method].append(transpo.occupancy())
                         else:
-                            occupancies[transpo.method] = transpo.occupancy()
-                            
-                    metric_text = self.font.render(f"Transportation: {len(self.transportations)}, avg. occupancy: {occupancies}", False, (0, 0, 0))
+                            occupancies[transpo.method] = [transpo.occupancy()]
+                    metric_text = self.font.render(f"Transportation Used: {len(self.transportations)}, avg. occupancy: {[(method, round(max(occupancy), 2))for method, occupancy in occupancies.items()]}", False, (0, 0, 0))
+                    available_transports = self.font.render(f"Live Transportation: {get_transport_count(self.transportations)}", False, (0, 0, 0))
                     
                     self.window.blit(states_text, states_text.get_rect(topleft=(20, 40)))
                     self.window.blit(travel_text, travel_text.get_rect(topleft=(20, 60)))
+                    self.window.blit(available_transports, available_transports.get_rect(topleft=(20, 80)))
                     pg.draw.circle(self.window, (0, 255, 0), pg.mouse.get_pos(), 5)
                     self.window.blit(metric_text, metric_text.get_rect(topleft=(20, 20)))
                     self.window.blit(text, text.get_rect(topright=(1060, 20)))
-                    self.window.blit(quarantine_text, quarantine_text.get_rect(topright=(1060, 40)))
 
                     pg.display.update()
 
@@ -407,5 +410,5 @@ if __name__ == '__main__':
         print("Configuration file not found! Simulation won't start.")
     else:
         print(f"Simulation Start: {datetime.now().isoformat()}")
-        Simulation(config, True)
+        Simulation(config, False)
         print(f"Simulation End: {datetime.now().isoformat()}")

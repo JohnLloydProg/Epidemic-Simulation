@@ -1,7 +1,7 @@
 from functools import lru_cache
 from graphing.core import Node, Edge
 from graphing.graph import Graph, RegionGraph
-from transport.transportation import Route, TrainRoute
+from transport.transportation import Route, TrainRoute, JeepRoute, BusRoute
 import pandas as pd
 import heapq
 import logging
@@ -220,10 +220,14 @@ def load_graph(config:dict) -> tuple[RegionGraph, Graph, list[Route]]:
             LOGGER.debug(f"Error finding path for route {i}: {e}")
             LOGGER.debug(f"Node 1: {(city_graph.layer, int(route_xl['Node 1']))}, Node 2: {(city_graph.layer, int(route_xl['Node 2']))}")
             continue # Interval
-        route = Route(node, edges, city_graph, int(route_xl['Interval']), int(route_xl['Peak Interval']))
-        return_route = Route(reverse_node, reversed_edges, city_graph, int(route_xl['Interval']), int(route_xl['Peak Interval']))
-        routes.append(route)
-        routes.append(return_route)
+        jeep_route = JeepRoute(node, edges, city_graph, int(route_xl['Interval']), int(route_xl['Peak Interval']))
+        jeep_return_route = JeepRoute(reverse_node, reversed_edges, city_graph, int(route_xl['Interval']), int(route_xl['Peak Interval']))
+        bus_route = BusRoute(node, edges, city_graph, int(route_xl['Interval'])*1.5, int(route_xl['Peak Interval'])*1.5)
+        bus_return_route = BusRoute(reverse_node, reversed_edges, city_graph, int(route_xl['Interval'])*1.5, int(route_xl['Peak Interval'])*1.5)
+        routes.append(jeep_route)
+        routes.append(jeep_return_route)
+        routes.append(bus_route)
+        routes.append(bus_return_route)
 
     route_data = pd.read_excel(f"{map_path}/{railway_graph.layer}/routes.xlsx", index_col=None)
     for i in range(len(route_data)):

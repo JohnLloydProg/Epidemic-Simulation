@@ -1,12 +1,13 @@
 from typing import Literal
 from functools import lru_cache
 from objects import Disease
-from transport.transportation import Transportation, Route
+from transport.transportation import Transportation, Route, RoutedTransportation
 from transport.checkpoint import Checkpoint, generate_checkpoints
 from const import QUARANTINE_CR_PERCENTAGE
 from graphing.graph import Graph, RegionGraph
 from graphing.core import Node, Region, Edge
 from graphing.mapping import shortest_edge_path
+from graphing.mapping import shortest_path
 from agents.core import Household, Firm
 from agents.core import Establishment
 import logging
@@ -85,14 +86,16 @@ class Agent:
         Agent.id += 1
     
     def ride_transportation(self, transportation:Transportation, time:int):
-        if (not transportation.is_full()):
-            self.transportation = transportation
-            self.boarding_time = time
-            transportation.agents.append(self)
-            if (self.SEIR_compartment == 'I'):
-                transportation.no_infected_agents += 1
-            self.current_node.agents.remove(self)
-            self.current_node = None
+        if (isinstance(transportation, RoutedTransportation) and transportation.is_full()):
+            return
+        
+        self.transportation = transportation
+        self.boarding_time = time
+        transportation.agents.append(self)
+        if (self.SEIR_compartment == 'I'):
+            transportation.no_infected_agents += 1
+        self.current_node.agents.remove(self)
+        self.current_node = None
     
     def alight_transportation(self):
         if (self.transportation):
@@ -129,12 +132,12 @@ class Agent:
             if (self.current_node not in path[0].nodes or self.destination.node not in path[-1].nodes):
                 raise ValueError(f"Invalid path: {[(edge.nodes[0].id, edge.nodes[1].id) for edge in path]} for current node {self.current_node.id} and destination node {destination.node.id}.")
             
-            transport = Transportation(method='private', speed=500, max_passenger=1, current_node=self.current_node, path=list(path))
+            transport = Transportation(method='private', speed=500, current_node=self.current_node, path=list(path))
             self.ride_transportation(transport, time)
             self.set_state('travelling')
             transport.transport(time)
 
-    def set_checkpoints(self, destination:Establishment, routing_cache:dict, time:int):
+    def set_checkpoints(self, destination:Establishment, routing_cache:dict, routes:list[Route], time:int):
         self.current_establishment.remove_agent(self)
         self.destination = destination
         self.current_node = self.current_establishment.node
@@ -142,13 +145,21 @@ class Agent:
         if (self.current_node.id == destination.node.id):
             self.arrived_at_destination(time)
         else:
-            cached_checkpoint = routing_cache.get((self.current_node.id, destination.node.id), [])
+            key = (self.current_node.id, destination.node.id)
+            cached_checkpoint = routing_cache.get(key, [])
             if (cached_checkpoint): 
                 self.checkpoints = list(cached_checkpoint)
                 self.set_state('travelling')
                 self.move(time)
             else:
-                print('NO DATA ON CACHE')
+                raw_path = shortest_path(self.current_node, destination.node, routes)
+                if (not raw_path):
+                    raise ValueError(f"Can't find path between {self.current_node.id} and {destination.node.id}")
+                routing_cache[key] = generate_checkpoints(raw_path)
+                self.checkpoints = list(routing_cache[key])
+                self.set_state('travelling')
+                self.move(time)
+
             
 
     def arrival(self, time:int, current_node:Node=None):
@@ -230,7 +241,7 @@ class WorkingAgent(Agent):
         self.working_hours = working_hours
 
 
-def handle_agent_events(event:manager.Event, routing_cache:dict, disease:Disease, time:int):
+def handle_agent_events(event:manager.Event, routing_cache:dict, routes:list[Route], max_distance:None|int, disease:Disease, time:int):
     agents:list[Agent] = event.get_objects()
     if (event.type == manager.AGENT_ARRIVAL):
         LOGGER.debug(f"Handling agent arrival for {len(agents)} agents at time {time}.")
@@ -269,7 +280,7 @@ def handle_agent_events(event:manager.Event, routing_cache:dict, disease:Disease
                 (time - agent.arrival_time)/60, time
                 )
             if (agent.commuting):
-                agent.set_checkpoints(agent.household, routing_cache, time)
+                agent.set_checkpoints(agent.household, routing_cache, routes, time)
             else:
                 agent.set_path(agent.household, time)
     elif (event.type == manager.AGENT_GO_SHOPPING):
@@ -287,13 +298,24 @@ def handle_agent_events(event:manager.Event, routing_cache:dict, disease:Disease
                 (time - agent.arrival_time)/60, time
                 )
             
-            choices:list[Firm] = agent.city.get_close_firms(agent.current_establishment.region)
+            if (random.random() < 0.8):
+                choices:list[Firm] = agent.city.get_close_firms(agent.current_establishment.region)
+            else:
+                choices:list[Firm] = agent.city.get_firms()
             if (isinstance(agent, WorkingAgent) and agent.firm in choices):
                 choices.remove(agent.firm)
             destination = random.choice(choices)
+            if (max_distance):
+                distance = sum(edge.distance for edge in shortest_edge_path(agent.current_establishment.node.id, destination.node.id, agent.city, agent.railway))
+                if (distance > max_distance):
+                    choices:list[Firm] = agent.city.get_close_firms(agent.current_establishment.region)
+                    if (isinstance(agent, WorkingAgent) and agent.firm in choices):
+                        choices.remove(agent.firm)
+                    destination = random.choice(choices)
+
 
             if (agent.commuting):
-                agent.set_checkpoints(destination, routing_cache, time)
+                agent.set_checkpoints(destination, routing_cache, routes, time)
             else:
                 agent.set_path(destination, time)
     elif (event.type == manager.AGENT_GO_WORK):
@@ -312,7 +334,7 @@ def handle_agent_events(event:manager.Event, routing_cache:dict, disease:Disease
                 (time - agent.arrival_time)/60, time
                 )
             if (agent.commuting):
-                agent.set_checkpoints(agent.firm, routing_cache, time)
+                agent.set_checkpoints(agent.firm, routing_cache, routes, time)
             else:
                 agent.set_path(agent.firm, time)
     elif (event.type == manager.AGENT_FINISHED_WORK):

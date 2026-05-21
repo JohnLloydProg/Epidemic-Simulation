@@ -15,26 +15,28 @@ PRIVATE_TRANSPORTATION_MOVE = 11
 PRIVATE_TRANSPORTATION_ARRIVED = 12
 AGENT_FINISHED_WORK = 13
 AGENT_ISOLATE = 14
+IMPLEMENT_POLICY = 15
+REVERT_POLICY = 16
 
 _events:dict[int, list['Event']] = {}
 _time_step = 0
 
 class Event:
-    _objects:dict
+    _objects:list
 
     def __init__(self, type:int, object=None):
         self.type = type
         self._object = object
-        self._objects = {object.id:object} if object is not None else {}
+        self._objects = [object] if object is not None else []
 
     def extends(self, event:'Event'):
         if (self.type != event.type):
             raise ValueError(f"Event type {self.type} can't extend with event type {self.type}. Event extension is only possible with the same types.")
         
-        self._objects[event._object.id] = event._object
+        self._objects.append(event._object)
     
     def get_objects(self) -> list:
-        return list(self._objects.values())
+        return self._objects.copy()
     
     def __str__(self) -> str:
         return f"Event(type={self.type})"
@@ -71,6 +73,15 @@ def emit(target_time:int, event:Event):
         events_in_time.append(event)
     else:
         _events[target_time] = [event]
+
+def cancel(event_type:int, object=None):
+    for events in _events.values():
+        for event in events:
+            if (event.type != event_type or object not in event.get_objects()):
+                continue
+
+            event._objects.remove(object)
+
 
 if __name__ == '__main__':
     from graphing.mapping import load_graph

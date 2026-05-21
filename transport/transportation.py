@@ -18,6 +18,8 @@ class Route:
     ordered_nodes:list[Node]
     transportations:list['RoutedTransportation']
     expected_speed:int = 150
+    capacity_ratio:int = 1
+    
 
     def __init__(self, spawn_node:Node, path:list[Edge], graph:Graph, spawn_time:int, peak_spawn:int):
         self.path = path
@@ -41,27 +43,9 @@ class Route:
     def __str__(self):
         return f"Route {self.id} from {self.spawn_node.id} to {self.path[-1].get_adjacent_node(self.path[-1].nodes[1]).id if self.path else self.spawn_node.id}"
     
-    def generate_transportation(self, current_time:int, is_peak_hours:bool, config:dict) ->list['RoutedTransportation']:
-        spawn_interval = self.spawn_time if not is_peak_hours else self.peak_spawn
-        manager.emit(current_time + spawn_interval, manager.Event(manager.TRANSPORTATION_SPAWN, self))
-        _transportations = []
-        for i in range(random.randint(1, 2)):
-            if (random.random() < 0.5):
-                passenger = random.choice([(10, 10), (12, 12), (15, 15), (15, 20) ])
-                max_passenger = passenger[1]
-                suggested_passenger = passenger[0]
-                expected_contact_rate = config['CONTACT_RATES'].get('JEEP', 3.5)
-                method = 'jeep'
-            else:
-                max_passenger = 50
-                suggested_passenger = 40
-                expected_contact_rate = config['CONTACT_RATES'].get('BUS', 4.5)
-                method = 'bus'
-            transportation = RoutedTransportation(method, self.expected_speed, max_passenger, suggested_passenger, 0, self.spawn_node, self)
-            transportation.expected_contact_rate = expected_contact_rate
-            _transportations.append(transportation)
-            self.transportations.append(transportation)
-        return _transportations
+    def generate_transportation(self, current_time:int, is_peak_hours:bool, config:dict) -> list['RoutedTransportation']:
+        """"""
+        pass
 
     def get_average_occupancy(self) -> float:
         occupancies = [transportation.occupancy() for transportation in self.transportations]
@@ -84,17 +68,40 @@ class Route:
         pg.draw.lines(window, (255, int(255*(1 - average_occupancy)), 0), False, points, 2)
 
 
+class JeepRoute(Route):
+    def __init__(self, spawn_node:Node, path:list[Edge], graph:Graph, spawn_time:int, peak_spawn:int):
+        super().__init__(spawn_node, path, graph, spawn_time, peak_spawn)
+    
+    def generate_transportation(self, current_time, is_peak_hours, config) -> list['RoutedTransportation']:
+        _transportations = []
+        for i in range(random.randint(1, 2)):
+            passenger = random.choice([(10, 10), (12, 12), (15, 15), (15, 20) ])
+            transportation = RoutedTransportation('jeep', self.expected_speed, passenger[1], self.capacity_ratio, passenger[0], 0, self.spawn_node, self)
+            transportation.expected_contact_rate = config['CONTACT_RATES'].get('JEEP', 3.5)
+            _transportations.append(transportation)
+            self.transportations.append(transportation)
+        return _transportations
+
+
+class BusRoute(Route):
+    def __init__(self, spawn_node:Node, path:list[Edge], graph:Graph, spawn_time:int, peak_spawn:int):
+        super().__init__(spawn_node, path, graph, spawn_time, peak_spawn)
+    
+    def generate_transportation(self, current_time, is_peak_hours, config) -> list['RoutedTransportation']:
+        transportation = RoutedTransportation('bus', self.expected_speed, 50, self.capacity_ratio, 40, 0, self.spawn_node, self)
+        transportation.expected_contact_rate = config['CONTACT_RATES'].get('BUS', 4.5)
+        self.transportations.append(transportation)
+        return [transportation]
+
+
 class TrainRoute(Route):
     expected_speed:int = 600
 
     def __init__(self, spawn_node:Node, path:list[Edge], graph:Graph, spawn_time:int, peak_spawn:int):
         super().__init__(spawn_node, path, graph, spawn_time, peak_spawn)
 
-    def generate_transportation(self, current_time, is_peak_hours:bool, config:dict):
-        spawn_interval = self.spawn_time if not is_peak_hours else self.peak_spawn
-        manager.emit(current_time + spawn_interval, manager.Event(manager.TRANSPORTATION_SPAWN, self))
-        
-        absolute_max = 1200 
+    def generate_transportation(self, current_time, is_peak_hours:bool, config:dict) -> list['RoutedTransportation']:
+        absolute_max = 1200
         hour_of_day = (current_time // 60) % 24
         if 7 <= hour_of_day <= 9 or 17 <= hour_of_day <= 19:
             external_load_percentage = random.uniform(0.80, 0.95)
@@ -102,9 +109,8 @@ class TrainRoute(Route):
             external_load_percentage = random.uniform(0.30, 0.60)
             
         seats_taken = int(absolute_max * external_load_percentage)
-        available_for_manila = absolute_max - seats_taken
 
-        transportation = RoutedTransportation('rail', self.expected_speed, available_for_manila, 900, seats_taken, self.spawn_node, self)
+        transportation = RoutedTransportation('rail', self.expected_speed, absolute_max, self.capacity_ratio, 900, seats_taken, self.spawn_node, self)
         transportation.expected_contact_rate = config['CONTACT_RATES'].get('TRAIN', 8.5)
         self.transportations.append(transportation)
         return [transportation]
@@ -116,22 +122,15 @@ class Transportation:
     no_infected_agents:int = 0
     current_edge:Edge = None
 
-    def __init__(self, method:str, speed:float, max_passenger:int, current_node:Node, path:list[Edge]=[]):
+    def __init__(self, method:str, speed:float, current_node:Node, path:list[Edge]=[]):
         self.method = method
         self.current_node = current_node
         self.speed = speed
         self.path = path
         self.id = Transportation.id
         self.agents = []
-        self.max_passenger = max_passenger
         self.path = path.copy()
         Transportation.id += 1
-    
-    def is_full(self) -> bool:
-        return len(self.agents) >= self.max_passenger
-
-    def occupancy(self) -> float:
-        return len(self.agents) / self.max_passenger
     
     def transport(self, current_time:int):
         self.current_edge = self.path.pop(0)
@@ -142,11 +141,19 @@ class Transportation:
 class RoutedTransportation(Transportation):
     expected_contact_rate:float = 5.0
 
-    def __init__(self, method:str, speed:float, max_passenger:int, suggested_passenger:int, external_passenger:int, current_node:Node, route:Route):
-        super().__init__(method=method, speed=speed, max_passenger=max_passenger, current_node=current_node)
+    def __init__(self, method:str, speed:float, max_passenger:int, capacity_ratio:float, suggested_passenger:int, external_passenger:int, current_node:Node, route:Route):
+        super().__init__(method=method, speed=speed, current_node=current_node)
         self.route = route
+        self.max_passenger = max_passenger
         self.suggested_passenger = suggested_passenger
         self.external_passenger = external_passenger
+        self.capacity_ratio = capacity_ratio
+
+    def is_full(self) -> bool:
+        return (len(self.agents) + self.external_passenger) >= int(self.max_passenger * self.capacity_ratio)
+
+    def occupancy(self) -> float:
+        return (len(self.agents) + self.external_passenger) / self.max_passenger
     
     def get_contact_rate(self) -> float:
         return self.expected_contact_rate * ((len(self.agents) + self.external_passenger)/self.suggested_passenger)
@@ -188,6 +195,8 @@ def handle_route_events(event:manager.Event, transportations:list[Transportation
                                 break
                 transport.transport(time)
             transportations.extend(transports)
+            spawn_interval = route.spawn_time if not is_peak_hours else route.peak_spawn
+            manager.emit(time + spawn_interval, manager.Event(manager.TRANSPORTATION_SPAWN, route))
 
 
 def handle_transportation_events(event:manager.Event, transportations:list[Transportation], time:int):
@@ -207,7 +216,6 @@ def handle_transportation_events(event:manager.Event, transportations:list[Trans
             
             getting_off_external = int(transport.external_passenger * random.uniform(0.5, 0.2))
             transport.external_passenger -= getting_off_external
-            transport.max_passenger += getting_off_external
 
             for agent in list(transport.current_node.agents):
                 if (agent.state != 'waiting'):
