@@ -5,7 +5,7 @@ import random
 class Establishment:
     id:int = 0
     no_agents:int = 0
-    no_infected_agents:int = 0
+    no_infected_agents:float = 0
     max_contact_rate:float = 10.0
     max_capacity:int = 100
 
@@ -21,12 +21,12 @@ class Establishment:
     def add_agent(self, agent):
         self.no_agents += 1
         if (agent.SEIR_compartment == 'I'):
-            self.no_infected_agents += 1
+            self.no_infected_agents += 1 if not agent.masked else 0.5
     
     def remove_agent(self, agent):
         self.no_agents -= 1
         if (agent.SEIR_compartment == 'I'):
-            self.no_infected_agents -= 1
+            self.no_infected_agents -= 1 if not agent.masked else 0.5
     
     def contact_rate(self) -> float:
         return self.max_contact_rate * (self.no_agents / self.max_capacity)
@@ -51,7 +51,7 @@ class Firm(Establishment):
     
     def __init__(self, node, region, size:Literal['micro', 'small', 'medium', 'large'], max_contact_rate:float):
         if (size == 'micro'):
-            max_capacity = random.randrange(1, 9)
+            max_capacity = random.randrange(2, 9)
         elif (size == 'small'):
             max_capacity = random.randrange(10, 99, 5)
         elif (size == 'medium'):

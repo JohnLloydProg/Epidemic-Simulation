@@ -119,7 +119,7 @@ class TrainRoute(Route):
 class Transportation:
     id:int = 0
     agents:list
-    no_infected_agents:int = 0
+    no_infected_agents:float = 0
     current_edge:Edge = None
 
     def __init__(self, method:str, speed:float, current_node:Node, path:list[Edge]=[]):

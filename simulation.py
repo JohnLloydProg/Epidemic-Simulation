@@ -4,12 +4,13 @@ from multiprocessing import Process
 from graphing.mapping import load_graph
 from graphing.graph import RegionGraph
 from agents.agent import AGE_RANGE_DISTRIBUTION, Agent, WorkingAgent, next_occurrence_of_hour, handle_agent_events
-from transport.transportation import Transportation, RoutedTransportation, handle_route_events, handle_transportation_events, BusRoute
-from interventions import Policy, LimitCapacity, handle_policy_events, RouteReduction
+from transport.transportation import Transportation, RoutedTransportation, handle_route_events, handle_transportation_events, BusRoute, JeepRoute, TrainRoute
+from interventions import handle_policy_events
 from routing_table import build_routing_cache
 from time import time_ns
 from datetime import datetime
 from dotenv import load_dotenv
+import interventions
 import manager
 import random
 import pygame as pg
@@ -26,10 +27,15 @@ from firebase_admin import firestore
 
 LOGGER = logging.getLogger('Simulation')
 
-def daily_work(agents:list[WorkingAgent], quarantine:bool, time:int, config:dict) -> set[int]:
+def daily_work(agents:list[WorkingAgent], quarantine:bool, curfew:dict, time:int, config:dict) -> set[int]:
     will_work = set()
     for agent in agents:
-        if (agent.SEIR_compartment == 'D' or (agent.isolate and (random.random() < config.get('AGENT_COMPLIANCE', 0.5) or quarantine))):
+        isolate = (agent.isolate and (random.random() < config.get('AGENT_COMPLIANCE', 0.5) or quarantine))
+        dead = agent.SEIR_compartment == 'D'
+        out_curfew = agent.working_hours[0] < curfew.get('start_hour', -1) or agent.working_hours[1] > curfew.get('end_hour', 24) or agent.working_hours[0] > curfew.get('end_hour', 24) or agent.working_hours[1] < curfew.get('start_hour', -1)
+        if (dead or isolate or out_curfew):
+            if (out_curfew):
+                print(f'agent with workings hours of {agent.working_hours} can not work due to curfew')
             continue
         agent.clocked_in = False
         agent.finished_work = False
@@ -69,6 +75,7 @@ def get_transport_count(transportations:list[RoutedTransportation]):
         transport_types[transport.method] = transport_types.get(transport.method, 0) + 1
     return transport_types
 
+
 class Simulation:
     compartments = ['S', 'E', 'I', 'R', 'D']
     layer = 'city'
@@ -84,7 +91,6 @@ class Simulation:
     active_cases:list[tuple[int, int]]
     designated_persons:list[Agent]
     no_per_compartment:dict
-    policy_schedule:dict
     simulation_multiplier = 25
     simulation_ns_per_time_unit = (10**9)//simulation_multiplier
     max_travel_distance = None
@@ -92,6 +98,7 @@ class Simulation:
     company_capacity_ratio = 1
     quarantine = False
     peak_hour:bool = False
+    curfew:dict[str, int] = {}
     step_counter = 0
 
     def __init__(self, config:dict, headless=True):
@@ -105,7 +112,6 @@ class Simulation:
         self.time_step = config['TIME_STEP']
         self.duration = config['DURATION']
         self.no_per_compartment = config.get('SEIR_COUNT', {'I':4})
-        self.policy_schedule = config.get('POLICY_SCHEDULES', {})
         self.agents = []
         self.working_agents = []
         self.non_working_agents = []
@@ -124,9 +130,12 @@ class Simulation:
         self.routes = environment[2]
         for route in self.routes:
             manager.emit(3, manager.Event(manager.TRANSPORTATION_SPAWN, route))
-
-        policy = RouteReduction(1 * 24 * 60, 2 * 24 * 60, [route for route in self.routes if isinstance(route, BusRoute)])
-        manager.emit(policy.start_time, manager.Event(manager.IMPLEMENT_POLICY, policy))
+        
+        """Loading planned policies to implement"""
+        pickled_policies:list[dict] = config.get('SCHEDULED_POLICIES', [])
+        for pickled_policy in pickled_policies:
+            policy = self.load_policy(pickled_policy)
+            manager.emit(policy.start_time, manager.Event(manager.IMPLEMENT_POLICY, policy))
 
         """Build routing cache for agents"""
         establishment = self.graph.get_firms()
@@ -169,7 +178,7 @@ class Simulation:
         for agent in self.working_agents:
             firm = random.choice(firms)
             tries = 0
-            while (len(firm.resident_agents) >= firm.max_capacity):
+            while (len(firm.resident_agents) >= int(firm.max_capacity * 0.85)):
                 firm = random.choice(firms)
                 tries += 1
             agent.firm = firm
@@ -203,6 +212,24 @@ class Simulation:
                     manager.emit(math.ceil(self.disease.sample_incubation_period()), infection_event)
                 
                 assigned.add(agent.id)
+    
+    def load_policy(self, pickled_policy:dict) -> interventions.Policy:
+        policy_type = pickled_policy['type']
+        params:dict = pickled_policy['params']
+
+        if ('routes' in params):
+            if (params['routes'] == 'bus'):
+                params['routes'] = [route for route in self.routes if (isinstance(route, BusRoute))]
+            elif (params['routes'] == 'jeep'):
+                params['routes'] = [route for route in self.routes if (isinstance(route, JeepRoute))]
+            elif (params['routes'] == 'train'):
+                params['routes'] = [route for route in self.routes if (isinstance(route, TrainRoute))]
+            elif (params['routes'] == 'all'):
+                params['routes'] = self.routes
+
+        _cls = interventions.POLICY_CLASS_MAPPING[policy_type]
+        policy = _cls(**params)
+        return policy
 
     def handle_events(self, time:int):
         self.step_counter += 1
@@ -225,7 +252,7 @@ class Simulation:
 
         """Event based handling"""
         for event in manager.get(time):
-            handle_agent_events(event, self.routing_table, self.routes, self.max_travel_distance, self.disease, time)
+            handle_agent_events(event, self.routing_table, self.routes, self.max_travel_distance, self.quarantine, self.disease, time)
             handle_transportation_events(event, self.transportations, time)
             handle_route_events(event, self.transportations, self.peak_hour, time, self.config)
             handle_policy_events(self, event, time)
@@ -310,10 +337,6 @@ class Simulation:
                 
                 LOGGER.info(f"Day {day}/{self.duration} completed in {day_delta} seconds.")
                 simulation_day_time = time_ns()
-
-                for agent in self.non_working_agents:
-                    if (random.random() < 0.3 and agent.age <= 65 and agent.age >= 4 and agent.SEIR_compartment != 'D' and not agent.isolate):
-                        manager.emit(next_occurrence_of_hour(time, random.randrange(10, 15)), manager.Event(manager.AGENT_GO_SHOPPING, agent))
                 
                 will_work:set[int] = set()
                 for firm in self.graph.get_firms():
@@ -322,7 +345,21 @@ class Simulation:
                     
                     max_capacity = firm.max_capacity if firm.essential else int(self.company_capacity_ratio * firm.max_capacity)
                     agents = random.sample(firm.resident_agents, min(len(firm.resident_agents), max_capacity))
-                    will_work.update(daily_work(agents, self.quarantine, time, self.config))
+                    will_work.update(daily_work(agents, self.quarantine, self.curfew, time, self.config))
+                
+                _agents = self.designated_persons if self.designated_persons else self.agents
+                for agent in _agents:
+                    isolate = (agent.isolate and (random.random() < config.get('AGENT_COMPLIANCE', 0.5) or self.quarantine))
+                    if (random.random() < 0.3 and 65 >= agent.age >= 4 and agent.SEIR_compartment != 'D' and not isolate):
+                        if (isinstance(agent, WorkingAgent) and agent.id in will_work):
+                            agent.errand_run = True
+                            continue
+
+                        if (self.curfew):
+                            hour = random.randrange(self.curfew['start_hour'], self.curfew['end_hour'] - 2)
+                        else:
+                            hour = random.randrange(10, 15)
+                        manager.emit(next_occurrence_of_hour(time, hour), manager.Event(manager.AGENT_GO_SHOPPING, agent))
             
             if (status.SEIR_compartments['I'] == 0):
                 running = False

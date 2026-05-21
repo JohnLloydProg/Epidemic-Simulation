@@ -62,6 +62,7 @@ class Agent:
     destination:Establishment = None
     current_establishment:Establishment
     commuting:bool
+    private:str
     arrival_time:int = 0
     boarding_time:int = 0
     checkpoints:list[Checkpoint]
@@ -69,6 +70,7 @@ class Agent:
     transportation:Transportation = None
     consumed:bool = False
     symptomatic:bool = False
+    masked:bool = False
     isolate:bool = False
     tested:bool = False
     state:str = 'home'
@@ -80,6 +82,8 @@ class Agent:
         self.current_establishment = household
         self.current_establishment.add_agent(self)
         self.commuting = random.random() < 0.8
+        if (not self.commuting):
+            self.private = 'car' if (random.random() < 0.7) else 'bike'
         self.city = city
         self.railway = railway
         self.id = Agent.id
@@ -93,7 +97,7 @@ class Agent:
         self.boarding_time = time
         transportation.agents.append(self)
         if (self.SEIR_compartment == 'I'):
-            transportation.no_infected_agents += 1
+            transportation.no_infected_agents += 1 if not self.masked else 0.5
         self.current_node.agents.remove(self)
         self.current_node = None
     
@@ -101,7 +105,7 @@ class Agent:
         if (self.transportation):
             self.transportation.agents.remove(self)
             if (self.SEIR_compartment == 'I'):
-                self.transportation.no_infected_agents -= 1
+                self.transportation.no_infected_agents -= 1 if not self.masked else 0.5
             self.transportation = None
     
     def set_state(self, state:Literal['home', 'travelling', 'waiting', 'working', 'consuming']):
@@ -241,7 +245,7 @@ class WorkingAgent(Agent):
         self.working_hours = working_hours
 
 
-def handle_agent_events(event:manager.Event, routing_cache:dict, routes:list[Route], max_distance:None|int, disease:Disease, time:int):
+def handle_agent_events(event:manager.Event, routing_cache:dict, routes:list[Route], max_distance:None|int, quarantine:bool, disease:Disease, time:int):
     agents:list[Agent] = event.get_objects()
     if (event.type == manager.AGENT_ARRIVAL):
         LOGGER.debug(f"Handling agent arrival for {len(agents)} agents at time {time}.")
@@ -261,7 +265,10 @@ def handle_agent_events(event:manager.Event, routing_cache:dict, routes:list[Rou
             agent.SEIR_compartment = 'I'
             agent.symptomatic = random.random() < 0.6  # 60% chance to be symptomatic
             if (agent.symptomatic):
-                manager.emit(time + (random.randint(24, 48)*60), manager.Event(manager.AGENT_ISOLATE, agent))
+                if (not quarantine):
+                    manager.emit(time + (random.randint(24, 48)*60), manager.Event(manager.AGENT_ISOLATE, agent))
+                else:
+                    agent.isolate = True
             remove_event = manager.Event(manager.AGENT_REMOVED, agent)
             manager.emit(time + round(disease.sample_infected_duration()), remove_event)
     elif (event.type == manager.AGENT_GO_HOME):
