@@ -34,8 +34,6 @@ def daily_work(agents:list[WorkingAgent], quarantine:bool, curfew:dict, time:int
         dead = agent.SEIR_compartment == 'D'
         out_curfew = agent.working_hours[0] < curfew.get('start_hour', -1) or agent.working_hours[1] > curfew.get('end_hour', 24) or agent.working_hours[0] > curfew.get('end_hour', 24) or agent.working_hours[1] < curfew.get('start_hour', -1)
         if (dead or isolate or out_curfew):
-            if (out_curfew):
-                print(f'agent with workings hours of {agent.working_hours} can not work due to curfew')
             continue
         agent.clocked_in = False
         agent.finished_work = False
