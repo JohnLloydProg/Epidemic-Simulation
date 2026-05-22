@@ -104,7 +104,7 @@ class MandatoryMask(Policy):
             agent.masked = False
     
     def __str__(self):
-        return f"MandatoryMask(start_time={self.start_time}, end_time={self.end_time}, firms={[firm.id for firm in self.firms]})"
+        return f"MandatoryMask(start_time={self.start_time}, end_time={self.end_time})"
 
 
 class TravelDistanceLimitation(Policy):
