@@ -93,7 +93,6 @@ class Simulation:
     simulation_ns_per_time_unit = (10**9)//simulation_multiplier
     max_travel_distance = None
     essential_only = False
-    company_capacity_ratio = 1
     quarantine = False
     peak_hour:bool = False
     curfew:dict[str, int] = {}
@@ -224,6 +223,14 @@ class Simulation:
                 params['routes'] = [route for route in self.routes if (isinstance(route, TrainRoute))]
             elif (params['routes'] == 'all'):
                 params['routes'] = self.routes
+        if ('firms' in params):
+            param:str|int = params['firms']
+            if (param == 'all'):
+                params['firms'] = self.graph.get_firms()
+            elif (isinstance(param, int)):
+                params['firms'] = [firm for firm in self.graph.get_firms() if (firm.industry[1] == param)]
+            else:
+                raise ValueError('Passed parameter for firms in config is invalid!')
 
         _cls = interventions.POLICY_CLASS_MAPPING[policy_type]
         policy = _cls(**params)
@@ -341,8 +348,7 @@ class Simulation:
                     if (not firm.essential and self.essential_only):
                         continue
                     
-                    max_capacity = firm.max_capacity if firm.essential else int(self.company_capacity_ratio * firm.max_capacity)
-                    agents = random.sample(firm.resident_agents, min(len(firm.resident_agents), max_capacity))
+                    agents = random.sample(firm.resident_agents, min(len(firm.resident_agents), firm.max_capacity))
                     will_work.update(daily_work(agents, self.quarantine, self.curfew, time, self.config))
                 
                 _agents = self.designated_persons if self.designated_persons else self.agents

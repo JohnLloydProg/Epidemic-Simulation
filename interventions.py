@@ -141,17 +141,21 @@ class EssentialCompanyOnly(Policy):
 
 
 class LimitCompanyCapacity(Policy):
-    def __init__(self, start_time:int, capacity_ratio:float, end_time:None|int = None):
+    def __init__(self, start_time:int, firms:list[Firm], capacity_ratio:float, end_time:None|int = None):
         super().__init__(start_time, end_time)
         self.capacity_ratio = capacity_ratio
+        self.firms = firms
+        self.original_capacity = {firm.id:firm.max_capacity for firm in firms}
     
     def implement(self, simulation):
         super().implement(simulation)
-        simulation.company_capacity_ratio = self.capacity_ratio
+        for firm in self.firms:
+            firm.max_capacity = int(self.capacity_ratio * firm.max_capacity)
     
     def revert(self, simulation):
         super().revert(simulation)
-        simulation.company_capacity_ratio = 1
+        for firm in self.firms:
+            firm.max_capacity = self.original_capacity[firm.id]
     
     def __str__(self):
         return f"LimitCompanyCapacity(start_time={self.start_time}, end_time={self.end_time}, capacity_ratio={self.capacity_ratio})"

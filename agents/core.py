@@ -2,6 +2,16 @@ from typing import Literal
 import random
 
 
+FIRM_INDUSTRIES_CATOGIZATION = {
+    ("Agri, For &wdasdw Fish", 1) : 0.0113, ("Mining & Quarrying", 2): 0.0011, ("Manufacturing", 2): 0.0829,
+    ("Elec, Gas, Steam & Air", 1): 0.0014, ("Water", 1): 0.0043, ("Construction", 2): 0.0079,
+    ("Wholesale & Retail", 3): 0.4445, ("Transpo & Storage", 1): 0.0109, ("Accom & Food", 1): 0.1095,
+    ("ICT", 1): 0.0080, ("Finance & Insurance", 3): 0.1522, ("Real Estate", 2): 0.0188,
+    ("Prof, Science, & Technical", 3): 0.0183, ("Admin & Support", 2): 0.0219, ("Education", 3): 0.0354,
+    ("Human Health", 1): 0.0261, ("Arts & Entertainment", 4): 0.0104, ("Other", 3): 0.0353
+    }
+
+
 class Establishment:
     id:int = 0
     no_agents:int = 0
@@ -47,6 +57,7 @@ class Household(Establishment):
 
 class Firm(Establishment):
     essential:bool
+    industry:tuple[str, int]
     resident_agents:list
     
     def __init__(self, node, region, size:Literal['micro', 'small', 'medium', 'large'], max_contact_rate:float):
@@ -62,4 +73,5 @@ class Firm(Establishment):
             raise ValueError(f"Firm size must be 'small', 'medium' or 'large'. Received {size}")
         super().__init__(node, region, max_capacity, max_contact_rate)
         self.resident_agents = []
-        self.essential = random.random() < 0.3
+        self.industry = random.choices(FIRM_INDUSTRIES_CATOGIZATION.keys(), FIRM_INDUSTRIES_CATOGIZATION.values(), k=1)[0]
+        self.essential = self.industry[1] == 1
