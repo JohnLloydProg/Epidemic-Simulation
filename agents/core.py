@@ -73,5 +73,5 @@ class Firm(Establishment):
             raise ValueError(f"Firm size must be 'small', 'medium' or 'large'. Received {size}")
         super().__init__(node, region, max_capacity, max_contact_rate)
         self.resident_agents = []
-        self.industry = random.choices(FIRM_INDUSTRIES_CATOGIZATION.keys(), FIRM_INDUSTRIES_CATOGIZATION.values(), k=1)[0]
+        self.industry = random.choices(list(FIRM_INDUSTRIES_CATOGIZATION.keys()), list(FIRM_INDUSTRIES_CATOGIZATION.values()), k=1)[0]
         self.essential = self.industry[1] == 1
