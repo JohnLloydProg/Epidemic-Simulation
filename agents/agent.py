@@ -245,6 +245,7 @@ class WorkingAgent(Agent):
     def __init__(self, age:int, city:RegionGraph, railway:Graph, household:Household, working_hours:tuple[int, int], compartment:str = 'S'):
         super().__init__(age, city, railway, household, compartment)
         self.working_hours = working_hours
+        self.day_offs = []
 
 
 def handle_agent_events(event:manager.Event, routing_cache:dict, routes:list[Route], max_distance:None|int, quarantine:bool, disease:Disease, time:int):
