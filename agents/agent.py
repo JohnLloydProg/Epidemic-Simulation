@@ -71,6 +71,7 @@ class Agent:
     consumed:bool = False
     symptomatic:bool = False
     masked:bool = False
+    infection_multiplier:int = 1
     isolate:bool = False
     tested:bool = False
     state:str = 'home'
@@ -97,7 +98,7 @@ class Agent:
         self.boarding_time = time
         transportation.agents.append(self)
         if (self.SEIR_compartment == 'I'):
-            transportation.no_infected_agents += 1 if not self.masked else 0.5
+            transportation.no_infected_agents += self.infection_multiplier
         self.current_node.agents.remove(self)
         self.current_node = None
     
@@ -105,7 +106,7 @@ class Agent:
         if (self.transportation):
             self.transportation.agents.remove(self)
             if (self.SEIR_compartment == 'I'):
-                self.transportation.no_infected_agents -= 1 if not self.masked else 0.5
+                self.transportation.no_infected_agents -= self.infection_multiplier
             self.transportation = None
     
     def set_state(self, state:Literal['home', 'travelling', 'waiting', 'working', 'consuming']):
@@ -142,6 +143,7 @@ class Agent:
             transport.transport(time)
 
     def set_checkpoints(self, destination:Establishment, routing_cache:dict, routes:list[Route], time:int):
+        self.infection_multiplier = 1 if not self.masked else random.uniform(0.5, 0.9)
         self.current_establishment.remove_agent(self)
         self.destination = destination
         self.current_node = self.current_establishment.node

@@ -42,12 +42,12 @@ class Establishment:
     def add_agent(self, agent):
         self.no_agents += 1
         if (agent.SEIR_compartment == 'I'):
-            self.no_infected_agents += 1 if not agent.masked else 0.5
+            self.no_infected_agents += agent.infection_multiplier
     
     def remove_agent(self, agent):
         self.no_agents -= 1
         if (agent.SEIR_compartment == 'I'):
-            self.no_infected_agents -= 1 if not agent.masked else 0.5
+            self.no_infected_agents -= agent.infection_multiplier
     
     def contact_rate(self) -> float:
         if (self.max_capacity == 0):

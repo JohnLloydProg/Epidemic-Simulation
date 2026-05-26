@@ -4,6 +4,7 @@ from transport.transportation import Route
 import manager
 import logging
 import random
+import math
 
 LOGGER = logging.getLogger('Interventions')
 
@@ -150,7 +151,7 @@ class LimitCompanyCapacity(Policy):
     def implement(self, simulation):
         super().implement(simulation)
         for firm in self.firms:
-            firm.max_capacity = int(self.capacity_ratio * firm.max_capacity)
+            firm.max_capacity = math.ceil(self.capacity_ratio * firm.max_capacity)
     
     def revert(self, simulation):
         super().revert(simulation)
@@ -183,18 +184,12 @@ class DesignatedPerson(Policy):
     
     def implement(self, simulation):
         super().implement(simulation)
-        households:list[Household] = simulation.graph.get_households()
-        for house in households:
-            agents = [agent for agent in house.resident_agents if not agent.isolate]
-            if (not agents):
-                continue
-
-            designated = random.choice(agents)
-            simulation.designated_persons.append(designated)
+        simulation.designated_persons = True
+        
     
     def revert(self, simulation):
         super().revert(simulation)
-        simulation.designated_persons.clear()
+        simulation.designated_persons = False
     
     def __str__(self):
         return f"DesignatedPerson(start_time={self.start_time}, end_time={self.end_time})"

@@ -88,7 +88,7 @@ class Simulation:
     font:pg.font.Font
     routing_table:dict[tuple, list]
     active_cases:list[tuple[int, int]]
-    designated_persons:list[Agent]
+    designated_persons:bool = False
     no_per_compartment:dict
     simulation_multiplier = 25
     simulation_ns_per_time_unit = (10**9)//simulation_multiplier
@@ -116,7 +116,6 @@ class Simulation:
         self.transportations = []
         self.headless = headless
         self.active_cases = []
-        self.designated_persons = []
         self.collection_id = config["COLLECTION_ID"]
         self.simulation_id = str(uuid.uuid4())
         self.config = config
@@ -181,7 +180,7 @@ class Simulation:
                 tries += 1
             agent.firm = firm
             if (firm.industry in WEEKEND_FIRMS):
-                agent.weekend_worker = random.random() < 0.5
+                agent.weekend_worker = random.random() < 0.3
                 if (agent.weekend_worker):
                     agent.day_offs.extend(random.sample(list(range(7)), k=2))
             firm.resident_agents.append(agent)
@@ -363,20 +362,35 @@ class Simulation:
                     agents = random.sample(in_schedule, min(len(in_schedule), firm.max_capacity))
                     will_work.update(daily_work(agents, self.quarantine, self.curfew, time, self.config))
                 
-                _agents = self.designated_persons if self.designated_persons else self.agents
-                for agent in _agents:
-                    isolate = (agent.isolate and (random.random() < config.get('AGENT_COMPLIANCE', 0.5) or self.quarantine))
-                    change_to_consume = 0.3 if (day % 7) < 5 else 0.6
-                    if (random.random() < change_to_consume and 65 >= agent.age >= 4 and agent.SEIR_compartment != 'D' and not isolate):
-                        if (isinstance(agent, WorkingAgent) and agent.id in will_work):
-                            agent.errand_run = True
+                if (self.designated_persons):
+                    for house in self.graph.get_households():
+                        agents = [agent for agent in house.resident_agents if (not agent.isolate and 65 >= agent.age >= 4 and agent.SEIR_compartment != 'D')]
+                        if (not agents):
                             continue
 
-                        if (self.curfew):
-                            hour = random.randrange(self.curfew['start_hour'], self.curfew['end_hour'] - 2)
-                        else:
-                            hour = random.randrange(10, 15)
-                        manager.emit(next_occurrence_of_hour(time, hour), manager.Event(manager.AGENT_GO_SHOPPING, agent))
+                        designated = random.choice(agents)
+                        chance_to_consume = 0.3 if (day % 7) < 5 else 0.6
+                        if (random.random() < chance_to_consume):
+                            if (isinstance(designated, WorkingAgent) and designated.id in will_work):
+                                designated.errand_run = True
+                                continue
+
+                            hour = random.randrange(max(10, self.curfew.get('start_hour', 0) + 1), min(15,  self.curfew.get('end_hour', 24) - 2))
+                            manager.emit(next_occurrence_of_hour(time, hour), manager.Event(manager.AGENT_GO_SHOPPING, designated))
+                else:
+                    for agent in self.agents:
+                        isolate = (agent.isolate and (random.random() < config.get('AGENT_COMPLIANCE', 0.5) or self.quarantine))
+                        chance_to_consume = 0.3 if (day % 7) < 5 else 0.6
+                        if (random.random() < chance_to_consume and 65 >= agent.age >= 4 and agent.SEIR_compartment != 'D' and not isolate):
+                            if (isinstance(agent, WorkingAgent) and agent.id in will_work):
+                                agent.errand_run = True
+                                continue
+
+                            if (self.curfew):
+                                hour = random.randrange(self.curfew['start_hour'], self.curfew['end_hour'] - 2)
+                            else:
+                                hour = random.randrange(10, 15)
+                            manager.emit(next_occurrence_of_hour(time, hour), manager.Event(manager.AGENT_GO_SHOPPING, agent))
             
             if (status.SEIR_compartments['I'] == 0):
                 running = False
