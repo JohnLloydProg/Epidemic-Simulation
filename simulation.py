@@ -204,7 +204,7 @@ class Simulation:
                     duration = random.randint(0, max_infection_duration) if self.config['IS_EPOCH_RESTART'] else max_infection_duration
                     if (agent.symptomatic):
                         if (duration//60 > 48):
-                            manager.emit(min(random.randint(24, 48))*60, manager.Event(manager.AGENT_ISOLATE, agent))
+                            manager.emit(random.randint(24, 48)*60, manager.Event(manager.AGENT_ISOLATE, agent))
                         else:
                             agent.isolate = True
                     remove_event = manager.Event(manager.AGENT_REMOVED, agent)
