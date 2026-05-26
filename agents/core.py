@@ -39,6 +39,8 @@ class Establishment:
             self.no_infected_agents -= 1 if not agent.masked else 0.5
     
     def contact_rate(self) -> float:
+        if (self.max_capacity == 0):
+            return 0
         return self.max_contact_rate * (self.no_agents / self.max_capacity)
     
     def infected_density(self) -> float:

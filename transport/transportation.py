@@ -129,7 +129,7 @@ class Transportation:
         self.path = path
         self.id = Transportation.id
         self.agents = []
-        self.path = path.copy()
+        self.path = path
         Transportation.id += 1
     
     def transport(self, current_time:int):
@@ -243,7 +243,11 @@ def handle_transportation_events(event:manager.Event, transportations:list[Trans
                 agent.alight_transportation()
                 agent.arrival(time, transport.current_node)
             else:
-                transport.transport(time)
+                if (transport.path):
+                    transport.transport(time)
+                else:
+                    agent.alight_transportation()
+                    agent.arrival(time, agent.destination.node)
     elif (event.type == manager.TRANSPORTATION_DESPAWN):
         LOGGER.debug(f"Handling transportation despawn for {len(event.get_objects())} transportations at time {time}.")
         for transport in _transportations:
