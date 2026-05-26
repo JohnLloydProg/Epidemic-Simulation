@@ -4,6 +4,7 @@ from multiprocessing import Process
 from graphing.mapping import load_graph
 from graphing.graph import RegionGraph
 from agents.agent import AGE_RANGE_DISTRIBUTION, Agent, WorkingAgent, next_occurrence_of_hour, handle_agent_events
+from agents.core import WEEKEND_FIRMS
 from transport.transportation import Transportation, RoutedTransportation, handle_route_events, handle_transportation_events, BusRoute, JeepRoute, TrainRoute
 from interventions import handle_policy_events
 from routing_table import build_routing_cache
@@ -179,6 +180,10 @@ class Simulation:
                 firm = random.choice(firms)
                 tries += 1
             agent.firm = firm
+            if (firm.industry in WEEKEND_FIRMS):
+                agent.weekend_worker = random.random() < 0.5
+                if (agent.weekend_worker):
+                    agent.day_offs.extend(random.sample(list(range(7)), k=2))
             firm.resident_agents.append(agent)
         
         """Firm occupancy ratios"""
@@ -354,13 +359,15 @@ class Simulation:
                     if (not firm.essential and self.essential_only):
                         continue
                     
-                    agents = random.sample(firm.resident_agents, min(len(firm.resident_agents), firm.max_capacity))
+                    in_schedule = [agent for agent in firm.resident_agents if ((day % 7) < 5 or (agent.weekend_worker and (day % 7) not in agent.day_offs))]
+                    agents = random.sample(in_schedule, min(len(in_schedule), firm.max_capacity))
                     will_work.update(daily_work(agents, self.quarantine, self.curfew, time, self.config))
                 
                 _agents = self.designated_persons if self.designated_persons else self.agents
                 for agent in _agents:
                     isolate = (agent.isolate and (random.random() < config.get('AGENT_COMPLIANCE', 0.5) or self.quarantine))
-                    if (random.random() < 0.3 and 65 >= agent.age >= 4 and agent.SEIR_compartment != 'D' and not isolate):
+                    change_to_consume = 0.3 if (day % 7) < 5 else 0.6
+                    if (random.random() < change_to_consume and 65 >= agent.age >= 4 and agent.SEIR_compartment != 'D' and not isolate):
                         if (isinstance(agent, WorkingAgent) and agent.id in will_work):
                             agent.errand_run = True
                             continue

@@ -11,6 +11,17 @@ FIRM_INDUSTRIES_CATOGIZATION = {
     ("Human Health", 1): 0.0261, ("Arts & Entertainment", 4): 0.0104, ("Other", 3): 0.0353
     }
 
+WEEKEND_FIRMS = {
+    ("Wholesale & Retail", 3),
+    ("Accom & Food", 1),
+    ("Arts & Entertainment", 4),
+    ("Human Health", 1),
+    ("Elec, Gas, Steam & Air", 1),
+    ("Water", 1),
+    ("Transpo & Storage", 1),
+    ("Admin & Support", 2)
+}
+
 
 class Establishment:
     id:int = 0
@@ -61,6 +72,7 @@ class Firm(Establishment):
     essential:bool
     industry:tuple[str, int]
     resident_agents:list
+    working_agents:list
     
     def __init__(self, node, region, size:Literal['micro', 'small', 'medium', 'large'], max_contact_rate:float):
         if (size == 'micro'):
@@ -77,3 +89,14 @@ class Firm(Establishment):
         self.resident_agents = []
         self.industry = random.choices(list(FIRM_INDUSTRIES_CATOGIZATION.keys()), list(FIRM_INDUSTRIES_CATOGIZATION.values()), k=1)[0]
         self.essential = self.industry[1] == 1
+        self.working_agents = []
+    
+    def add_agent(self, agent):
+        super().add_agent(agent)
+        if (agent in self.resident_agents):
+            self.working_agents.append(agent)
+    
+    def remove_agent(self, agent):
+        super().remove_agent(agent)
+        if (agent in self.resident_agents and agent in self.working_agents):
+            self.working_agents.remove(agent)

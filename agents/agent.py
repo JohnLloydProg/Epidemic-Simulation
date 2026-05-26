@@ -238,6 +238,8 @@ class WorkingAgent(Agent):
     firm:Firm = None
     errand_run:bool = False
     finished_work:bool = False
+    weekend_worker:bool = False
+    day_offs:list[int]
     clocked_in:bool = False
 
     def __init__(self, age:int, city:RegionGraph, railway:Graph, household:Household, working_hours:tuple[int, int], compartment:str = 'S'):
@@ -306,16 +308,16 @@ def handle_agent_events(event:manager.Event, routing_cache:dict, routes:list[Rou
                 )
             
             if (random.random() < 0.8):
-                choices:list[Firm] = agent.city.get_close_firms(agent.current_establishment.region)
+                choices:list[Firm] = [firm for firm in agent.city.get_close_firms(agent.current_establishment.region) if firm.working_agents]
             else:
-                choices:list[Firm] = agent.city.get_firms()
+                choices:list[Firm] = [firm for firm in agent.city.get_firms() if firm.working_agents]
             if (isinstance(agent, WorkingAgent) and agent.firm in choices):
                 choices.remove(agent.firm)
             destination = random.choice(choices)
             if (max_distance):
                 distance = sum(edge.distance for edge in shortest_edge_path(agent.current_establishment.node.id, destination.node.id, agent.city, agent.railway))
                 if (distance > max_distance):
-                    choices:list[Firm] = agent.city.get_close_firms(agent.current_establishment.region)
+                    choices:list[Firm] = [firm for firm in agent.city.get_close_firms(agent.current_establishment.region) if firm.working_agents]
                     if (isinstance(agent, WorkingAgent) and agent.firm in choices):
                         choices.remove(agent.firm)
                     destination = random.choice(choices)

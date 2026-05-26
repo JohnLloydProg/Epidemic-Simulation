@@ -185,7 +185,11 @@ class DesignatedPerson(Policy):
         super().implement(simulation)
         households:list[Household] = simulation.graph.get_households()
         for house in households:
-            designated = random.choice([agent for agent in house.resident_agents if not agent.isolate])
+            agents = [agent for agent in house.resident_agents if not agent.isolate]
+            if (not agents):
+                continue
+
+            designated = random.choice(agents)
             simulation.designated_persons.append(designated)
     
     def revert(self, simulation):
