@@ -314,6 +314,8 @@ def handle_agent_events(event:manager.Event, routing_cache:dict, routes:list[Rou
                 choices:list[Firm] = [firm for firm in agent.city.get_firms() if firm.working_agents]
             if (isinstance(agent, WorkingAgent) and agent.firm in choices):
                 choices.remove(agent.firm)
+            if (not choices):
+                continue
             destination = random.choice(choices)
             if (max_distance):
                 distance = sum(edge.distance for edge in shortest_edge_path(agent.current_establishment.node.id, destination.node.id, agent.city, agent.railway))
