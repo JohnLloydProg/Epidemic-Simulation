@@ -386,10 +386,7 @@ class Simulation:
                                 agent.errand_run = True
                                 continue
 
-                            if (self.curfew):
-                                hour = random.randrange(self.curfew['start_hour'], self.curfew['end_hour'] - 2)
-                            else:
-                                hour = random.randrange(10, 15)
+                            hour = random.randrange(max(10, self.curfew.get('start_hour', 0) + 1), min(15,  self.curfew.get('end_hour', 24) - 2))
                             manager.emit(next_occurrence_of_hour(time, hour), manager.Event(manager.AGENT_GO_SHOPPING, agent))
             
             if (status.SEIR_compartments['I'] == 0):
