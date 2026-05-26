@@ -200,14 +200,20 @@ class Simulation:
                 
                 if (compartment == 'I'):
                     agent.symptomatic = random.random() < 0.6
+                    max_infection_duration = math.ceil(self.disease.sample_infected_duration())
+                    duration = random.randint(0, max_infection_duration) if self.config['IS_EPOCH_RESTART'] else max_infection_duration
                     if (agent.symptomatic):
-                        manager.emit(random.randint(24, 48)*60, manager.Event(manager.AGENT_ISOLATE, agent))
+                        if (duration//60 > 48):
+                            manager.emit(min(random.randint(24, 48))*60, manager.Event(manager.AGENT_ISOLATE, agent))
+                        else:
+                            agent.isolate = True
                     remove_event = manager.Event(manager.AGENT_REMOVED, agent)
-                    manager.emit(math.ceil(self.disease.sample_infected_duration()), remove_event)
+                    manager.emit(duration, remove_event)
                 elif (compartment == 'E'):
+                    max_incubation_period = math.ceil(self.disease.sample_incubation_period())
+                    duration = random.randint(0, max_incubation_period) if self.config['IS_EPOCH_RESTART'] else max_incubation_period
                     infection_event = manager.Event(manager.AGENT_INFECTED, agent)
-                    manager.emit(math.ceil(self.disease.sample_incubation_period()), infection_event)
-                
+                    manager.emit(duration, infection_event)
                 assigned.add(agent.id)
     
     def load_policy(self, pickled_policy:dict) -> interventions.Policy:
