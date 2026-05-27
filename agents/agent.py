@@ -184,6 +184,7 @@ class Agent:
             self.arrived_at_destination(time)
 
     def arrived_at_destination(self, time:int):
+        self.infection_multiplier = 1 if not self.masked else random.uniform(0.5, 0.7)
         self.arrival_time = time
         self.current_establishment = self.destination
         self.current_establishment.add_agent(self)
