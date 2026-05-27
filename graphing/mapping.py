@@ -6,6 +6,8 @@ import pandas as pd
 import heapq
 import logging
 import math
+import json
+import os
 
 LOGGER = logging.getLogger('Mapping')
 
@@ -134,7 +136,12 @@ def shortest_path(start_node:Node, end_node:Node, routes:list[Route]) -> list[tu
     return []
 
 
-def load_graph(config:dict) -> tuple[RegionGraph, Graph, list[Route]]:
+def load_graph(config:None|dict = None) -> tuple[RegionGraph, Graph, list[Route]]:
+    if (not config):
+        config_path = f'/firebase_cred/{os.environ['CONFIG_FILE_NAME']}' if (os.environ.get('CLOUD', 'False') == 'True') else os.environ['CONFIG_FILE_NAME']
+        with open(config_path) as f:
+            config = json.load(f)
+
     map_path = './map/'
     city_graph = RegionGraph('city')
     railway_graph = Graph('railway')
