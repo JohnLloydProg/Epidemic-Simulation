@@ -144,7 +144,7 @@ class Agent:
             transport.transport(time)
 
     def set_checkpoints(self, destination:Establishment, routing_cache:dict, routes:list[Route], time:int):
-        self.infection_multiplier = 1 if not self.masked else random.uniform(0.5, 0.9)
+        self.infection_multiplier = 1 if not self.masked else random.uniform(0.5, 0.7)
         self.current_establishment.remove_agent(self)
         self.destination = destination
         self.current_node = self.current_establishment.node
