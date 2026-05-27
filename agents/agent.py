@@ -99,6 +99,7 @@ class Agent:
         transportation.agents.append(self)
         if (self.SEIR_compartment == 'I'):
             transportation.no_infected_agents += self.infection_multiplier
+        self.set_state('travelling')
         self.current_node.agents.remove(self)
         self.current_node = None
     

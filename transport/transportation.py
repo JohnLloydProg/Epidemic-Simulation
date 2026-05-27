@@ -183,6 +183,7 @@ def handle_route_events(event:manager.Event, transportations:list[Transportation
             for transport in transports:
                 for agent in list(transport.current_node.agents):
                     if (agent.state != 'waiting'):
+                        transport.current_node.agents.remove(agent)
                         continue
 
                     current_leg = agent.checkpoints[0]
@@ -191,7 +192,6 @@ def handle_route_events(event:manager.Event, transportations:list[Transportation
                         for node in transport.route.ordered_nodes[current_index:]:
                             if (not transport.is_full() and current_leg.end_node == node):
                                 agent.ride_transportation(transport, time)
-                                agent.set_state('travelling')
                                 break
                 transport.transport(time)
             transportations.extend(transports)
@@ -205,9 +205,11 @@ def handle_transportation_events(event:manager.Event, transportations:list[Trans
         LOGGER.debug(f"Handling transportation arrival for {len(event.get_objects())} transportations at time {time}.")
         for transport in _transportations:
             transport.current_node = transport.current_edge.get_adjacent_node(transport.current_node)
-            for agent in list(transport.agents):
+            transpo_agents = list(transport.agents)
+            for agent in transpo_agents:
                 if (agent.state != 'travelling'):
                     transport.agents.remove(agent)
+                    agent.transportation = None
                     continue
 
                 if (transport.current_node.id == agent.checkpoints[0].end_node.id):
@@ -217,8 +219,10 @@ def handle_transportation_events(event:manager.Event, transportations:list[Trans
             getting_off_external = int(transport.external_passenger * random.uniform(0.5, 0.2))
             transport.external_passenger -= getting_off_external
 
-            for agent in list(transport.current_node.agents):
+            node_agents = list(transport.current_node.agents)
+            for agent in node_agents:
                 if (agent.state != 'waiting'):
+                    transport.current_node.agents.remove(agent)
                     continue
 
                 current_leg = agent.checkpoints[0]
@@ -227,7 +231,6 @@ def handle_transportation_events(event:manager.Event, transportations:list[Trans
                     for node in transport.route.ordered_nodes[current_index:]:
                         if (not transport.is_full() and current_leg.end_node == node and not agent.transportation):
                             agent.ride_transportation(transport, time)
-                            agent.set_state('travelling')
                             break
                 
             transport.transport(time)

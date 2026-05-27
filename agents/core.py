@@ -73,6 +73,7 @@ class Firm(Establishment):
     industry:tuple[str, int]
     resident_agents:list
     working_agents:list
+    day_workers:dict[int, list]
     
     def __init__(self, node, region, size:Literal['micro', 'small', 'medium', 'large'], max_contact_rate:float):
         if (size == 'micro'):
@@ -90,6 +91,7 @@ class Firm(Establishment):
         self.industry = random.choices(list(FIRM_INDUSTRIES_CATOGIZATION.keys()), list(FIRM_INDUSTRIES_CATOGIZATION.values()), k=1)[0]
         self.essential = self.industry[1] == 1
         self.working_agents = []
+        self.day_workers = {num:[] for num in range(7)}
     
     def add_agent(self, agent):
         super().add_agent(agent)

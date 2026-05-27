@@ -80,7 +80,6 @@ class Simulation:
     layer = 'city'
     agents:list[Agent]
     working_agents:list[WorkingAgent]
-    non_working_agents:list[Agent]
     transportations:list[Transportation]
     graph:RegionGraph
     clock:pg.time.Clock
@@ -112,7 +111,6 @@ class Simulation:
         self.no_per_compartment = config.get('SEIR_COUNT', {'I':4})
         self.agents = []
         self.working_agents = []
-        self.non_working_agents = []
         self.transportations = []
         self.headless = headless
         self.active_cases = []
@@ -165,7 +163,6 @@ class Simulation:
                     self.working_agents.append(agent)
                 else:
                     agent = Agent(age, self.graph, self.railway_graph, household)
-                    self.non_working_agents.append(agent)
                 household.resident_agents.append(agent)
                 self.agents.append(agent)
         
@@ -180,10 +177,17 @@ class Simulation:
                 tries += 1
             agent.firm = firm
             if (firm.industry in WEEKEND_FIRMS):
-                agent.weekend_worker = random.random() < 0.3
+                agent.weekend_worker = random.random() < 0.4
                 if (agent.weekend_worker):
-                    agent.day_offs.extend(random.sample(list(range(7)), k=2))
+                    agent.day_offs.extend(random.sample(list(range(5)), k=2))
             firm.resident_agents.append(agent)
+            if (not agent.weekend_worker):
+                for i in range(5):
+                    firm.day_workers[i].append(agent)
+            else:
+                for i in range(7):
+                    if (i not in agent.day_offs):
+                        firm.day_workers[i].append(agent)
         
         """Firm occupancy ratios"""
         occupany_ratios = []
@@ -195,7 +199,10 @@ class Simulation:
         LOGGER.info('assigning initial infections...')
         assigned = set()
         for compartment in self.compartments:
-            un_assigned_agents = list(filter(lambda agent: agent.id not in assigned, self.working_agents))
+            if (compartment in {'E', 'I'}):
+                un_assigned_agents = list(filter(lambda agent: agent.id not in assigned, self.working_agents))
+            else:
+                un_assigned_agents = list(filter(lambda agent: agent.id not in assigned, self.agents))
             if (len(un_assigned_agents) == 0):
                 break
             agents = random.sample(un_assigned_agents, self.no_per_compartment.get(compartment, 0))
@@ -307,7 +314,7 @@ class Simulation:
             hour = (time // 60) % 24
             day = time // (60 * 24)
             time_record = time_ns()
-            self.peak_hour = (8 >= hour >= 6) or (20 >= hour >= 17)
+            self.peak_hour = (9 >= hour >= 6) or (20 >= hour >= 17)
             
             # --- HOURLY SNAPSHOT ---
             if minute == 58 and last_sampled_hour != hour:
@@ -358,10 +365,12 @@ class Simulation:
                     if (not firm.essential and self.essential_only):
                         continue
                     
-                    in_schedule = [agent for agent in firm.resident_agents if ((day % 7) < 5 or (agent.weekend_worker and (day % 7) not in agent.day_offs))]
+                    in_schedule = list(firm.day_workers[day % 7])
                     agents = random.sample(in_schedule, min(len(in_schedule), firm.max_capacity))
                     will_work.update(daily_work(agents, self.quarantine, self.curfew, time, self.config))
                 
+                valid_start_hour = max(10, self.curfew.get('start_hour', 0) + 1)
+                valid_end_hour = min(15,  self.curfew.get('end_hour', 24) - 2)
                 if (self.designated_persons):
                     for house in self.graph.get_households():
                         agents = [agent for agent in house.resident_agents if (not agent.isolate and 65 >= agent.age >= 4 and agent.SEIR_compartment != 'D')]
@@ -375,18 +384,19 @@ class Simulation:
                                 designated.errand_run = True
                                 continue
 
-                            hour = random.randrange(max(10, self.curfew.get('start_hour', 0) + 1), min(15,  self.curfew.get('end_hour', 24) - 2))
+                            hour = random.randrange(valid_start_hour, valid_end_hour)
                             manager.emit(next_occurrence_of_hour(time, hour), manager.Event(manager.AGENT_GO_SHOPPING, designated))
                 else:
+                    compliance = self.config.get('AGENT_COMPLIANCE', 0.5)
+                    chance_to_consume = 0.3 if (day % 7) < 5 else 0.6
                     for agent in self.agents:
-                        isolate = (agent.isolate and (random.random() < config.get('AGENT_COMPLIANCE', 0.5) or self.quarantine))
-                        chance_to_consume = 0.3 if (day % 7) < 5 else 0.6
+                        isolate = (agent.isolate and (random.random() < compliance or self.quarantine))
                         if (random.random() < chance_to_consume and 65 >= agent.age >= 4 and agent.SEIR_compartment != 'D' and not isolate):
                             if (isinstance(agent, WorkingAgent) and agent.id in will_work):
                                 agent.errand_run = True
                                 continue
 
-                            hour = random.randrange(max(10, self.curfew.get('start_hour', 0) + 1), min(15,  self.curfew.get('end_hour', 24) - 2))
+                            hour = random.randrange(valid_start_hour, valid_end_hour)
                             manager.emit(next_occurrence_of_hour(time, hour), manager.Event(manager.AGENT_GO_SHOPPING, agent))
             
             if (status.SEIR_compartments['I'] == 0):
