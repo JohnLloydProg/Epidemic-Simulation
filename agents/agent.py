@@ -33,7 +33,7 @@ def compute_for_chance_of_infection(chance_per_contact:float, contact_rate:float
         chance_of_not_infected = math.exp(-force_of_infection)
     except OverflowError:
         chance_of_not_infected = 0.0
-    return round(1 - chance_of_not_infected, 4)
+    return 1 - chance_of_not_infected
 
 @lru_cache(maxsize=128, typed=False)
 def compute_mortality_rate(age:int) -> float:
