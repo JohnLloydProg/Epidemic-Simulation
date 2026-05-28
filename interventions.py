@@ -262,7 +262,8 @@ POLICY_CLASS_MAPPING = {
     'limit-transpo-capacity':LimitTranspoCapacity, 'route-reduction':RouteReduction, 'mandatory-mask':MandatoryMask,
     'travel-distance-limitation':TravelDistanceLimitation, 'essential-company-only':EssentialCompanyOnly,
     'limit-company-capacity':LimitCompanyCapacity, 'enforce-quarantine':EnforceQuaratine, 
-    'designated-person':DesignatedPerson, 'curfew':Curfew, 'bike-transpo':BikeTranspo
+    'designated-person':DesignatedPerson, 'curfew':Curfew, 'bike-transpo':BikeTranspo,
+    'enable-worker-testing':TestingKit
 }
 
 
