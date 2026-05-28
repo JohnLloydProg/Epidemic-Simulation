@@ -145,6 +145,7 @@ class Agent:
 
     def set_checkpoints(self, destination:Establishment, routing_cache:dict, routes:list[Route], time:int):
         self.infection_multiplier = 1 if not self.masked else random.uniform(0.5, 0.7)
+        self.infection_multiplier *= 1 if self.symptomatic else 0.6
         self.current_establishment.remove_agent(self)
         self.destination = destination
         self.current_node = self.current_establishment.node
@@ -185,11 +186,19 @@ class Agent:
 
     def arrived_at_destination(self, time:int):
         self.infection_multiplier = 1 if not self.masked else random.uniform(0.5, 0.7)
+        self.infection_multiplier *= 1 if self.symptomatic else random.uniform(0.4, 0.6)
         self.arrival_time = time
         self.current_establishment = self.destination
         self.current_establishment.add_agent(self)
+        self.current_node.agents.remove(self)
+        self.current_node = None
         if (isinstance(self.destination, Firm)):
             if (isinstance(self, WorkingAgent) and self.destination == self.firm):
+                if (random.random() < self.firm.testing_probability and (self.SEIR_compartment == 'I' and not self.isolate)):
+                    self.isolate = True
+                    manager.emit(time + 2, manager.Event(manager.AGENT_GO_HOME, self))
+                    return
+                
                 time_out = next_occurrence_of_hour(time, self.working_hours[1] - random.gauss(0, 0.5))
                 if (not self.clocked_in):
                     while (time_out - 2 < time):
@@ -215,8 +224,6 @@ class Agent:
                 self.set_state('consuming')
         elif (isinstance(self.destination, Household)):
             self.set_state('home')
-        self.current_node.agents.remove(self)
-        self.current_node = None
     
     def move(self, time:int):
         if (not self.checkpoints):

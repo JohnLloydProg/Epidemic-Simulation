@@ -240,6 +240,24 @@ class BikeTranspo(Policy):
         return f"BikeTranspo(start_time={self.start_time}, end_time={self.end_time}, population_portion={self.population_portion})"
 
 
+class TestingKit(Policy):
+    def __init__(self, start_time:int, testing_probability:float, end_time:None|int = None):
+        super().__init__(start_time, end_time)
+        self.testing_probability = testing_probability
+    
+    def implement(self, simulation):
+        super().implement(simulation)
+        firms:list[Firm] = simulation.graph.get_firms()
+        for firm in firms:
+            firm.testing_probability = self.testing_probability
+
+    def revert(self, simulation):
+        super().revert(simulation)
+        firms:list[Firm] = simulation.graph.get_firms()
+        for firm in firms:
+            firm.testing_probability = 0
+
+
 POLICY_CLASS_MAPPING = {
     'limit-transpo-capacity':LimitTranspoCapacity, 'route-reduction':RouteReduction, 'mandatory-mask':MandatoryMask,
     'travel-distance-limitation':TravelDistanceLimitation, 'essential-company-only':EssentialCompanyOnly,

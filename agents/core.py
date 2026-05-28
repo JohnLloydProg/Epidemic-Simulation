@@ -74,6 +74,7 @@ class Firm(Establishment):
     resident_agents:list
     working_agents:list
     day_workers:dict[int, list]
+    testing_probability:float = 0
     
     def __init__(self, node, region, size:Literal['micro', 'small', 'medium', 'large'], max_contact_rate:float):
         if (size == 'micro'):
