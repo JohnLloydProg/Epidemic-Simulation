@@ -35,7 +35,7 @@ class Establishment:
         self.region = region
         self.id = Establishment.id
         Establishment.id += 1
-
+        self.base_capacity = max_capacity
         self.max_contact_rate = max_contact_rate
         self.max_capacity = max_capacity
     
@@ -50,9 +50,9 @@ class Establishment:
             self.no_infected_agents -= agent.infection_multiplier
     
     def contact_rate(self) -> float:
-        if (self.max_capacity == 0):
+        if (self.base_capacity == 0):
             return 0
-        return self.max_contact_rate * (self.no_agents / self.max_capacity)
+        return self.max_contact_rate * (self.no_agents / self.base_capacity)
     
     def infected_density(self) -> float:
         if (self.no_agents == 0):

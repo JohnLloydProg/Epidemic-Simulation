@@ -172,7 +172,7 @@ class Simulation:
         for agent in self.working_agents:
             firm = random.choice(firms)
             tries = 0
-            while (len(firm.resident_agents) >= int(firm.max_capacity * 0.85)):
+            while (len(firm.resident_agents) >= int(firm.base_capacity * 0.85)):
                 firm = random.choice(firms)
                 tries += 1
             agent.firm = firm
@@ -192,7 +192,7 @@ class Simulation:
         """Firm occupancy ratios"""
         occupany_ratios = []
         for firm in firms:
-            occupany_ratios.append((len(firm.resident_agents) / firm.max_capacity) * 100)
+            occupany_ratios.append((len(firm.resident_agents) / firm.base_capacity) * 100)
         LOGGER.info(f'Firm occupancy ratios: min={min(occupany_ratios)}%, max={max(occupany_ratios)}%, avg={sum(occupany_ratios)/len(occupany_ratios)}%, std={math.sqrt(sum((x - (sum(occupany_ratios)/len(occupany_ratios)))**2 for x in occupany_ratios)/len(occupany_ratios))}%')
 
         """Assign initial SEIR compartments to agents. Assignment here is done randomly"""
