@@ -124,6 +124,9 @@ class Agent:
             manager.emit(time + incubation_period, infection_event)
     
     def set_path(self, destination:Establishment, time:int):
+        masked_multiplier = 1 if not self.masked else random.uniform(0.5, 0.7)
+        asymptomatic_multiplier = 1 if self.symptomatic else random.uniform(0.4, 0.6)
+        self.infection_multiplier = masked_multiplier * asymptomatic_multiplier
         self.current_establishment.remove_agent(self)
         self.destination = destination
         self.current_node = self.current_establishment.node
@@ -144,8 +147,9 @@ class Agent:
             transport.transport(time)
 
     def set_checkpoints(self, destination:Establishment, routing_cache:dict, routes:list[Route], time:int):
-        self.infection_multiplier = 1 if not self.masked else random.uniform(0.5, 0.7)
-        self.infection_multiplier *= 1 if self.symptomatic else 0.6
+        masked_multiplier = 1 if not self.masked else random.uniform(0.5, 0.7)
+        asymptomatic_multiplier = 1 if self.symptomatic else random.uniform(0.4, 0.6)
+        self.infection_multiplier = masked_multiplier * asymptomatic_multiplier
         self.current_establishment.remove_agent(self)
         self.destination = destination
         self.current_node = self.current_establishment.node
@@ -185,8 +189,6 @@ class Agent:
             self.arrived_at_destination(time)
 
     def arrived_at_destination(self, time:int):
-        self.infection_multiplier = 1 if not self.masked else random.uniform(0.5, 0.7)
-        self.infection_multiplier *= 1 if self.symptomatic else random.uniform(0.4, 0.6)
         self.arrival_time = time
         self.current_establishment = self.destination
         self.current_establishment.add_agent(self)

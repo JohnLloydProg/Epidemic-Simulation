@@ -204,7 +204,7 @@ class Simulation:
             else:
                 un_assigned_agents = list(filter(lambda agent: agent.id not in assigned, self.agents))
             if (len(un_assigned_agents) == 0):
-                break
+                continue
             agents = random.sample(un_assigned_agents, self.no_per_compartment.get(compartment, 0))
             for agent in agents:
                 agent.SEIR_compartment = compartment
