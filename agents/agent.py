@@ -290,10 +290,11 @@ def handle_agent_events(event:manager.Event, routing_cache:dict, routes:list[Rou
     elif (event.type == manager.AGENT_GO_HOME):
         LOGGER.debug(f"Handling agent go home for {len(agents)} agents at time {time}.")
         for agent in agents:
-            if (isinstance(agent, WorkingAgent) and agent.current_establishment == agent.firm):
-                chance_per_contact = disease.sample_infection_firm_work_CPC()
-            else:
+            establishment:Firm = agent.current_establishment
+            if (establishment.industry[1] >= 3):
                 chance_per_contact = disease.sample_infection_firm_retail_CPC()
+            else:
+                chance_per_contact = disease.sample_infection_firm_work_CPC()
 
             agent.check_for_infection(
                 chance_per_contact,
@@ -312,7 +313,11 @@ def handle_agent_events(event:manager.Event, routing_cache:dict, routes:list[Rou
             if (agent.current_establishment == agent.household):
                 chance_per_contact = disease.sample_infection_household_CPC()
             else:
-                chance_per_contact = disease.sample_infection_firm_work_CPC()
+                establishment:Firm = agent.current_establishment
+                if (establishment.industry[1] >= 3):
+                    chance_per_contact = disease.sample_infection_firm_retail_CPC()
+                else:
+                    chance_per_contact = disease.sample_infection_firm_work_CPC()
             agent.check_for_infection(
                 chance_per_contact,
                 disease.sample_incubation_period(),
@@ -349,7 +354,11 @@ def handle_agent_events(event:manager.Event, routing_cache:dict, routes:list[Rou
             if (agent.current_establishment == agent.household):
                 chance_per_contact = disease.sample_infection_household_CPC()
             else:
-                chance_per_contact = disease.sample_infection_firm_retail_CPC()
+                establishment:Firm = agent.current_establishment
+                if (establishment.industry[1] >= 3):
+                    chance_per_contact = disease.sample_infection_firm_retail_CPC()
+                else:
+                    chance_per_contact = disease.sample_infection_firm_work_CPC()
 
             agent.check_for_infection(
                 chance_per_contact,
