@@ -196,7 +196,7 @@ class Agent:
         self.current_node = None
         if (isinstance(self.destination, Firm)):
             if (isinstance(self, WorkingAgent) and self.destination == self.firm):
-                if (random.random() < self.firm.testing_probability and (self.SEIR_compartment == 'I' and not self.isolate)):
+                if (random.random() < self.firm.testing_probability and self.SEIR_compartment == 'I'):
                     self.isolate = True
 
                     for member in self.household.resident_agents:
