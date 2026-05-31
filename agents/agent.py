@@ -198,6 +198,14 @@ class Agent:
             if (isinstance(self, WorkingAgent) and self.destination == self.firm):
                 if (random.random() < self.firm.testing_probability and (self.SEIR_compartment == 'I' and not self.isolate)):
                     self.isolate = True
+
+                    for member in self.household.resident_agents:
+                        if (member.id == self.id):
+                            continue
+
+                        member.isolate = True
+                        manager.emit(time + 20160, manager.Event(manager.ISOLATION_PERIOD_DONE, member))
+
                     manager.emit(time + 2, manager.Event(manager.AGENT_GO_HOME, self))
                     return
                 
@@ -334,4 +342,8 @@ def handle_agent_events(event:manager.Event, routing_cache:dict, routes:list[Rou
         LOGGER.debug(f'Handling agent isolation for {len(agents)} agents at time {time}.')
         for agent in agents:
             agent.isolate = True
-            
+    elif (event.type == manager.ISOLATION_PERIOD_DONE):
+        LOGGER.debug(f'Handling agent isolation done for {len(agents)} agents at time {time}.')
+        for agent in agents:
+            if (agent.SEIR_compartment != 'I'):
+                agent.isolate = False
