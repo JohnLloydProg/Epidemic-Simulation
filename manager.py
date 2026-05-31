@@ -17,6 +17,7 @@ AGENT_FINISHED_WORK = 13
 AGENT_ISOLATE = 14
 IMPLEMENT_POLICY = 15
 REVERT_POLICY = 16
+ISOLATION_PERIOD_DONE = 17
 
 _events:dict[int, list['Event']] = {}
 _time_step = 0

@@ -52,7 +52,7 @@ class Establishment:
         self.no_agents -= 1
         if (agent.SEIR_compartment == 'I'):
             self.no_infected_agents -= agent.infection_multiplier
-        elif (agent.SEIR_compartment == 'S' and agent in self.susceptible_agents):
+        if (agent in self.susceptible_agents):
             self.susceptible_agents.remove(agent)
     
     def contact_rate(self) -> float:
