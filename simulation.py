@@ -351,6 +351,47 @@ class Simulation:
                 daily_hourly_occupancies = {}
                 daily_hourly_travelling = {}
 
+            """Routine every 30 minutes"""
+            if (minute == 0 or minute == 30):
+                for household in self.graph.get_households():
+                    if (not household.susceptible_agents or household.no_infected_agents == 0):
+                        continue
+
+                    for agent in list(household.susceptible_agents):
+                        if (agent.state != 'home'):
+                            household.remove_agent(agent)
+                            continue
+
+                        agent.check_for_infection(
+                            self.disease.sample_infection_household_CPC(),
+                            self.disease.sample_incubation_period(),
+                            household.contact_rate(), 
+                            household.infected_density(),
+                            0.5, time
+                            )
+
+                for firm in self.graph.get_firms():
+                    if (not firm.susceptible_agents or firm.no_infected_agents == 0):
+                        continue
+
+                    if (firm.industry[1] >= 3):
+                        chance_per_contact = self.disease.sample_infection_firm_retail_CPC()
+                    else:
+                        chance_per_contact = self.disease.sample_infection_firm_work_CPC()
+
+                    for agent in list(firm.susceptible_agents):
+                        if (agent.state not in {'working', 'consuming'}):
+                            firm.remove_agent(agent)
+                            continue
+
+                        agent.check_for_infection(
+                            chance_per_contact,
+                            self.disease.sample_incubation_period(),
+                            firm.contact_rate(), 
+                            firm.infected_density(),
+                            0.5, time
+                            )
+
             # --- DAILY ROUTINE ---
             if (hour == 0 and minute == 0):
                 status = generate_status(self.agents, time, self.active_cases)

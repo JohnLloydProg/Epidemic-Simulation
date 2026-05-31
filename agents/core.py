@@ -26,6 +26,7 @@ WEEKEND_FIRMS = {
 class Establishment:
     id:int = 0
     no_agents:int = 0
+    susceptible_agents:list
     no_infected_agents:float = 0
     max_contact_rate:float = 10.0
     max_capacity:int = 100
@@ -38,16 +39,21 @@ class Establishment:
         self.base_capacity = max_capacity
         self.max_contact_rate = max_contact_rate
         self.max_capacity = max_capacity
+        self.susceptible_agents = []
     
     def add_agent(self, agent):
         self.no_agents += 1
         if (agent.SEIR_compartment == 'I'):
             self.no_infected_agents += agent.infection_multiplier
+        elif (agent.SEIR_compartment == 'S' and agent not in self.susceptible_agents):
+            self.susceptible_agents.append(agent)
     
     def remove_agent(self, agent):
         self.no_agents -= 1
         if (agent.SEIR_compartment == 'I'):
             self.no_infected_agents -= agent.infection_multiplier
+        elif (agent.SEIR_compartment == 'S' and agent in self.susceptible_agents):
+            self.susceptible_agents.remove(agent)
     
     def contact_rate(self) -> float:
         if (self.base_capacity == 0):
