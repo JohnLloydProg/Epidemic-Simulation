@@ -200,7 +200,7 @@ class Agent:
                     self.isolate = True
 
                     for member in self.household.resident_agents:
-                        if (member.id == self.id):
+                        if (member.id == self.id or member.SEIR_compartment == "D"):
                             continue
 
                         member.isolate = True
@@ -293,6 +293,14 @@ def handle_agent_events(event:manager.Event, routing_cache:dict, routes:list[Rou
                     manager.emit(time + (random.randint(24, 48)*60), manager.Event(manager.AGENT_ISOLATE, agent))
                 else:
                     agent.isolate = True
+            
+                for member in agent.household.resident_agents:
+                    if (member.id == agent.id or member.SEIR_compartment == "D"):
+                        continue
+
+                    member.isolate = True
+                    manager.emit(time + 20160, manager.Event(manager.ISOLATION_PERIOD_DONE, member))
+                    
             remove_event = manager.Event(manager.AGENT_REMOVED, agent)
             manager.emit(time + round(disease.sample_infected_duration()), remove_event)
     elif (event.type == manager.AGENT_GO_HOME):
