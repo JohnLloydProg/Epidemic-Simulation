@@ -294,12 +294,12 @@ def handle_agent_events(event:manager.Event, routing_cache:dict, routes:list[Rou
                 else:
                     agent.isolate = True
             
-                for member in agent.household.resident_agents:
-                    if (member.id == agent.id or member.SEIR_compartment == "D"):
-                        continue
+                    for member in agent.household.resident_agents:
+                        if (member.id == agent.id or member.SEIR_compartment == "D"):
+                            continue
 
-                    member.isolate = True
-                    manager.emit(time + 20160, manager.Event(manager.ISOLATION_PERIOD_DONE, member))
+                        member.isolate = True
+                        manager.emit(time + 20160, manager.Event(manager.ISOLATION_PERIOD_DONE, member))
                     
             remove_event = manager.Event(manager.AGENT_REMOVED, agent)
             manager.emit(time + round(disease.sample_infected_duration()), remove_event)
