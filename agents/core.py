@@ -36,7 +36,7 @@ class Establishment:
         self.region = region
         self.id = Establishment.id
         Establishment.id += 1
-        self.base_capacity = max_capacity
+        self.base_capacity = int(max_capacity * 0.8)
         self.max_contact_rate = max_contact_rate
         self.max_capacity = max_capacity
         self.susceptible_agents = []
@@ -54,6 +54,9 @@ class Establishment:
             self.no_infected_agents -= agent.infection_multiplier
         if (agent in self.susceptible_agents):
             self.susceptible_agents.remove(agent)
+        if (self.no_agents == 0):
+            self.susceptible_agents.clear()
+            self.no_infected_agents = 0
     
     def contact_rate(self) -> float:
         if (self.base_capacity == 0):
@@ -80,19 +83,22 @@ class Firm(Establishment):
     resident_agents:list
     working_agents:list
     day_workers:dict[int, list]
+    max_workers:int
     testing_probability:float = 0
     
     def __init__(self, node, region, size:Literal['micro', 'small', 'medium', 'large'], max_contact_rate:float):
         if (size == 'micro'):
-            max_capacity = random.randrange(2, 9)
+            max_workers = random.randrange(2, 9)
         elif (size == 'small'):
-            max_capacity = random.randrange(10, 99, 5)
+            max_workers = random.randrange(10, 99, 5)
         elif (size == 'medium'):
-            max_capacity = random.randrange(100, 299, 10)
+            max_workers = random.randrange(100, 299, 10)
         elif (size == 'large'):
-            max_capacity = random.randrange(300, 700, 50)
+            max_workers = random.randrange(300, 700, 50)
         else:
             raise ValueError(f"Firm size must be 'small', 'medium' or 'large'. Received {size}")
+        self.max_workers = max_workers
+        max_capacity = int(max_workers * random.uniform(1.5, 3.5))
         super().__init__(node, region, max_capacity, max_contact_rate)
         self.resident_agents = []
         self.industry = random.choices(list(FIRM_INDUSTRIES_CATOGIZATION.keys()), list(FIRM_INDUSTRIES_CATOGIZATION.values()), k=1)[0]

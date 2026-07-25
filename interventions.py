@@ -30,18 +30,21 @@ class Policy:
 class LimitTranspoCapacity(Policy):
     routes:list[Route]
 
-    def __init__(self, start_time:int, routes:list[Route], new_capacity_ratio:float, end_time:None|int = None):
+    def __init__(self, start_time:int, routes:list[Route], new_capacity_ratio:float, compliance:float, end_time:None|int = None):
         super().__init__(start_time, end_time)
         self.routes = routes
         self.new_capacity_ratio = new_capacity_ratio
+        self.compliance = compliance
     
     def implement(self, simulation):
         super().implement(simulation)
+        simulation.transpo_capacity_compliance = self.compliance
         for route in self.routes:
             route.capacity_ratio = self.new_capacity_ratio
 
     def revert(self, simulation):
         super().revert(simulation)
+        simulation.transpo_capacity_compliance = 1
         for route in self.routes:
             route.capacity_ratio = 1
 
@@ -89,17 +92,20 @@ class RouteReduction(Policy):
 
 
 class MandatoryMask(Policy):
-    def __init__(self, start_time:int, end_time:None|int = None):
+    def __init__(self, start_time:int, compliance:float, end_time:None|int = None):
         super().__init__(start_time, end_time)
+        self.compliance = compliance
 
     def implement(self, simulation):
         super().implement(simulation)
+        simulation.mask_compliance = self.compliance
         agents:list[Agent] = simulation.agents
         for agent in agents:
             agent.masked = True
     
     def revert(self, simulation):
         super().revert(simulation)
+        simulation.mask_compliance = 0.8
         agents:list[Agent] = simulation.agents
         for agent in agents:
             agent.masked = False
@@ -109,16 +115,19 @@ class MandatoryMask(Policy):
 
 
 class TravelDistanceLimitation(Policy):
-    def __init__(self, start_time:int, max_travel_distance:int, end_time:None|int = None):
+    def __init__(self, start_time:int, max_travel_distance:int, compliance:float, end_time:None|int = None):
         super().__init__(start_time, end_time)
         self.max_travel_distance = max_travel_distance
+        self.compliance = compliance
     
     def implement(self, simulation):
         super().implement(simulation)
+        simulation.distance_compliance = self.compliance
         simulation.max_travel_distance = self.max_travel_distance
 
     def revert(self, simulation):
         super().revert(simulation)
+        simulation.distance_compliance = 0.7
         simulation.max_travel_distance = None
     
     def __str__(self):
@@ -142,21 +151,31 @@ class EssentialCompanyOnly(Policy):
 
 
 class LimitCompanyCapacity(Policy):
-    def __init__(self, start_time:int, firms:list[Firm], capacity_ratio:float, end_time:None|int = None):
+    def __init__(self, start_time:int, firms:list[Firm], capacity_ratio:float, compliance:float, end_time:None|int = None):
         super().__init__(start_time, end_time)
         self.capacity_ratio = capacity_ratio
         self.firms = firms
-        self.original_capacity = {firm.id:firm.max_capacity for firm in firms}
+        self.compliance = compliance
+        self.original_capacity = {}
+        self.original_workers = {}
+        for firm in firms:
+            self.original_capacity[firm.id] = firm.max_capacity
+            self.original_workers[firm.id] = firm.max_workers
     
     def implement(self, simulation):
         super().implement(simulation)
+        simulation.company_capacity_compliance = self.compliance
+        upper_bound = min(1, self.capacity_ratio + (1 - self.compliance))
         for firm in self.firms:
             firm.max_capacity = math.ceil(self.capacity_ratio * firm.max_capacity)
+            firm.max_workers = math.ceil(random.uniform(self.capacity_ratio, upper_bound) * firm.max_workers)
     
     def revert(self, simulation):
         super().revert(simulation)
+        simulation.company_capacity_compliance = 1
         for firm in self.firms:
             firm.max_capacity = self.original_capacity[firm.id]
+            firm.max_workers = self.original_workers[firm.id]
     
     def __str__(self):
         return f"LimitCompanyCapacity(start_time={self.start_time}, end_time={self.end_time}, capacity_ratio={self.capacity_ratio})"
@@ -241,15 +260,17 @@ class BikeTranspo(Policy):
 
 
 class TestingKit(Policy):
-    def __init__(self, start_time:int, testing_probability:float, end_time:None|int = None):
+    def __init__(self, start_time:int, testing_probability:float, compliance:float, end_time:None|int = None):
         super().__init__(start_time, end_time)
         self.testing_probability = testing_probability
+        self.compliance = compliance
     
     def implement(self, simulation):
         super().implement(simulation)
         firms:list[Firm] = simulation.graph.get_firms()
         for firm in firms:
-            firm.testing_probability = self.testing_probability
+            if (random.random() < self.compliance):
+                firm.testing_probability = self.testing_probability
 
     def revert(self, simulation):
         super().revert(simulation)

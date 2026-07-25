@@ -174,12 +174,12 @@ class RoutedTransportation(Transportation):
         manager.emit(current_time + math.ceil(travel_time), manager.Event(manager.TRANSPORTATION_ARRIVED, self))
 
 
-def handle_route_events(event:manager.Event, transportations:list[Transportation], is_peak_hours:bool, time:int, config:dict):
+def handle_route_events(event:manager.Event, time:int, simulation):
     routes:list[Route] = event.get_objects()
     if (event.type == manager.TRANSPORTATION_SPAWN):
         LOGGER.debug(f"Handling transportation spawn for {len(routes)} routes at time {time}.")
         for route in routes:
-            transports = route.generate_transportation(current_time=time, is_peak_hours=is_peak_hours, config=config)
+            transports = route.generate_transportation(current_time=time, is_peak_hours=simulation.peak_hour, config=simulation.config)
             for transport in transports:
                 for agent in list(transport.current_node.agents):
                     if (agent.state != 'waiting'):
@@ -191,15 +191,15 @@ def handle_route_events(event:manager.Event, transportations:list[Transportation
                         current_index = transport.route.ordered_nodes.index(transport.current_node)
                         for node in transport.route.ordered_nodes[current_index:]:
                             if (not transport.is_full() and current_leg.end_node == node):
-                                agent.ride_transportation(transport, time)
+                                agent.ride_transportation(transport, time, simulation.transpo_capacity_compliance)
                                 break
                 transport.transport(time)
-            transportations.extend(transports)
-            spawn_interval = route.spawn_time if not is_peak_hours else route.peak_spawn
+            simulation.transportations.extend(transports)
+            spawn_interval = route.spawn_time if not simulation.peak_hour else route.peak_spawn
             manager.emit(time + spawn_interval, manager.Event(manager.TRANSPORTATION_SPAWN, route))
 
 
-def handle_transportation_events(event:manager.Event, transportations:list[Transportation], time:int):
+def handle_transportation_events(event:manager.Event, time:int, simulation):
     _transportations:list[Transportation] = event.get_objects()
     if (event.type == manager.TRANSPORTATION_ARRIVED):
         LOGGER.debug(f"Handling transportation arrival for {len(event.get_objects())} transportations at time {time}.")
@@ -214,7 +214,7 @@ def handle_transportation_events(event:manager.Event, transportations:list[Trans
 
                 if (transport.current_node.id == agent.checkpoints[0].end_node.id):
                     agent.alight_transportation()
-                    agent.arrival(time)
+                    agent.arrival(time, simulation.company_capacity_compliance)
             
             getting_off_external = int(transport.external_passenger * random.uniform(0.5, 0.2))
             transport.external_passenger -= getting_off_external
@@ -230,7 +230,7 @@ def handle_transportation_events(event:manager.Event, transportations:list[Trans
                     current_index = transport.route.ordered_nodes.index(transport.current_node)
                     for node in transport.route.ordered_nodes[current_index:]:
                         if (not transport.is_full() and current_leg.end_node == node and not agent.transportation):
-                            agent.ride_transportation(transport, time)
+                            agent.ride_transportation(transport, time, simulation.transpo_capacity_compliance)
                             break
                 
             transport.transport(time)
@@ -244,14 +244,14 @@ def handle_transportation_events(event:manager.Event, transportations:list[Trans
             agent = transport.agents[0]
             if (transport.current_node.id == agent.destination.node.id):
                 agent.alight_transportation()
-                agent.arrival(time, transport.current_node)
+                agent.arrival(time, simulation.company_capacity_compliance, transport.current_node)
             else:
                 if (transport.path):
                     transport.transport(time)
                 else:
                     agent.alight_transportation()
-                    agent.arrival(time, agent.destination.node)
+                    agent.arrival(time, simulation.company_capacity_compliance, agent.destination.node)
     elif (event.type == manager.TRANSPORTATION_DESPAWN):
         LOGGER.debug(f"Handling transportation despawn for {len(event.get_objects())} transportations at time {time}.")
         for transport in _transportations:
-            transportations.remove(transport)
+            simulation.transportations.remove(transport)

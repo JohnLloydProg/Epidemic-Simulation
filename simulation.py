@@ -92,6 +92,10 @@ class Simulation:
     simulation_multiplier = 25
     simulation_ns_per_time_unit = (10**9)//simulation_multiplier
     max_travel_distance = None
+    company_capacity_compliance = 1
+    transpo_capacity_compliance = 1
+    mask_compliance = 0.8
+    distance_compliance = 0.7
     essential_only = False
     quarantine = False
     peak_hour:bool = False
@@ -172,7 +176,7 @@ class Simulation:
         for agent in self.working_agents:
             firm = random.choice(firms)
             tries = 0
-            while (len(firm.resident_agents) >= int(firm.base_capacity * 0.85)):
+            while (len(firm.resident_agents) >= firm.max_workers):
                 firm = random.choice(firms)
                 tries += 1
             agent.firm = firm
@@ -250,7 +254,11 @@ class Simulation:
                 raise ValueError('Passed parameter for firms in config is invalid!')
 
         _cls = interventions.POLICY_CLASS_MAPPING[policy_type]
-        policy = _cls(**params)
+        try:
+            policy = _cls(**params)
+        except:
+            print(params)
+            exit()
         return policy
 
     def handle_events(self, time:int):
@@ -274,9 +282,9 @@ class Simulation:
 
         """Event based handling"""
         for event in manager.get(time):
-            handle_agent_events(event, self.routing_table, self.routes, self.max_travel_distance, self.quarantine, self.disease, time)
-            handle_transportation_events(event, self.transportations, time)
-            handle_route_events(event, self.transportations, self.peak_hour, time, self.config)
+            handle_agent_events(event, time, self)
+            handle_transportation_events(event, time, self)
+            handle_route_events(event, time, self)
             handle_policy_events(self, event, time)
     
     def run(self):
@@ -407,7 +415,7 @@ class Simulation:
                         continue
                     
                     in_schedule = list(firm.day_workers[day % 7])
-                    agents = random.sample(in_schedule, min(len(in_schedule), firm.max_capacity))
+                    agents = random.sample(in_schedule, min(len(in_schedule), firm.max_workers))
                     will_work.update(daily_work(agents, self.quarantine, self.curfew, time, self.config))
                 
                 valid_start_hour = max(10, self.curfew.get('start_hour', 0) + 1)
