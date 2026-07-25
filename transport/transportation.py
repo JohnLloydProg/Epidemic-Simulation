@@ -216,7 +216,7 @@ def handle_transportation_events(event:manager.Event, time:int, simulation):
                     agent.alight_transportation()
                     agent.arrival(time, simulation.company_capacity_compliance)
             
-            getting_off_external = int(transport.external_passenger * random.uniform(0.5, 0.2))
+            getting_off_external = int(transport.external_passenger * random.uniform(0.2, 0.5))
             transport.external_passenger -= getting_off_external
 
             node_agents = list(transport.current_node.agents)

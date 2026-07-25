@@ -226,7 +226,11 @@ class Agent:
                 manager.emit(target_time, next_event)
                 self.set_state('working')
             else:
-                if (self.destination.no_agents >= self.destination.max_capacity or (random.random() < compliance_rate)):
+                if (self.destination.no_agents >= self.destination.max_capacity and random.random() < compliance_rate):
+                    if (isinstance(self, WorkingAgent) and not self.finished_work):
+                        manager.emit(time + 1, manager.Event(manager.AGENT_GO_WORK, self))
+                        return
+                    
                     if (random.random() < 0.5):
                         manager.emit(time + 1, manager.Event(manager.AGENT_GO_SHOPPING, self))
                     else:
