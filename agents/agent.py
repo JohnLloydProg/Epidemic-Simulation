@@ -68,7 +68,7 @@ class Agent:
     checkpoints:list[Checkpoint]
     current_node:Node = None
     transportation:Transportation = None
-    full_counter:int = 0
+    full_tried:bool = False
     consumed:bool = False
     symptomatic:bool = False
     masked:bool = False
@@ -230,19 +230,19 @@ class Agent:
                 if (self.destination.no_agents >= self.destination.max_capacity and random.random() < compliance_rate):
                     if (isinstance(self, WorkingAgent) and not self.finished_work):
                         manager.emit(time + 1, manager.Event(manager.AGENT_GO_WORK, self))
-                        self.full_counter = 0
+                        self.full_tried = False
                         return
 
-                    if (random.random() < max(0.0, 0.5 - (self.full_counter * 0.25))):
+                    if (random.random() < 0.5 and not self.full_tried):
                         manager.emit(time + 1, manager.Event(manager.AGENT_GO_SHOPPING, self))
-                        self.full_counter += 1
+                        self.full_tried = True
                         return
                     
                     manager.emit(time + 1, manager.Event(manager.AGENT_GO_HOME, self))
-                    self.full_counter = 0
+                    self.full_tried = False
                     return
 
-                self.full_counter = 0
+                self.full_tried = False
                 self.consumed = True
                 if (isinstance(self, WorkingAgent) and not self.finished_work):
                     manager.emit(time + 30, manager.Event(manager.AGENT_GO_WORK, self))
