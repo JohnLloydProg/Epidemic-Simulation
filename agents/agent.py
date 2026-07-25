@@ -68,6 +68,7 @@ class Agent:
     checkpoints:list[Checkpoint]
     current_node:Node = None
     transportation:Transportation = None
+    full_counter:int = 0
     consumed:bool = False
     symptomatic:bool = False
     masked:bool = False
@@ -230,13 +231,17 @@ class Agent:
                     if (isinstance(self, WorkingAgent) and not self.finished_work):
                         manager.emit(time + 1, manager.Event(manager.AGENT_GO_WORK, self))
                         return
-                    
-                    if (random.random() < 0.5):
+
+                    if (random.random() < (0.5 - (0.5 * (self.full_counter/3)))):
                         manager.emit(time + 1, manager.Event(manager.AGENT_GO_SHOPPING, self))
-                    else:
-                        manager.emit(time + 1, manager.Event(manager.AGENT_GO_HOME, self))
+                        self.full_counter += 1
+                        return
+                    
+                    manager.emit(time + 1, manager.Event(manager.AGENT_GO_HOME, self))
+                    self.full_counter = 0
                     return
-                
+
+                self.full_counter = 0
                 self.consumed = True
                 if (isinstance(self, WorkingAgent) and not self.finished_work):
                     manager.emit(time + 30, manager.Event(manager.AGENT_GO_WORK, self))
