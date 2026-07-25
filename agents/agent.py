@@ -230,9 +230,10 @@ class Agent:
                 if (self.destination.no_agents >= self.destination.max_capacity and random.random() < compliance_rate):
                     if (isinstance(self, WorkingAgent) and not self.finished_work):
                         manager.emit(time + 1, manager.Event(manager.AGENT_GO_WORK, self))
+                        self.full_counter = 0
                         return
 
-                    if (random.random() < (0.5 - (0.5 * (self.full_counter/3)))):
+                    if (random.random() < max(0.0, 0.5 - (self.full_counter * 0.25))):
                         manager.emit(time + 1, manager.Event(manager.AGENT_GO_SHOPPING, self))
                         self.full_counter += 1
                         return
