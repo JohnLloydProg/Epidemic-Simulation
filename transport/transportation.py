@@ -182,7 +182,7 @@ def handle_route_events(event:manager.Event, time:int, simulation):
             transports = route.generate_transportation(current_time=time, is_peak_hours=simulation.peak_hour, config=simulation.config)
             for transport in transports:
                 for agent in list(transport.current_node.agents):
-                    if (agent.state != 'waiting'):
+                    if (agent.state != 'waiting' or agent.current_node != transport.current_node):
                         transport.current_node.agents.remove(agent)
                         continue
 

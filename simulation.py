@@ -92,8 +92,8 @@ class Simulation:
     simulation_multiplier = 25
     simulation_ns_per_time_unit = (10**9)//simulation_multiplier
     max_travel_distance = None
-    company_capacity_compliance = 1
-    transpo_capacity_compliance = 1
+    company_capacity_compliance = 0.85
+    transpo_capacity_compliance = 0.7
     mask_compliance = 0.8
     distance_compliance = 0.7
     essential_only = False

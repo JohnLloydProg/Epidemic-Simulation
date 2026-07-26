@@ -1,5 +1,6 @@
 from typing import Literal
 import random
+import math
 
 
 FIRM_INDUSTRIES_CATOGIZATION = {
@@ -36,7 +37,7 @@ class Establishment:
         self.region = region
         self.id = Establishment.id
         Establishment.id += 1
-        self.base_capacity = int(max_capacity * 0.5)
+        self.base_capacity = math.ceil(max_capacity * 0.4)
         self.max_contact_rate = max_contact_rate
         self.max_capacity = max_capacity
         self.susceptible_agents = []

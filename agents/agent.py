@@ -291,6 +291,9 @@ def handle_agent_events(event:manager.Event, time:int, simulation):
     if (event.type == manager.AGENT_ARRIVAL):
         LOGGER.debug(f"Handling agent arrival for {len(agents)} agents at time {time}.")
         for agent in agents:
+            if (not agent.checkpoints):
+                continue
+            
             agent.arrival(time, simulation.company_capacity_compliance)
     elif (event.type == manager.AGENT_REMOVED):
         for agent in agents:
