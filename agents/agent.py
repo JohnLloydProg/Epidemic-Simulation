@@ -72,6 +72,7 @@ class Agent:
     symptomatic:bool = False
     masked:bool = False
     infection_multiplier:int = 1
+    full_counter:int = 0
     isolate:bool = False
     tested:bool = False
     state:str = 'home'
@@ -229,10 +230,19 @@ class Agent:
                 if (self.destination.no_agents >= self.destination.max_capacity and random.random() < compliance_rate):
                     if (isinstance(self, WorkingAgent) and not self.finished_work):
                         manager.emit(time + 1, manager.Event(manager.AGENT_GO_WORK, self))
-                    else:
-                        manager.emit(time + 1, manager.Event(manager.AGENT_GO_HOME, self))
+                        self.full_counter = 0
+                        return
+
+                    if (random.random() < max(0.0, 0.5 - (self.full_counter * 0.25))):
+                        manager.emit(time + 1, manager.Event(manager.AGENT_GO_SHOPPING, self))
+                        self.full_counter += 1
+                        return
+
+                    manager.emit(time + 1, manager.Event(manager.AGENT_GO_HOME, self))
+                    self.full_counter = 0
                     return
 
+                self.full_counter = 0
                 self.consumed = True
                 if (isinstance(self, WorkingAgent) and not self.finished_work):
                     manager.emit(time + 30, manager.Event(manager.AGENT_GO_WORK, self))

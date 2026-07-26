@@ -211,8 +211,11 @@ def handle_transportation_events(event:manager.Event, time:int, simulation):
                     transport.agents.remove(agent)
                     agent.transportation = None
                     continue
+                elif (agent.transportation != transport):
+                    transport.agents.remove(agent)
+                    continue
 
-                if (transport.current_node.id == agent.checkpoints[0].end_node.id):
+                if (agent.checkpoints and transport.current_node.id == agent.checkpoints[0].end_node.id):
                     agent.alight_transportation()
                     agent.arrival(time, simulation.company_capacity_compliance)
             
