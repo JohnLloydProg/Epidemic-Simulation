@@ -224,7 +224,7 @@ def handle_transportation_events(event:manager.Event, time:int, simulation):
 
             node_agents = list(transport.current_node.agents)
             for agent in node_agents:
-                if (agent.state != 'waiting'):
+                if (agent.state != 'waiting' or agent.current_node != transport.current_node):
                     transport.current_node.agents.remove(agent)
                     continue
 
