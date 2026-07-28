@@ -227,6 +227,7 @@ class Agent:
                 manager.emit(target_time, next_event)
                 self.set_state('working')
             else:
+                self.set_state('consuming')
                 if (self.destination.no_agents >= self.destination.max_capacity and random.random() < compliance_rate):
                     if (isinstance(self, WorkingAgent) and not self.finished_work):
                         manager.emit(time + 1, manager.Event(manager.AGENT_GO_WORK, self))
@@ -248,7 +249,6 @@ class Agent:
                     manager.emit(time + 30, manager.Event(manager.AGENT_GO_WORK, self))
                 else:
                     manager.emit(time + random.randint(30, 120), manager.Event(manager.AGENT_GO_HOME, self))
-                self.set_state('consuming')
         elif (isinstance(self.destination, Household)):
             self.set_state('home')
     
@@ -291,9 +291,6 @@ def handle_agent_events(event:manager.Event, time:int, simulation):
     if (event.type == manager.AGENT_ARRIVAL):
         LOGGER.debug(f"Handling agent arrival for {len(agents)} agents at time {time}.")
         for agent in agents:
-            if (not agent.checkpoints):
-                continue
-            
             agent.arrival(time, simulation.company_capacity_compliance)
     elif (event.type == manager.AGENT_REMOVED):
         for agent in agents:

@@ -182,7 +182,7 @@ def handle_route_events(event:manager.Event, time:int, simulation):
             transports = route.generate_transportation(current_time=time, is_peak_hours=simulation.peak_hour, config=simulation.config)
             for transport in transports:
                 for agent in list(transport.current_node.agents):
-                    if (agent.state != 'waiting' or agent.current_node != transport.current_node):
+                    if (agent.state != 'waiting'):
                         transport.current_node.agents.remove(agent)
                         continue
 
@@ -211,11 +211,8 @@ def handle_transportation_events(event:manager.Event, time:int, simulation):
                     transport.agents.remove(agent)
                     agent.transportation = None
                     continue
-                elif (agent.transportation != transport):
-                    transport.agents.remove(agent)
-                    continue
 
-                if (agent.checkpoints and transport.current_node.id == agent.checkpoints[0].end_node.id):
+                if (transport.current_node.id == agent.checkpoints[0].end_node.id):
                     agent.alight_transportation()
                     agent.arrival(time, simulation.company_capacity_compliance)
             
@@ -224,7 +221,7 @@ def handle_transportation_events(event:manager.Event, time:int, simulation):
 
             node_agents = list(transport.current_node.agents)
             for agent in node_agents:
-                if (agent.state != 'waiting' or agent.current_node != transport.current_node):
+                if (agent.state != 'waiting'):
                     transport.current_node.agents.remove(agent)
                     continue
 

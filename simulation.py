@@ -254,11 +254,7 @@ class Simulation:
                 raise ValueError('Passed parameter for firms in config is invalid!')
 
         _cls = interventions.POLICY_CLASS_MAPPING[policy_type]
-        try:
-            policy = _cls(**params)
-        except:
-            print(params)
-            exit()
+        policy = _cls(**params)
         return policy
 
     def handle_events(self, time:int):
