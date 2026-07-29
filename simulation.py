@@ -28,10 +28,10 @@ from firebase_admin import firestore
 
 LOGGER = logging.getLogger('Simulation')
 
-def daily_work(agents:list[WorkingAgent], quarantine:bool, curfew:dict, time:int, config:dict) -> set[int]:
+def daily_work(agents:list[WorkingAgent], quarantine:float,  curfew:dict, time:int, config:dict) -> set[int]:
     will_work = set()
     for agent in agents:
-        isolate = (agent.isolate and (random.random() < config.get('AGENT_COMPLIANCE', 0.5) or quarantine))
+        isolate = (agent.isolate and random.random() < quarantine)
         dead = agent.SEIR_compartment == 'D'
         out_curfew = agent.working_hours[0] < curfew.get('start_hour', -1) or agent.working_hours[1] > curfew.get('end_hour', 24) or agent.working_hours[0] > curfew.get('end_hour', 24) or agent.working_hours[1] < curfew.get('start_hour', -1)
         if (dead or isolate or out_curfew):
@@ -87,7 +87,7 @@ class Simulation:
     font:pg.font.Font
     routing_table:dict[tuple, list]
     active_cases:list[tuple[int, int]]
-    designated_persons:bool = False
+    designated_persons = 0
     no_per_compartment:dict
     simulation_multiplier = 25
     simulation_ns_per_time_unit = (10**9)//simulation_multiplier
@@ -97,7 +97,7 @@ class Simulation:
     mask_compliance = 0.8
     distance_compliance = 0.7
     essential_only = False
-    quarantine = False
+    quarantine = 0
     peak_hour:bool = False
     curfew:dict[str, int] = {}
     step_counter = 0
@@ -196,7 +196,7 @@ class Simulation:
         """Firm occupancy ratios"""
         occupany_ratios = []
         for firm in firms:
-            occupany_ratios.append((len(firm.resident_agents) / firm.base_capacity) * 100)
+            occupany_ratios.append((len(firm.resident_agents) / firm.max_workers) * 100)
         LOGGER.info(f'Firm occupancy ratios: min={min(occupany_ratios)}%, max={max(occupany_ratios)}%, avg={sum(occupany_ratios)/len(occupany_ratios)}%, std={math.sqrt(sum((x - (sum(occupany_ratios)/len(occupany_ratios)))**2 for x in occupany_ratios)/len(occupany_ratios))}%')
 
         """Assign initial SEIR compartments to agents. Assignment here is done randomly"""
@@ -216,7 +216,7 @@ class Simulation:
                 if (compartment == 'I'):
                     agent.symptomatic = random.random() < 0.6
                     max_infection_duration = math.ceil(self.disease.sample_infected_duration())
-                    duration = random.randint(0, max_infection_duration) if self.config['IS_EPOCH_RESTART'] else max_infection_duration
+                    duration = random.randrange(1, max_infection_duration, 30) if self.config['IS_EPOCH_RESTART'] else max_infection_duration
                     if (agent.symptomatic):
                         if (duration//60 > 48):
                             manager.emit(random.randint(24, 48)*60, manager.Event(manager.AGENT_ISOLATE, agent))
@@ -226,9 +226,14 @@ class Simulation:
                     manager.emit(duration, remove_event)
                 elif (compartment == 'E'):
                     max_incubation_period = math.ceil(self.disease.sample_incubation_period())
-                    duration = random.randint(0, max_incubation_period) if self.config['IS_EPOCH_RESTART'] else max_incubation_period
+                    duration = random.randrange(1, max_incubation_period, 30) if self.config['IS_EPOCH_RESTART'] else max_incubation_period
                     infection_event = manager.Event(manager.AGENT_INFECTED, agent)
                     manager.emit(duration, infection_event)
+                elif (compartment == "R" and random.random() < self.disease.waning_immunity_probability):
+                    max_waning_period = math.ceil(self.disease.sample_waning_immunity_duration())
+                    duration = random.randrange(1, max_waning_period, 30) if self.config['IS_EPOCH_RESTART'] else max_waning_period
+                    immunity_loss_event = manager.Event(manager.AGENT_IMMUNITY_LOSS, agent)
+                    manager.emit(duration, immunity_loss_event)
                 assigned.add(agent.id)
     
     def load_policy(self, pickled_policy:dict) -> interventions.Policy:
@@ -420,22 +425,33 @@ class Simulation:
                     for house in self.graph.get_households():
                         agents = [agent for agent in house.resident_agents if (not agent.isolate and 65 >= agent.age >= 4 and agent.SEIR_compartment != 'D')]
                         if (not agents):
+                            agents = [agent for agent in house.resident_agents if (65 >= agent.age >= 4 and agent.SEIR_compartment != 'D')]
+                        if (not agents):
                             continue
 
-                        designated = random.choice(agents)
-                        chance_to_consume = 0.3 if (day % 7) < 5 else 0.6
-                        if (random.random() < chance_to_consume):
-                            if (isinstance(designated, WorkingAgent) and designated.id in will_work):
-                                designated.errand_run = True
+                        designated_agent = random.choice(agents)
+                        designated_group = [designated_agent]
+
+                        for agent in agents:
+                            if (agent == designated_agent):
                                 continue
 
-                            hour = random.randrange(valid_start_hour, valid_end_hour)
-                            manager.emit(next_occurrence_of_hour(time, hour), manager.Event(manager.AGENT_GO_SHOPPING, designated))
+                            if (random.random() > self.designated_persons):
+                                designated_group.append(agent)
+
+                        chance_to_consume = 0.3 if (day % 7) < 5 else 0.6
+                        for designated in designated_group:
+                            if (random.random() < chance_to_consume):
+                                if (isinstance(designated, WorkingAgent) and designated.id in will_work):
+                                    designated.errand_run = True
+                                    continue
+
+                                hour = random.randrange(valid_start_hour, valid_end_hour)
+                                manager.emit(next_occurrence_of_hour(time, hour), manager.Event(manager.AGENT_GO_SHOPPING, designated))
                 else:
-                    compliance = self.config.get('AGENT_COMPLIANCE', 0.5)
                     chance_to_consume = 0.3 if (day % 7) < 5 else 0.6
                     for agent in self.agents:
-                        isolate = (agent.isolate and (random.random() < compliance or self.quarantine))
+                        isolate = (agent.isolate and random.random() < self.quarantine)
                         if (random.random() < chance_to_consume and 65 >= agent.age >= 4 and agent.SEIR_compartment != 'D' and not isolate):
                             if (isinstance(agent, WorkingAgent) and agent.id in will_work):
                                 agent.errand_run = True

@@ -182,33 +182,35 @@ class LimitCompanyCapacity(Policy):
 
 
 class EnforceQuaratine(Policy):
-    def __init__(self, start_time:int, end_time:None|int = None):
+    def __init__(self, start_time:int, compliance:float, end_time:None|int = None):
         super().__init__(start_time, end_time)
+        self.compliance = compliance
     
     def implement(self, simulation):
         super().implement(simulation)
-        simulation.quarantine = True
+        simulation.quarantine = self.compliance
     
     def revert(self, simulation):
         super().revert(simulation)
-        simulation.quarantine = False
+        simulation.quarantine = 0
     
     def __str__(self):
         return f"EnforceQuarantine(start_time={self.start_time}, end_time={self.end_time})"
 
 
 class DesignatedPerson(Policy):
-    def __init__(self, start_time:int, end_time:None|int = None):
+    def __init__(self, start_time:int, compliance:float, end_time:None|int = None):
         super().__init__(start_time, end_time)
+        self.compliance = compliance
     
     def implement(self, simulation):
         super().implement(simulation)
-        simulation.designated_persons = True
+        simulation.designated_persons = self.compliance
         
     
     def revert(self, simulation):
         super().revert(simulation)
-        simulation.designated_persons = False
+        simulation.designated_persons = 0
     
     def __str__(self):
         return f"DesignatedPerson(start_time={self.start_time}, end_time={self.end_time})"

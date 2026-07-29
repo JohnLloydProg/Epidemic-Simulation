@@ -26,13 +26,9 @@ AGE_RANGE_DISTRIBUTION = {
     (90, 94):0.0005, (95, 99):0.0005, (100, 104):0.0001
 }
 
-@lru_cache(maxsize=128, typed=False)
 def compute_for_chance_of_infection(chance_per_contact:float, contact_rate:float, infected_density:float, duration:int) -> float:
     force_of_infection = chance_per_contact * contact_rate * infected_density * duration
-    try:
-        chance_of_not_infected = math.exp(-force_of_infection)
-    except OverflowError:
-        chance_of_not_infected = 0.0
+    chance_of_not_infected = math.exp(-force_of_infection)
     return 1 - chance_of_not_infected
 
 @lru_cache(maxsize=128, typed=False)
@@ -121,14 +117,18 @@ class Agent:
         chance_infection = compute_for_chance_of_infection(chance_per_contact, contact_rate, infected_density, duration)
         if (random.random() <= chance_infection):
             self.SEIR_compartment = 'E'
+
+            if (self.current_establishment):
+                self.current_establishment.sync_agent_state(self, "S")
+
             infection_event = manager.Event(manager.AGENT_INFECTED, self)
             manager.emit(time + incubation_period, infection_event)
     
     def set_path(self, destination:Establishment, time:int, company_compliance:float, mask_compliance:float):
+        self.current_establishment.remove_agent(self)
         masked_multiplier = random.uniform(0.5, 0.7) if (self.masked and random.random() < mask_compliance) else 1
         asymptomatic_multiplier = 1 if self.symptomatic else random.uniform(0.4, 0.6)
         self.infection_multiplier = masked_multiplier * asymptomatic_multiplier
-        self.current_establishment.remove_agent(self)
         self.destination = destination
         self.current_node = self.current_establishment.node
         self.current_node.agents.append(self)
@@ -148,10 +148,10 @@ class Agent:
             transport.transport(time)
 
     def set_checkpoints(self, destination:Establishment, routing_cache:dict, routes:list[Route], time:int, company_compliance:float, mask_compliance:float):
+        self.current_establishment.remove_agent(self)
         masked_multiplier = random.uniform(0.5, 0.7) if (self.masked and random.random() < mask_compliance) else 1
         asymptomatic_multiplier = 1 if self.symptomatic else random.uniform(0.4, 0.6)
         self.infection_multiplier = masked_multiplier * asymptomatic_multiplier
-        self.current_establishment.remove_agent(self)
         self.destination = destination
         self.current_node = self.current_establishment.node
         self.current_node.agents.append(self)
@@ -301,6 +301,23 @@ def handle_agent_events(event:manager.Event, time:int, simulation):
             else:
                 agent.SEIR_compartment = 'R'
                 agent.isolate = False
+
+                if (random.random() < simulation.disease.waning_immunity_probability):
+                    immunity_duration = simulation.disease.sample_waning_immunity_duration()
+                    manager.emit(time + immunity_duration, manager.Event(manager.AGENT_IMMUNITY_LOSS, agent))
+
+            current_location = agent.current_establishment
+            if (current_location):
+                current_location.sync_agent_state(agent, "I")
+    elif (event.type == manager.AGENT_IMMUNITY_LOSS):
+        LOGGER.debug(f'Handling agent immunity loss for {len(agents)} agents at time {time}.')
+        for agent in agents:
+            if (agent.SEIR_compartment == 'R'):
+                agent.SEIR_compartment = 'S'
+                
+                current_location = agent.current_establishment
+                if (current_location):
+                    current_location.sync_agent_state(agent, "R")
     elif (event.type == manager.AGENT_INFECTED):
         for agent in agents:
             agent.SEIR_compartment = 'I'
@@ -317,7 +334,11 @@ def handle_agent_events(event:manager.Event, time:int, simulation):
 
                         member.isolate = True
                         manager.emit(time + 20160, manager.Event(manager.ISOLATION_PERIOD_DONE, member))
-                    
+
+            current_location = agent.current_establishment
+            if (current_location):
+                current_location.sync_agent_state(agent, "E")
+            
             remove_event = manager.Event(manager.AGENT_REMOVED, agent)
             manager.emit(time + round(simulation.disease.sample_infected_duration()), remove_event)
     elif (event.type == manager.AGENT_GO_HOME):

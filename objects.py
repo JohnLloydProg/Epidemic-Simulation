@@ -54,10 +54,12 @@ class Disease:
     def __init__(self, config:dict):
         self.incubation_period_in_hours = (config.get('INCUBATION_PERIOD_IN_HOURS_SHAPE', 165.84), config.get('INCUBATION_PERIOD_IN_HOURS_RATE', 25.2))
         self.infected_duration_in_hours = (config.get('INFECTED_DURATION_IN_HOURS_SHAPE', 7.11), config.get('INFECTED_DURATION_IN_HOURS_RATE', 0.037))
+        self.waning_immunity_in_hours = (config.get('WANING_IMMUNITY_IN_HOURS_SHAPE', 25.0), config.get('WANING_IMMUNITY_IN_HOURS_RATE', 0.01388))
         self.chance_per_contact_on_household = (config.get('CHANCE_PER_CONTACT_ON_HOUSEHOLD_MEAN', 0.20), config.get('CHANCE_PER_CONTACT_ON_HOUSEHOLD_STD', 0.0332))
         self.chance_per_contact_on_firm_work = (config.get('CHANCE_PER_CONTACT_ON_FIRM_WORK_MEAN', 0.01), config.get('CHANCE_PER_CONTACT_ON_FIRM_WORK_STD', 0.0051))
         self.chance_per_contact_on_firm_retail = (config.get('CHANCE_PER_CONTACT_ON_FIRM_RETAIL_MEAN', 0.06), config.get('CHANCE_PER_CONTACT_ON_FIRM_RETAIL_STD', 0.0179))
         self.chance_per_contact_on_transport = (config.get('CHANCE_PER_CONTACT_ON_TRANSPORT_MEAN', 0.01), config.get('CHANCE_PER_CONTACT_ON_TRANSPORT_STD', 0.0051))
+        self.waning_immunity_probability = config.get('WANING_IMMUNITY_PROBABILITY', 0.30)
     
     def sample_infection_household_CPC(self) -> float:
         result = np.random.normal(loc=self.chance_per_contact_on_household[0], scale=self.chance_per_contact_on_household[1])
@@ -77,9 +79,13 @@ class Disease:
 
     def sample_incubation_period(self) -> int:
         result = np.random.gamma(shape=self.incubation_period_in_hours[0], scale=1.0/self.incubation_period_in_hours[1]) * 60
-        return result
+        return int(result)
 
     def sample_infected_duration(self) -> int:
         result = np.random.gamma(shape=self.infected_duration_in_hours[0], scale=1.0/self.infected_duration_in_hours[1]) * 60
-        return result
+        return int(result)
+
+    def sample_waning_immunity_duration(self) -> int:
+        result = np.random.gamma(shape=self.waning_immunity_in_hours[0], scale=1.0/self.waning_immunity_in_hours[1]) * 60
+        return int(result)
 

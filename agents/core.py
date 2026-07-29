@@ -27,7 +27,8 @@ WEEKEND_FIRMS = {
 class Establishment:
     id:int = 0
     no_agents:int = 0
-    susceptible_agents:list
+    susceptible_agents:set
+    infected_agents:set
     no_infected_agents:float = 0
     max_contact_rate:float = 10.0
     max_capacity:int = 100
@@ -40,23 +41,50 @@ class Establishment:
         self.base_capacity = math.ceil(max_capacity * 0.4)
         self.max_contact_rate = max_contact_rate
         self.max_capacity = max_capacity
-        self.susceptible_agents = []
+        self.susceptible_agents = set()
+        self.infected_agents = set()
     
     def add_agent(self, agent):
         self.no_agents += 1
         if (agent.SEIR_compartment == 'I'):
             self.no_infected_agents += agent.infection_multiplier
-        elif (agent.SEIR_compartment == 'S' and agent not in self.susceptible_agents):
-            self.susceptible_agents.append(agent)
+            self.infected_agents.add(agent)
+        elif (agent.SEIR_compartment == 'S'):
+            self.susceptible_agents.add(agent)
+
+    def sync_agent_state(self, agent, old_compartment: str):
+        """Called by the agent whenever their SEIR state changes while inside this establishment."""
+        if (old_compartment == 'I'):
+            if (agent in self.infected_agents):
+                self.no_infected_agents -= agent.infection_multiplier
+                self.infected_agents.remove(agent)
+        elif (old_compartment == 'S'):
+            if (agent in self.susceptible_agents):
+                self.susceptible_agents.remove(agent)
+
+        if (agent.SEIR_compartment == 'I'):
+            self.no_infected_agents += agent.infection_multiplier
+            self.infected_agents.add(agent)
+        elif (agent.SEIR_compartment == 'S'):
+            self.susceptible_agents.add(agent)
+
+        if (self.no_infected_agents < 1e-9):
+            self.no_infected_agents = 0.0
     
     def remove_agent(self, agent):
         self.no_agents -= 1
-        if (agent.SEIR_compartment == 'I'):
+        if (agent in self.infected_agents):
             self.no_infected_agents -= agent.infection_multiplier
-        if (agent in self.susceptible_agents):
+            self.infected_agents.remove(agent)
+        elif (agent in self.susceptible_agents):
             self.susceptible_agents.remove(agent)
-        if (self.no_agents == 0):
+
+        if (self.no_agents <= 0):
+            self.infected_agents.clear()
             self.susceptible_agents.clear()
+            self.no_agents = 0
+            self.no_infected_agents = 0
+        elif (self.no_infected_agents < 1e-9):
             self.no_infected_agents = 0
     
     def contact_rate(self) -> float:
