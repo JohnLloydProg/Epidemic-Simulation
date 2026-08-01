@@ -326,7 +326,7 @@ class Simulation:
             self.peak_hour = (9 >= hour >= 6) or (20 >= hour >= 17)
             
             # --- HOURLY SNAPSHOT ---
-            if minute == 58 and last_sampled_hour != hour:
+            if minute == (60 - self.config.get('TIME_STEP', 2)) and last_sampled_hour != hour:
                 last_sampled_hour = hour
                 
                 # Vehicle Occupancy Tracker
@@ -348,7 +348,7 @@ class Simulation:
                 daily_hourly_travelling[f"{hour:02d}:00"] = current_states.get('travelling', 0)
             
             # --- FIRESTORE LOGGING ---
-            if hour == 23 and minute == 58 and last_logged_day != str(day):
+            if hour == 23 and minute == (60 - self.config.get('TIME_STEP', 2)) and last_logged_day != str(day):
                 last_logged_day = str(day)
                 actual_log_time = (day * 24 * 60) + (hour * 60) + minute 
                 current_status = generate_status(self.agents, actual_log_time, self.active_cases)
