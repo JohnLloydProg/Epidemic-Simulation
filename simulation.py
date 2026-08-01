@@ -277,7 +277,7 @@ class Simulation:
                         self.disease.sample_incubation_period(),
                         transportation.get_contact_rate(), 
                         transportation.get_infected_density(),
-                        4/10, time
+                        (2 * self.config.get('TIME_STEP', 2))/10, time
                         )
             self.step_counter = 0
 
