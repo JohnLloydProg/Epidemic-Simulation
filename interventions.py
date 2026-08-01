@@ -85,7 +85,7 @@ class RouteReduction(Policy):
 
         for route in self.removed_routes:
             simulation.routes.append(route)
-            manager.emit(self.end_time + 2, manager.Event(manager.TRANSPORTATION_SPAWN, route))
+            manager.emit(self.end_time + (3 * simulation.config.get('TIME_STEP', 2)), manager.Event(manager.TRANSPORTATION_SPAWN, route))
     
     def __str__(self):
         return f"RouteReduction(start_time={self.start_time}, end_time={self.end_time}, routes={[route.id for route in self.removed_routes]})"
