@@ -190,6 +190,9 @@ class Agent:
             self.arrived_at_destination(time, compliance_rate)
 
     def arrived_at_destination(self, time:int, compliance_rate:float):
+        if (self.SEIR_compartment == 'D'):
+            return
+
         self.arrival_time = time
         self.current_establishment = self.destination
         self.current_establishment.add_agent(self)
@@ -298,6 +301,8 @@ def handle_agent_events(event:manager.Event, time:int, simulation):
             # TO ADD: Recovery chance depending on age, health condition, etc.
             if (random.random() <= mortality_rate):
                 agent.SEIR_compartment = 'D'
+                if (agent.current_establishment):
+                    agent.current_establishment.remove_agent(agent)
             else:
                 agent.SEIR_compartment = 'R'
                 agent.isolate = False

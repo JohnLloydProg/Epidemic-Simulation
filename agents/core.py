@@ -45,6 +45,9 @@ class Establishment:
         self.infected_agents = set()
     
     def add_agent(self, agent):
+        if (agent.SEIR_compartment == 'D'):
+            return
+
         self.no_agents += 1
         if (agent.SEIR_compartment == 'I'):
             self.no_infected_agents += agent.infection_multiplier
