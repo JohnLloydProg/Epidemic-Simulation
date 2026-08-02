@@ -38,7 +38,7 @@ class Establishment:
         self.region = region
         self.id = Establishment.id
         Establishment.id += 1
-        self.base_capacity = math.ceil(max_capacity * 0.4)
+        self.base_capacity = math.ceil(max_capacity * 0.6)
         self.max_contact_rate = max_contact_rate
         self.max_capacity = max_capacity
         self.susceptible_agents = set()
