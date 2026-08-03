@@ -1,3 +1,4 @@
+import configuration as config
 from functools import lru_cache
 from graphing.core import Node, Edge
 from graphing.graph import Graph, RegionGraph
@@ -136,11 +137,9 @@ def shortest_path(start_node:Node, end_node:Node, routes:list[Route]) -> list[tu
     return []
 
 
-def load_graph(config:None|dict = None) -> tuple[RegionGraph, Graph, list[Route]]:
-    if (not config):
-        config_path = f'/firebase_cred/{os.environ['CONFIG_FILE_NAME']}' if (os.environ.get('CLOUD', 'False') == 'True') else os.environ['CONFIG_FILE_NAME']
-        with open(config_path) as f:
-            config = json.load(f)
+def load_graph() -> tuple[RegionGraph, Graph, list[Route]]:
+    if (not config.__config):
+        config.init()
 
     map_path = './map/'
     city_graph = RegionGraph('city')
@@ -179,7 +178,7 @@ def load_graph(config:None|dict = None) -> tuple[RegionGraph, Graph, list[Route]
         nodes = nodes.strip(",")
         node_ids = [(city_graph.layer, int(node_id)) for node_id in nodes.split(",")]
         try:
-            city_graph.add_region(node_ids, math.ceil(int(region_xl['Alloted Residential Units']) * 0.1), math.ceil(int(region_xl['Alloted Business Units']) * 0.1), config)
+            city_graph.add_region(node_ids, math.ceil(int(region_xl['Alloted Residential Units']) * 0.1), math.ceil(int(region_xl['Alloted Business Units']) * 0.1))
         except Exception as e:
             LOGGER.debug(f"Error adding region {i}: {e}")
             LOGGER.debug(f"Node IDs: {node_ids}")

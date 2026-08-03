@@ -1,5 +1,5 @@
+import configuration as config
 from objects import Disease, Status
-from const import ENHANCED_CQ, MODIFIED_ENHANCED_CQ, GENERAL_CQ, MODIFIED_GENERAL_CQ
 from multiprocessing import Process
 from graphing.mapping import load_graph
 from graphing.graph import RegionGraph
@@ -28,7 +28,7 @@ from firebase_admin import firestore
 
 LOGGER = logging.getLogger('Simulation')
 
-def daily_work(agents:list[WorkingAgent], quarantine:float,  curfew:dict, time:int, config:dict) -> set[int]:
+def daily_work(agents:list[WorkingAgent], quarantine:float,  curfew:dict, time:int) -> set[int]:
     will_work = set()
     for agent in agents:
         isolate = (agent.isolate and random.random() < quarantine)
@@ -102,28 +102,28 @@ class Simulation:
     curfew:dict[str, int] = {}
     step_counter = 0
 
-    def __init__(self, config:dict, headless=True):
+    def __init__(self, headless=True):
         logging.basicConfig(handlers=[logging.FileHandler("logfile.txt", 'w'), logging.StreamHandler(sys.stdout)], 
                             level=logging.DEBUG if os.environ.get('DEBUG', 'False') == 'True' else logging.INFO)
         LOGGER.info(f'Initializing simulation with headless = {headless}...')
-        manager.init(config)
+        config.init()
+        manager.init()
         
         """Initialize simulation parameters"""
-        self.disease = Disease(config)
-        self.time_step = config['TIME_STEP']
-        self.duration = config['DURATION']
+        self.disease = Disease()
+        self.time_step = config.get('TIME_STEP', 2)
+        self.duration = config.get('DURATION')
         self.no_per_compartment = config.get('SEIR_COUNT', {'I':4})
         self.agents = []
         self.working_agents = []
         self.transportations = []
         self.headless = headless
         self.active_cases = []
-        self.collection_id = config["COLLECTION_ID"]
+        self.collection_id = config.get("COLLECTION_ID")
         self.simulation_id = str(uuid.uuid4())
-        self.config = config
 
         """Load environment and initialize route spawning events"""
-        environment = load_graph(config)
+        environment = load_graph()
         self.graph = environment[0]
         self.railway_graph = environment[1]
         self.routes = environment[2]
@@ -216,7 +216,7 @@ class Simulation:
                 if (compartment == 'I'):
                     agent.symptomatic = random.random() < 0.6
                     max_infection_duration = math.ceil(self.disease.sample_infected_duration())
-                    duration = random.randrange(1, max_infection_duration, 30) if self.config['IS_EPOCH_RESTART'] else max_infection_duration
+                    duration = random.randrange(1, max_infection_duration, 30) if config.get('IS_EPOCH_RESTART', False) else max_infection_duration
                     if (agent.symptomatic):
                         if (duration//60 > 48):
                             manager.emit(random.randint(24, 48)*60, manager.Event(manager.AGENT_ISOLATE, agent))
@@ -226,12 +226,12 @@ class Simulation:
                     manager.emit(duration, remove_event)
                 elif (compartment == 'E'):
                     max_incubation_period = math.ceil(self.disease.sample_incubation_period())
-                    duration = random.randrange(1, max_incubation_period, 30) if self.config['IS_EPOCH_RESTART'] else max_incubation_period
+                    duration = random.randrange(1, max_incubation_period, 30) if config.get('IS_EPOCH_RESTART', False) else max_incubation_period
                     infection_event = manager.Event(manager.AGENT_INFECTED, agent)
                     manager.emit(duration, infection_event)
                 elif (compartment == "R" and random.random() < self.disease.waning_immunity_probability):
                     max_waning_period = math.ceil(self.disease.sample_waning_immunity_duration())
-                    duration = random.randrange(1, max_waning_period, 30) if self.config['IS_EPOCH_RESTART'] else max_waning_period
+                    duration = random.randrange(1, max_waning_period, 30) if config.get('IS_EPOCH_RESTART', False) else max_waning_period
                     immunity_loss_event = manager.Event(manager.AGENT_IMMUNITY_LOSS, agent)
                     manager.emit(duration, immunity_loss_event)
                 assigned.add(agent.id)
@@ -277,7 +277,7 @@ class Simulation:
                         self.disease.sample_incubation_period(),
                         transportation.get_contact_rate(), 
                         transportation.get_infected_density(),
-                        (2 * self.config.get('TIME_STEP', 2))/10, time
+                        (2 * self.time_step)/10, time
                         )
             self.step_counter = 0
 
@@ -326,7 +326,7 @@ class Simulation:
             self.peak_hour = (9 >= hour >= 6) or (20 >= hour >= 17)
             
             # --- HOURLY SNAPSHOT ---
-            if minute == (60 - self.config.get('TIME_STEP', 2)) and last_sampled_hour != hour:
+            if minute == (60 - self.time_step) and last_sampled_hour != hour:
                 last_sampled_hour = hour
                 
                 # Vehicle Occupancy Tracker
@@ -348,7 +348,7 @@ class Simulation:
                 daily_hourly_travelling[f"{hour:02d}:00"] = current_states.get('travelling', 0)
             
             # --- FIRESTORE LOGGING ---
-            if hour == 23 and minute == (60 - self.config.get('TIME_STEP', 2)) and last_logged_day != str(day):
+            if hour == 23 and minute == (60 - self.time_step) and last_logged_day != str(day):
                 last_logged_day = str(day)
                 actual_log_time = (day * 24 * 60) + (hour * 60) + minute 
                 current_status = generate_status(self.agents, actual_log_time, self.active_cases)
@@ -417,7 +417,7 @@ class Simulation:
                     
                     in_schedule = list(firm.day_workers[day % 7])
                     agents = random.sample(in_schedule, min(len(in_schedule), firm.max_workers))
-                    will_work.update(daily_work(agents, self.quarantine, self.curfew, time, self.config))
+                    will_work.update(daily_work(agents, self.quarantine, self.curfew, time))
                 
                 valid_start_hour = max(10, self.curfew.get('start_hour', 0) + 1)
                 valid_end_hour = min(15,  self.curfew.get('end_hour', 24) - 2)
@@ -538,13 +538,8 @@ if __name__ == '__main__':
     firebase_admin.initialize_app(cred)
     db = firestore.client()
     
-    config_path = f'/firebase_cred/{os.environ['CONFIG_FILE_NAME']}' if (os.environ.get('CLOUD', 'False') == 'True') else os.environ['CONFIG_FILE_NAME']
-    with open(config_path) as f:
-        config = json.load(f)
-    
-    if (not config):
-        print("Configuration file not found! Simulation won't start.")
-    else:
-        print(f"Simulation Start: {datetime.now().isoformat()}")
-        Simulation(config, os.environ.get('HEADLESS', 'True') == 'True')
-        print(f"Simulation End: {datetime.now().isoformat()}")
+    print(f"Simulation Start: {datetime.now().isoformat()}")
+    Simulation(os.environ.get('HEADLESS', 'True') == 'True')
+    print(f"Simulation End: {datetime.now().isoformat()}")
+
+        

@@ -1,3 +1,4 @@
+import configuration as config
 import os
 
 AGENT_GO_WORK = 0
@@ -44,7 +45,7 @@ class Event:
         return f"Event(type={self.type})"
 
 
-def init(config:dict):
+def init():
     global _time_step
     _time_step = config.get('TIME_STEP', 2)
 

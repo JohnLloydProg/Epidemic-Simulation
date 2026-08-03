@@ -1,3 +1,4 @@
+import configuration as config
 import matplotlib.pyplot as plt
 import numpy as np
 import os
@@ -51,7 +52,7 @@ class Status:
         plt.show()
 
 class Disease:
-    def __init__(self, config:dict):
+    def __init__(self):
         self.incubation_period_in_hours = (config.get('INCUBATION_PERIOD_IN_HOURS_SHAPE', 165.84), config.get('INCUBATION_PERIOD_IN_HOURS_RATE', 25.2))
         self.infected_duration_in_hours = (config.get('INFECTED_DURATION_IN_HOURS_SHAPE', 7.11), config.get('INFECTED_DURATION_IN_HOURS_RATE', 0.037))
         self.waning_immunity_in_hours = (config.get('WANING_IMMUNITY_IN_HOURS_SHAPE', 25.0), config.get('WANING_IMMUNITY_IN_HOURS_RATE', 0.01388))

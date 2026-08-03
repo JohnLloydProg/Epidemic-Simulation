@@ -1,3 +1,4 @@
+import configuration as config
 from graphing.core import Edge, Node
 from graphing.graph import Graph
 from objects import Disease
@@ -43,7 +44,7 @@ class Route:
     def __str__(self):
         return f"Route {self.id} from {self.spawn_node.id} to {self.path[-1].get_adjacent_node(self.path[-1].nodes[1]).id if self.path else self.spawn_node.id}"
     
-    def generate_transportation(self, current_time:int, is_peak_hours:bool, config:dict) -> list['RoutedTransportation']:
+    def generate_transportation(self, current_time:int) -> list['RoutedTransportation']:
         """"""
         pass
 
@@ -72,12 +73,12 @@ class JeepRoute(Route):
     def __init__(self, spawn_node:Node, path:list[Edge], graph:Graph, spawn_time:int, peak_spawn:int):
         super().__init__(spawn_node, path, graph, spawn_time, peak_spawn)
     
-    def generate_transportation(self, current_time, is_peak_hours, config) -> list['RoutedTransportation']:
+    def generate_transportation(self, current_time) -> list['RoutedTransportation']:
         _transportations = []
         for i in range(random.randint(1, 2)):
             passenger = random.choice([(10, 10), (12, 12), (15, 15), (15, 20) ])
             transportation = RoutedTransportation('jeep', self.expected_speed, passenger[1], self.capacity_ratio, passenger[0], 0, self.spawn_node, self)
-            transportation.expected_contact_rate = config['CONTACT_RATES'].get('JEEP', 3.5)
+            transportation.expected_contact_rate = config.get('CONTACT_RATES', {}).get('JEEP', 3.5)
             _transportations.append(transportation)
             self.transportations.append(transportation)
         return _transportations
@@ -87,9 +88,9 @@ class BusRoute(Route):
     def __init__(self, spawn_node:Node, path:list[Edge], graph:Graph, spawn_time:int, peak_spawn:int):
         super().__init__(spawn_node, path, graph, spawn_time, peak_spawn)
     
-    def generate_transportation(self, current_time, is_peak_hours, config) -> list['RoutedTransportation']:
+    def generate_transportation(self, current_time) -> list['RoutedTransportation']:
         transportation = RoutedTransportation('bus', self.expected_speed, 50, self.capacity_ratio, 40, 0, self.spawn_node, self)
-        transportation.expected_contact_rate = config['CONTACT_RATES'].get('BUS', 4.5)
+        transportation.expected_contact_rate = config.get('CONTACT_RATES', {}).get('BUS', 4.5)
         self.transportations.append(transportation)
         return [transportation]
 
@@ -100,7 +101,7 @@ class TrainRoute(Route):
     def __init__(self, spawn_node:Node, path:list[Edge], graph:Graph, spawn_time:int, peak_spawn:int):
         super().__init__(spawn_node, path, graph, spawn_time, peak_spawn)
 
-    def generate_transportation(self, current_time, is_peak_hours:bool, config:dict) -> list['RoutedTransportation']:
+    def generate_transportation(self, current_time) -> list['RoutedTransportation']:
         absolute_max = 1200
         hour_of_day = (current_time // 60) % 24
         if 7 <= hour_of_day <= 9 or 17 <= hour_of_day <= 19:
@@ -111,7 +112,7 @@ class TrainRoute(Route):
         seats_taken = int(absolute_max * external_load_percentage)
 
         transportation = RoutedTransportation('rail', self.expected_speed, absolute_max, self.capacity_ratio, 900, seats_taken, self.spawn_node, self)
-        transportation.expected_contact_rate = config['CONTACT_RATES'].get('TRAIN', 8.5)
+        transportation.expected_contact_rate = config.get('CONTACT_RATES', {}).get('TRAIN', 8.5)
         self.transportations.append(transportation)
         return [transportation]
 
@@ -179,7 +180,7 @@ def handle_route_events(event:manager.Event, time:int, simulation):
     if (event.type == manager.TRANSPORTATION_SPAWN):
         LOGGER.debug(f"Handling transportation spawn for {len(routes)} routes at time {time}.")
         for route in routes:
-            transports = route.generate_transportation(current_time=time, is_peak_hours=simulation.peak_hour, config=simulation.config)
+            transports = route.generate_transportation(current_time=time)
             for transport in transports:
                 for agent in list(transport.current_node.agents):
                     if (agent.state != 'waiting'):

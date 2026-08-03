@@ -1,3 +1,4 @@
+import configuration as config
 from graphing.core import Node, Edge, Region
 from agents.core import Firm, Household
 import pygame as pg
@@ -88,7 +89,7 @@ class RegionGraph(Graph):
         super().__init__(layer)
         self.regions = {}
     
-    def add_region(self, node_ids:list[int], no_households:int, no_firms:int, config:dict):
+    def add_region(self, node_ids:list[int], no_households:int, no_firms:int):
         region_nodes = []
 
         for id in node_ids:
@@ -96,10 +97,10 @@ class RegionGraph(Graph):
 
         region = Region(region_nodes)
         for _ in range(no_households):
-            region.add_household(config['CONTACT_RATES'].get('HOUSEHOLD', 4))
+            region.add_household(config.get('CONTACT_RATES', {}).get('HOUSEHOLD', 4))
         
         for _ in range(no_firms):
-            region.add_firm(config['CONTACT_RATES'].get('FIRM', 3))
+            region.add_firm(config.get('CONTACT_RATES', {}).get('FIRM', 3))
 
         self.regions[region.id] = region
     
