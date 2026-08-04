@@ -1,11 +1,10 @@
+import configuration as config
 from typing import Literal
 from functools import lru_cache
-from objects import Disease
 from transport.transportation import Transportation, Route, RoutedTransportation
 from transport.checkpoint import Checkpoint, generate_checkpoints
-from const import QUARANTINE_CR_PERCENTAGE
 from graphing.graph import Graph, RegionGraph
-from graphing.core import Node, Region, Edge
+from graphing.core import Node, Edge
 from graphing.mapping import shortest_edge_path
 from graphing.mapping import shortest_path
 from agents.core import Household, Firm
@@ -271,7 +270,7 @@ class Agent:
                 total_distance = sum(edge.distance for edge in shortest_edge_path(current_checkpoint.start_node.id, current_checkpoint.end_node.id, self.city, self.railway))
                 walking_time = math.ceil(total_distance / 75)  # Assuming walking speed is 1 unit per time
             self.set_state('travelling')
-            manager.emit(time + round(walking_time), manager.Event(manager.AGENT_ARRIVAL, self))
+            manager.emit(time + walking_time + config.get("TIME_STEP", 2), manager.Event(manager.AGENT_ARRIVAL, self))
         elif (current_checkpoint.mode == 'ride'):
             self.set_state('waiting')
 

@@ -1,3 +1,5 @@
+from dotenv import load_dotenv
+load_dotenv()
 import configuration as config
 from objects import Disease, Status
 from multiprocessing import Process
@@ -10,7 +12,6 @@ from interventions import handle_policy_events
 from routing_table import build_routing_cache
 from time import time_ns
 from datetime import datetime
-from dotenv import load_dotenv
 import interventions
 import manager
 import random
@@ -575,7 +576,6 @@ class Simulation:
     
 
 if __name__ == '__main__':
-    load_dotenv()
     cert_path = f'/firebase_cred/{os.environ['CERT_FILE_NAME']}' if (os.environ.get('CLOUD', 'False') == 'True') else os.environ['CERT_FILE_NAME']
     cred = credentials.Certificate(cert_path)
     firebase_admin.initialize_app(cred)
