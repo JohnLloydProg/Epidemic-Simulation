@@ -66,7 +66,9 @@ def get(time:int) -> list[Event]:
     return _events.pop(time, [])
 
 def emit(target_time:int, event:Event):
-    target_time += _time_step - (target_time % _time_step)
+    remainder = target_time % _time_step
+    if (remainder):
+        target_time += _time_step - remainder
     if (target_time in _events):
         events_in_time = _events.get(target_time)
         for target_event in events_in_time:

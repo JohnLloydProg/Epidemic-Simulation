@@ -33,7 +33,7 @@ def daily_work(agents:list[WorkingAgent], quarantine:float,  curfew:dict, time:i
     for agent in agents:
         isolate = (agent.isolate and random.random() < quarantine)
         dead = agent.SEIR_compartment == 'D'
-        out_curfew = agent.working_hours[0] < curfew.get('start_hour', -1) or agent.working_hours[1] > curfew.get('end_hour', 24) or agent.working_hours[0] > curfew.get('end_hour', 24) or agent.working_hours[1] < curfew.get('start_hour', -1)
+        out_curfew = shift_conflicts_with_curfew(agent.working_hours[0], agent.working_hours[1], curfew)
         if (dead or isolate or out_curfew):
             continue
         agent.clocked_in = False
@@ -73,6 +73,29 @@ def get_transport_count(transportations:list[RoutedTransportation]):
     for transport in transportations:
         transport_types[transport.method] = transport_types.get(transport.method, 0) + 1
     return transport_types
+
+def _split_wrapping_interval(start: float, end: float) -> list[tuple[float, float]]:
+    if start <= end:
+        return [(start, end)]
+    return [(start, 24), (0, end)]
+
+def shift_conflicts_with_curfew(work_start: float, work_end: float, curfew: dict) -> bool:
+    if not curfew:
+        return False
+
+    curfew_start = curfew.get('start_hour')
+    curfew_end = curfew.get('end_hour')
+    if curfew_start is None or curfew_end is None:
+        return False
+
+    work_segments = _split_wrapping_interval(work_start, work_end)
+    curfew_segments = _split_wrapping_interval(curfew_start, curfew_end)
+
+    for w_start, w_end in work_segments:
+        for c_start, c_end in curfew_segments:
+            if w_start < c_end and c_start < w_end:
+                return True
+    return False
 
 
 class Simulation:

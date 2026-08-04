@@ -99,6 +99,7 @@ class MandatoryMask(Policy):
 
     def implement(self, simulation):
         super().implement(simulation)
+        self.original_mask_compliance = simulation.mask_compliance
         simulation.mask_compliance = self.compliance
         agents:list[Agent] = simulation.agents
         for agent in agents:
@@ -106,7 +107,7 @@ class MandatoryMask(Policy):
     
     def revert(self, simulation):
         super().revert(simulation)
-        simulation.mask_compliance = 0.8
+        simulation.mask_compliance = self.original_mask_compliance
         agents:list[Agent] = simulation.agents
         for agent in agents:
             agent.masked = False
@@ -123,12 +124,13 @@ class TravelDistanceLimitation(Policy):
     
     def implement(self, simulation):
         super().implement(simulation)
+        self.original_distance_compliance = simulation.distance_compliance
         simulation.distance_compliance = self.compliance
         simulation.max_travel_distance = self.max_travel_distance
 
     def revert(self, simulation):
         super().revert(simulation)
-        simulation.distance_compliance = 0.7
+        simulation.distance_compliance = self.original_distance_compliance
         simulation.max_travel_distance = None
     
     def __str__(self):
@@ -165,6 +167,7 @@ class LimitCompanyCapacity(Policy):
     
     def implement(self, simulation):
         super().implement(simulation)
+        self.original_company_capacity_compliance = simulation.company_capacity_compliance
         simulation.company_capacity_compliance = self.compliance
         upper_bound = min(1, self.capacity_ratio + (1 - self.compliance))
         for firm in self.firms:
@@ -173,7 +176,7 @@ class LimitCompanyCapacity(Policy):
     
     def revert(self, simulation):
         super().revert(simulation)
-        simulation.company_capacity_compliance = 1
+        simulation.company_capacity_compliance = self.original_company_capacity_compliance
         for firm in self.firms:
             firm.max_capacity = self.original_capacity[firm.id]
             firm.max_workers = self.original_workers[firm.id]
@@ -244,11 +247,13 @@ class BikeTranspo(Policy):
         super().__init__(start_time, end_time)
         self.population_portion = population_portion
         self.changed_agents:list[Agent] = []
+        self.original_transpos = {}
     
     def implement(self, simulation):
         super().implement(simulation)
         candidates:list[Agent] = [agent for agent in simulation.agents if agent.commuting and agent.state == 'home']
         for agent in random.sample(candidates, int(self.population_portion * len(candidates))):
+            self.original_transpos[agent.id] = (agent.commuting, agent.private)
             agent.commuting = False
             agent.private = 'bike'
             self.changed_agents.append(agent)
@@ -256,7 +261,9 @@ class BikeTranspo(Policy):
     def revert(self, simulation):
         super().revert(simulation)
         for agent in self.changed_agents:
-            agent.commuting = True
+            original_commuting, original_private = self.original_transpos[agent.id]
+            agent.commuting = original_commuting
+            agent.private = original_private
     
     def __str__(self):
         return f"BikeTranspo(start_time={self.start_time}, end_time={self.end_time}, population_portion={self.population_portion})"
