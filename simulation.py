@@ -258,6 +258,27 @@ class Simulation:
                     immunity_loss_event = manager.Event(manager.AGENT_IMMUNITY_LOSS, agent)
                     manager.emit(duration, immunity_loss_event)
                 assigned.add(agent.id)
+
+    def get_valid_hours(self):
+        default_start, default_end = 10, 15
+        curfew_start = self.curfew.get('start_hour', 24)
+        curfew_end = self.curfew.get('end_hour', 0)
+
+        valid_start_hour = default_start
+        valid_end_hour = default_end
+
+        if curfew_start <= curfew_end:
+            valid_start_hour = max(valid_start_hour, curfew_end + 1)
+            valid_end_hour = min(valid_end_hour, curfew_start - 1)
+        else:
+            if curfew_end >= valid_start_hour:
+                valid_start_hour = curfew_end + 1
+            if curfew_start <= valid_end_hour:
+                valid_end_hour = curfew_start - 1
+
+        if valid_start_hour >= valid_end_hour:
+            valid_start_hour, valid_end_hour = default_start, default_start + 1
+        return (valid_start_hour, valid_end_hour)
     
     def load_policy(self, pickled_policy:dict) -> interventions.Policy:
         policy_type = pickled_policy['type']
@@ -442,8 +463,7 @@ class Simulation:
                     agents = random.sample(in_schedule, min(len(in_schedule), firm.max_workers))
                     will_work.update(daily_work(agents, self.quarantine, self.curfew, time))
                 
-                valid_start_hour = max(10, self.curfew.get('start_hour', 0) + 1)
-                valid_end_hour = min(15,  self.curfew.get('end_hour', 24) - 2)
+                valid_start_hour, valid_end_hour = self.get_valid_hours()
                 if (self.designated_persons):
                     for house in self.graph.get_households():
                         agents = [agent for agent in house.resident_agents if (not agent.isolate and 65 >= agent.age >= 4 and agent.SEIR_compartment != 'D')]
