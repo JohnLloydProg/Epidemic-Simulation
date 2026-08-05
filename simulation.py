@@ -346,6 +346,7 @@ class Simulation:
         last_logged_day = None 
 
         def log_data_to_firestore(day, seir_data, occupancies_data, travelling_data):
+            global running
             try:
                 doc_ref = db.collection(self.collection_id).document(self.simulation_id)
                 total_population = sum(seir_data.values())
@@ -356,7 +357,8 @@ class Simulation:
                     "Travelling_Agents": travelling_data
                 }}, merge=True)
             except Exception as e:
-                print(f"Firestore Sync Error: {e}")
+                LOGGER.error(f"Firestore Sync Error: {e}")
+                running = False
 
         daily_hourly_occupancies = {}
         daily_hourly_travelling = {}
@@ -399,7 +401,7 @@ class Simulation:
                 current_status = generate_status(self.agents, actual_log_time, self.active_cases)
                 
                 log_data_to_firestore(day, current_status.SEIR_compartments, daily_hourly_occupancies, daily_hourly_travelling)
-                print(f"\nLogged Day {day} to Firestore with Hourly Occupancies and Travel Data.")
+                LOGGER.debug(f"\nLogged Day {day} to Firestore with Hourly Occupancies and Travel Data.")
                 
                 # Reset for the next day
                 daily_hourly_occupancies = {}
@@ -581,8 +583,8 @@ if __name__ == '__main__':
     firebase_admin.initialize_app(cred)
     db = firestore.client()
     
-    print(f"Simulation Start: {datetime.now().isoformat()}")
+    LOGGER.info(f"Simulation Start: {datetime.now().isoformat()}")
     Simulation(os.environ.get('HEADLESS', 'True') == 'True')
-    print(f"Simulation End: {datetime.now().isoformat()}")
+    LOGGER.info(f"Simulation End: {datetime.now().isoformat()}")
 
         

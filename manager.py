@@ -50,18 +50,11 @@ def init():
     _time_step = config.get('TIME_STEP', 2)
 
 def get(time:int) -> list[Event]:
-    counter = []
     for target in _events.keys():
         if (target < time):
-            counter.append(target)
-
-    if (len(counter) > 0):
-        print('current time: ', time)
-    for target in counter:
-        print("Past events didn't called at target time:", target)
-        for event in _events.get(target):
-            print(str(event), end=' ')
-        print('')
+            raise RuntimeError("An event passed without being called.")
+        else:
+            break
 
     return _events.pop(time, [])
 
