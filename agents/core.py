@@ -104,7 +104,7 @@ class Establishment:
 
 class Household(Establishment):
     def __init__(self, node, region, max_contact_rate:float):
-        resident_count = random.choices([1, 2, 3, 4, 5], weights=[0.45, 0.35, 0.05, 0.05, 0.05])[0]
+        resident_count = random.choices([1, 2, 3, 4, 5, 6, 7, 8, 9, 10], weights=[0.085, 0.155, 0.185, 0.19, 0.15, 0.095, 0.06, 0.04, 0.025, 0.015])[0]
         super().__init__(node, region, resident_count, max_contact_rate)
         self.resident_count:int = resident_count
         self.resident_agents = []
