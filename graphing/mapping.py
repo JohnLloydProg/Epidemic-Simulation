@@ -178,7 +178,7 @@ def load_graph() -> tuple[RegionGraph, Graph, list[Route]]:
         nodes = nodes.strip(",")
         node_ids = [(city_graph.layer, int(node_id)) for node_id in nodes.split(",")]
         try:
-            city_graph.add_region(node_ids, math.ceil(int(region_xl['Alloted Residential Units']) * 0.1), math.ceil(int(region_xl['Alloted Business Units']) * 0.1))
+            city_graph.add_region(node_ids, math.ceil(int(region_xl['Alloted Residential Units']) * 0.0445), math.ceil(int(region_xl['Alloted Business Units']) * 0.05))
         except Exception as e:
             LOGGER.debug(f"Error adding region {i}: {e}")
             LOGGER.debug(f"Node IDs: {node_ids}")
