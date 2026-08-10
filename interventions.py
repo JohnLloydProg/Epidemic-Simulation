@@ -298,8 +298,9 @@ class Vaccination(Policy):
 
     def implement(self, simulation):
         super().implement(simulation)
-        agents:list[Agent] = random.sample(simulation.agents, self.number_to_vaccine)
-        for agent in agents:
+        agents:list[Agent] = simulation.agents
+        to_be_vaccinated:list[Agent] = random.sample(list(filter(lambda agent: agent.SEIR_compartment != "R", agents)), self.number_to_vaccine)
+        for agent in to_be_vaccinated:
             if (random.random() > 0.8204):
                 continue
 
