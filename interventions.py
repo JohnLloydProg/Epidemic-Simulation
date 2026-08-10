@@ -291,8 +291,8 @@ class TestingKit(Policy):
 
 
 class Vaccination(Policy):
-    def __init__(self, start_time:int, number:int, end_time:None|int = None):
-        super().__init__(start_time, end_time)
+    def __init__(self, start_time:int, number:int):
+        super().__init__(start_time, None)
         self.number_to_vaccine = number
         self.time = start_time
 
