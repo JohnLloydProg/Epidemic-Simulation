@@ -1,7 +1,8 @@
 from agents.core import Firm, Household
-from agents.agent import WorkingAgent, Agent
+from agents.agent import WorkingAgent, Agent, grant_immunity
 from transport.transportation import Route
 import configuration as config
+import numpy as np
 import manager
 import logging
 import random
@@ -289,12 +290,48 @@ class TestingKit(Policy):
             firm.testing_probability = 0
 
 
+class Vaccination(Policy):
+    def __init__(self, start_time:int, number:int, end_time:None|int = None):
+        super().__init__(start_time, end_time)
+        self.number_to_vaccine = number
+        self.time = start_time
+
+    def implement(self, simulation):
+        super().implement(simulation)
+        agents:list[Agent] = random.sample(simulation.agents, self.number_to_vaccine)
+        for agent in agents:
+            if (random.random() > 0.8204):
+                continue
+
+            previous_compartment = agent.SEIR_compartment
+            agent.SEIR_compartment = "R"
+            agent.isolate = False
+
+            if (previous_compartment == "I"):
+                manager.cancel(manager.AGENT_REMOVED, agent)
+                if (random.random() < simulation.disease.waning_immunity_probability):
+                    immunity_duration = simulation.disease.sample_waning_immunity_duration()
+                    grant_immunity(agent, self.time, immunity_duration)
+            else:
+                if (previous_compartment == "E"):
+                    manager.cancel(manager.AGENT_INFECTED, agent)
+            
+                if (random.random() < config.get("VACCINE_WANING_IMMUNITY_PROBABILITY", 1.0)):
+                    result = np.random.gamma(shape=config.get("VACCINE_WANING_IMMUNITY_IN_HOURS_SHAPE", 36.0), scale=1.0/config.get("VACCINE_WANING_IMMUNITY_IN_HOURS_RATE", 0.0139)) * 60
+                    immunity_duration = int(result)
+                    grant_immunity(agent, self.time, immunity_duration)
+
+            current_location = agent.current_establishment
+            if (current_location):
+                current_location.sync_agent_state(agent, previous_compartment)
+
+
 POLICY_CLASS_MAPPING = {
     'limit-transpo-capacity':LimitTranspoCapacity, 'route-reduction':RouteReduction, 'mandatory-mask':MandatoryMask,
     'travel-distance-limitation':TravelDistanceLimitation, 'essential-company-only':EssentialCompanyOnly,
     'limit-company-capacity':LimitCompanyCapacity, 'enforce-quarantine':EnforceQuaratine, 
     'designated-person':DesignatedPerson, 'curfew':Curfew, 'bike-transpo':BikeTranspo,
-    'enable-worker-testing':TestingKit
+    'enable-worker-testing':TestingKit, 'vaccination':Vaccination
 }
 
 

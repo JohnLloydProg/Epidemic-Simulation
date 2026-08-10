@@ -51,6 +51,19 @@ def next_occurrence_of_hour(current_time, target_hour):
         return (current_time - current_minute_within_day +
                 MIN_PER_DAY + target_minute_within_day)
 
+def grant_immunity(agent, time: int, duration: int):
+    """Grants or extends immunity, whichever source is more protective wins."""
+    proposed_expiry = time + duration
+
+    if agent.immunity_expiry_time is not None and agent.immunity_expiry_time > proposed_expiry:
+        return
+
+    if agent.immunity_expiry_time is not None:
+        manager.cancel(manager.AGENT_IMMUNITY_LOSS, agent)
+
+    agent.immunity_expiry_time = proposed_expiry
+    manager.emit(proposed_expiry, manager.Event(manager.AGENT_IMMUNITY_LOSS, agent))
+
 
 class Agent:
     id:int = 0
@@ -63,6 +76,7 @@ class Agent:
     checkpoints:list[Checkpoint]
     current_node:Node = None
     transportation:Transportation = None
+    immunity_expiry_time: int = None 
     consumed:bool = False
     symptomatic:bool = False
     masked:bool = False
@@ -308,7 +322,7 @@ def handle_agent_events(event:manager.Event, time:int, simulation):
 
                 if (random.random() < simulation.disease.waning_immunity_probability):
                     immunity_duration = simulation.disease.sample_waning_immunity_duration()
-                    manager.emit(time + immunity_duration, manager.Event(manager.AGENT_IMMUNITY_LOSS, agent))
+                    grant_immunity(agent, time, immunity_duration)
 
             current_location = agent.current_establishment
             if (current_location):
