@@ -411,3 +411,30 @@ def handle_agent_events(event:manager.Event, time:int, simulation):
         for agent in agents:
             if (agent.SEIR_compartment != 'I'):
                 agent.isolate = False
+    elif (event.type == manager.SEED_TO_E):
+        for agent in agents:
+            agent.SEIR_compartment = 'E'
+            if (agent.current_establishment):
+                agent.current_establishment.sync_agent_state(agent, "S")
+
+            max_incubation_period = math.ceil(simulation.disease.sample_incubation_period())
+            duration = random.randrange(1, max_incubation_period, 30) if config.get('IS_EPOCH_RESTART', False) else max_incubation_period
+            manager.emit(time + duration, manager.Event(manager.AGENT_INFECTED, agent))
+
+    elif (event.type == manager.SEED_TO_I):
+        for agent in agents:
+            agent.SEIR_compartment = 'I'
+            agent.symptomatic = random.random() < 0.6
+            if (agent.current_establishment):
+                agent.current_establishment.sync_agent_state(agent, "S")
+
+            max_infection_duration = math.ceil(simulation.disease.sample_infected_duration())
+            duration = random.randrange(1, max_infection_duration, 30) if config.get('IS_EPOCH_RESTART', False) else max_infection_duration
+
+            if (agent.symptomatic):
+                if (duration // 60 > 48):
+                    manager.emit(time + random.randint(24, 48) * 60, manager.Event(manager.AGENT_ISOLATE, agent))
+                else:
+                    agent.isolate = True
+
+            manager.emit(time + duration, manager.Event(manager.AGENT_REMOVED, agent))

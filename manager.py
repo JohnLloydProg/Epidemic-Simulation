@@ -20,6 +20,8 @@ IMPLEMENT_POLICY = 15
 REVERT_POLICY = 16
 ISOLATION_PERIOD_DONE = 17
 AGENT_IMMUNITY_LOSS = 18
+SEED_TO_E = 19
+SEED_TO_I = 20
 
 _events:dict[int, list['Event']] = {}
 _time_step = 0

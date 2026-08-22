@@ -236,23 +236,14 @@ class Simulation:
             agents = random.sample(un_assigned_agents, self.no_per_compartment.get(compartment, 0))
             for agent in agents:
                 agent.SEIR_compartment = compartment
-                
+                stagger_window = config.get('SEED_STAGGER_WINDOW_HOURS', 0) * 60  # minutes; defaults to 0 = old instant-seed behavior
+
                 if (compartment == 'I'):
-                    agent.symptomatic = random.random() < 0.6
-                    max_infection_duration = math.ceil(self.disease.sample_infected_duration())
-                    duration = random.randrange(1, max_infection_duration, 30) if config.get('IS_EPOCH_RESTART', False) else max_infection_duration
-                    if (agent.symptomatic):
-                        if (duration//60 > 48):
-                            manager.emit(random.randint(24, 48)*60, manager.Event(manager.AGENT_ISOLATE, agent))
-                        else:
-                            agent.isolate = True
-                    remove_event = manager.Event(manager.AGENT_REMOVED, agent)
-                    manager.emit(duration, remove_event)
+                    stagger_time = random.randint(0, stagger_window) if stagger_window > 0 else 0
+                    manager.emit(stagger_time, manager.Event(manager.SEED_TO_I, agent))
                 elif (compartment == 'E'):
-                    max_incubation_period = math.ceil(self.disease.sample_incubation_period())
-                    duration = random.randrange(1, max_incubation_period, 30) if config.get('IS_EPOCH_RESTART', False) else max_incubation_period
-                    infection_event = manager.Event(manager.AGENT_INFECTED, agent)
-                    manager.emit(duration, infection_event)
+                    stagger_time = random.randint(0, stagger_window) if stagger_window > 0 else 0
+                    manager.emit(stagger_time, manager.Event(manager.SEED_TO_E, agent))
                 elif (compartment == "R" and random.random() < self.disease.waning_immunity_probability):
                     max_waning_period = math.ceil(self.disease.sample_waning_immunity_duration())
                     duration = random.randrange(1, max_waning_period, 30) if config.get('IS_EPOCH_RESTART', False) else max_waning_period
@@ -506,7 +497,9 @@ class Simulation:
                             hour = random.randrange(valid_start_hour, valid_end_hour)
                             manager.emit(next_occurrence_of_hour(time, hour), manager.Event(manager.AGENT_GO_SHOPPING, agent))
             
-            if (status.SEIR_compartments['I'] == 0):
+            seed_stagger_minutes = config.get('SEED_STAGGER_WINDOW_HOURS', 0) * 60
+
+            if (time > seed_stagger_minutes and status.SEIR_compartments['I'] == 0 and status.SEIR_compartments['E'] == 0):
                 running = False
 
             if (not self.headless):
