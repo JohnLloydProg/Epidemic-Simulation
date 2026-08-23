@@ -413,6 +413,9 @@ def handle_agent_events(event:manager.Event, time:int, simulation):
                 agent.isolate = False
     elif (event.type == manager.SEED_TO_E):
         for agent in agents:
+            if (agent.SEIR_compartment != "S"):
+                continue
+
             agent.SEIR_compartment = 'E'
             if (agent.current_establishment):
                 agent.current_establishment.sync_agent_state(agent, "S")
@@ -423,6 +426,9 @@ def handle_agent_events(event:manager.Event, time:int, simulation):
 
     elif (event.type == manager.SEED_TO_I):
         for agent in agents:
+            if (agent.SEIR_compartment != "S"):
+                continue
+            
             agent.SEIR_compartment = 'I'
             agent.symptomatic = random.random() < 0.6
             if (agent.current_establishment):
