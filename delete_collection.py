@@ -19,6 +19,10 @@ if __name__ == "__main__":
         print(f'[{i}] {sim_group.id}')
         sim_groups_dict[i] = sim_group.id
     simulation_group = int(input("Enter the simulation group name: "))
+
+    choice = input(f"Are you sure you want to delete {sim_groups_dict[simulation_group]}? [y/n]")
+    if (choice == "n"):
+        exit()
     
     collection = db.collection(sim_groups_dict[simulation_group])
     docs = collection.list_documents()
@@ -27,3 +31,5 @@ if __name__ == "__main__":
         print(f"Simulation ID: {sim.id}")
         sim_ref = collection.document(sim.id)
         sim_ref.delete()
+
+    print(f"you finished deleting simulation {sim_groups_dict[simulation_group]}")
