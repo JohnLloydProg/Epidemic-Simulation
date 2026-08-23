@@ -291,6 +291,8 @@ class Simulation:
                 params['firms'] = self.graph.get_firms()
             elif (isinstance(param, int)):
                 params['firms'] = [firm for firm in self.graph.get_firms() if (firm.industry[1] == param)]
+            elif (isinstance(param, str)):
+                params['firms'] = [firm for firm in self.graph.get_firms() if (firm.industry[0] == param)]
             else:
                 raise ValueError('Passed parameter for firms in config is invalid!')
 

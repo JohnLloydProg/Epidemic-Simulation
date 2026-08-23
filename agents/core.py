@@ -6,7 +6,7 @@ import numpy as np
 
 
 FIRM_INDUSTRIES_CATOGIZATION = {
-    ("Agri, For &wdasdw Fish", 1) : 0.0113, ("Mining & Quarrying", 2): 0.0011, ("Manufacturing", 2): 0.0829,
+    ("Agri, For & Fish", 1) : 0.0113, ("Mining & Quarrying", 2): 0.0011, ("Manufacturing", 2): 0.0829,
     ("Elec, Gas, Steam & Air", 1): 0.0014, ("Water", 1): 0.0043, ("Construction", 2): 0.0079,
     ("Wholesale & Retail", 3): 0.4445, ("Transpo & Storage", 1): 0.0109, ("Accom & Food", 1): 0.1095,
     ("ICT", 1): 0.0080, ("Finance & Insurance", 3): 0.1522, ("Real Estate", 2): 0.0188,
