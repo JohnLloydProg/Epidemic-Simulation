@@ -235,7 +235,6 @@ class Simulation:
                 continue
             agents = random.sample(un_assigned_agents, self.no_per_compartment.get(compartment, 0))
             for agent in agents:
-                agent.SEIR_compartment = compartment
                 stagger_window = config.get('SEED_STAGGER_WINDOW_HOURS', 0) * 60  # minutes; defaults to 0 = old instant-seed behavior
 
                 if (compartment == 'I'):
@@ -245,10 +244,13 @@ class Simulation:
                     stagger_time = random.randint(0, stagger_window) if stagger_window > 0 else 0
                     manager.emit(stagger_time, manager.Event(manager.SEED_TO_E, agent))
                 elif (compartment == "R" and random.random() < self.disease.waning_immunity_probability):
+                    agent.SEIR_compartment = compartment
                     max_waning_period = math.ceil(self.disease.sample_waning_immunity_duration())
                     duration = random.randrange(1, max_waning_period, 30) if config.get('IS_EPOCH_RESTART', False) else max_waning_period
                     immunity_loss_event = manager.Event(manager.AGENT_IMMUNITY_LOSS, agent)
                     manager.emit(duration, immunity_loss_event)
+                else:
+                    agent.SEIR_compartment = compartment
                 assigned.add(agent.id)
 
     def get_valid_hours(self):

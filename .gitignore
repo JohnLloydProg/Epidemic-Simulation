@@ -9,3 +9,4 @@ pyvenv.cfg
 *.json
 .env
 
+manila_daily_confirmed.csv
