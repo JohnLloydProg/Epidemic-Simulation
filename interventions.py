@@ -388,8 +388,8 @@ def handle_policy_events(simulation, event:manager.Event, time:int):
 
         e_count = round(import_count * policy.e_fraction)
         for agent in imported[:e_count]:
-            manager.emit(time, manager.Event(manager.SEED_TO_E, agent))
+            manager.emit(time + (3 * config.get('TIME_STEP', 2)), manager.Event(manager.SEED_TO_E, agent))
         for agent in imported[e_count:]:
-            manager.emit(time, manager.Event(manager.SEED_TO_I, agent))
+            manager.emit(time + (3 * config.get('TIME_STEP', 2)), manager.Event(manager.SEED_TO_I, agent))
 
         policy._schedule_next(time)
