@@ -289,6 +289,9 @@ class TestingKit(Policy):
         for firm in firms:
             firm.testing_probability = 0
 
+    def __str__(self):
+        return f"TestingKit(start_time={str(self.start_time)}, testing_probability={str(self.testing_probability)}, compliance={str(self.compliance)}, end_time={str(self.end_time)})"
+
 
 class Vaccination(Policy):
     def __init__(self, start_time:int, number:int):
@@ -326,13 +329,41 @@ class Vaccination(Policy):
             if (current_location):
                 current_location.sync_agent_state(agent, previous_compartment)
 
+    def __str__(self):
+        return f"Vaccination(start_time={str(self.start_time)}, number={str(self.number_to_vaccine)})"
+
+
+class CaseImportation(Policy):
+    def __init__(self, start_time, end_time, interval_hours, number, e_fraction=0.6):
+        super().__init__(start_time, end_time)
+        self.interval_hours = interval_hours
+        self.number = number
+        self.e_fraction = e_fraction
+
+    def implement(self, simulation):
+        super().implement(simulation)
+        self._schedule_next(self.start_time)
+
+    def _schedule_next(self, time):
+        next_time = time + (self.interval_hours * 60)
+        if self.end_time and next_time > self.end_time:
+            return
+        manager.emit(next_time, manager.Event(manager.CASE_IMPORTATION_TICK, self))
+
+    def revert(self, simulation):
+        super().revert(simulation)
+        manager.cancel(manager.CASE_IMPORTATION_TICK, self)
+
+    def __str__(self):
+        return f"CaseImportation(start_time={str(self.start_time)}, end_time={str(self.end_time)}, interval_hours={str(self.interval_hours)}, number={str(self.number)}, e_fraction={str(self.e_fraction)})"
+
 
 POLICY_CLASS_MAPPING = {
     'limit-transpo-capacity':LimitTranspoCapacity, 'route-reduction':RouteReduction, 'mandatory-mask':MandatoryMask,
     'travel-distance-limitation':TravelDistanceLimitation, 'essential-company-only':EssentialCompanyOnly,
     'limit-company-capacity':LimitCompanyCapacity, 'enforce-quarantine':EnforceQuaratine, 
     'designated-person':DesignatedPerson, 'curfew':Curfew, 'bike-transpo':BikeTranspo,
-    'enable-worker-testing':TestingKit, 'vaccination':Vaccination
+    'enable-worker-testing':TestingKit, 'vaccination':Vaccination, "case-importation":CaseImportation,
 }
 
 
@@ -346,3 +377,19 @@ def handle_policy_events(simulation, event:manager.Event, time:int):
     elif (event.type == manager.REVERT_POLICY):
         for policy in policies:
             policy.revert(simulation)
+    elif (event.type == manager.CASE_IMPORTATION_TICK):
+        policy = event.get_objects()[0]
+
+        susceptible_pool = [agent for household in simulation.graph.get_households()
+                            for agent in household.susceptible_agents]
+
+        import_count = min(policy.number, len(susceptible_pool))
+        imported = random.sample(susceptible_pool, import_count)
+
+        e_count = round(import_count * policy.e_fraction)
+        for agent in imported[:e_count]:
+            manager.emit(time, manager.Event(manager.SEED_TO_E, agent))
+        for agent in imported[e_count:]:
+            manager.emit(time, manager.Event(manager.SEED_TO_I, agent))
+
+        policy._schedule_next(time)

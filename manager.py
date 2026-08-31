@@ -22,6 +22,7 @@ ISOLATION_PERIOD_DONE = 17
 AGENT_IMMUNITY_LOSS = 18
 SEED_TO_E = 19
 SEED_TO_I = 20
+CASE_IMPORTATION_TICK = 21
 
 _events:dict[int, list['Event']] = {}
 _time_step = 0
