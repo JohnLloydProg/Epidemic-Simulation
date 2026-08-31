@@ -349,8 +349,8 @@ class Simulation:
                     **seir_data,
                 }}, merge=True)
                 doc_ref.update({f"{str(day)}.Total":total_population})
-                doc_ref.update({f"{str(day)}.Vehicle_Occupancy": occupancies_data})
-                doc_ref.update({f"{str(day)}.Travelling_Agents": travelling_data})
+                doc_ref.update({f"{str(day)}.Vehicle_Occupancy": json.dumps(occupancies_data)})
+                doc_ref.update({f"{str(day)}.Travelling_Agents": json.dumps(travelling_data)})
             except Exception as e:
                 LOGGER.error(f"Firestore Sync Error: {e}")
                 running = False
