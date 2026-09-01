@@ -246,7 +246,15 @@ class Simulation:
                 elif (compartment == "R" and random.random() < self.disease.waning_immunity_probability):
                     agent.SEIR_compartment = compartment
                     max_waning_period = math.ceil(self.disease.sample_waning_immunity_duration())
-                    duration = random.randrange(1, max_waning_period, 30) if config.get('IS_EPOCH_RESTART', False) else max_waning_period
+                    if config.get('IS_EPOCH_RESTART', False):
+                        waning_elapsed_floor = config.get('WANING_IMMUNITY_ELAPSED_FLOOR_MINUTES', 1)
+                        range_start = max_waning_period - waning_elapsed_floor
+                        if range_start < 1:
+                            duration = 1
+                        else:
+                            duration = random.randrange(range_start, max_waning_period, 30) if max_waning_period > 1 else 1
+                    else:
+                        duration = max_waning_period
                     immunity_loss_event = manager.Event(manager.AGENT_IMMUNITY_LOSS, agent)
                     manager.emit(duration, immunity_loss_event)
                 else:
