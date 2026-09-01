@@ -25,6 +25,27 @@ WEEKEND_FIRMS = {
     ("Admin & Support", 2)
 }
 
+ESSENTIAL_FRACTION = {
+    "Agri, For & Fish": 1.0,
+    "Mining & Quarrying": 1.0,
+    "Manufacturing": 0.55,
+    "Elec, Gas, Steam & Air": 1.0,
+    "Water": 1.0,
+    "Construction": 0.15,
+    "Wholesale & Retail": 0.25,
+    "Transpo & Storage": 1.0,
+    "Accom & Food": 1.0,
+    "ICT": 1.0,
+    "Finance & Insurance": 0.35,
+    "Real Estate": 0.65,
+    "Prof, Science, & Technical": 0.0,
+    "Admin & Support": 0.41,
+    "Education": 0.0,
+    "Human Health": 1.0,
+    "Arts & Entertainment": 0.0,
+    "Other": 0.0,
+}
+
 def generate_resident_count(max_size=10):
     r, p = 15.490, 0.8479  # fitted to Manila City's exact 2020 AHS = 3.7792
     size = np.random.negative_binomial(r, p) + 1  # +1 shift: min possible output = 1
@@ -141,7 +162,7 @@ class Firm(Establishment):
         super().__init__(node, region, max_capacity, max_contact_rate)
         self.resident_agents = []
         self.industry = random.choices(list(FIRM_INDUSTRIES_CATOGIZATION.keys()), list(FIRM_INDUSTRIES_CATOGIZATION.values()), k=1)[0]
-        self.essential = self.industry[1] == 1
+        self.essential = random.random() < ESSENTIAL_FRACTION[self.industry[0]]
         self.working_agents = []
         self.day_workers = {num:[] for num in range(7)}
     
