@@ -208,7 +208,8 @@ def load_graph() -> tuple[RegionGraph, Graph, list[Route]]:
     LOGGER.info('Generating routes for city graph...')
     routes = []
 
-    route_data = pd.read_excel(f"{map_path}/{city_graph.layer}/routes.xlsx", index_col=None)
+    excel_path = f'/firebase_cred/{city_graph.layer}/routes.xlsx' if (os.environ.get('CLOUD', 'False') == 'True') else f"{map_path}/{city_graph.layer}/routes.xlsx"
+    route_data = pd.read_excel(excel_path, index_col=None)
     for i in range(len(route_data)):
         route_xl = route_data.iloc[i]
         node_id = (city_graph.layer, int(route_xl['Node 1']))
@@ -235,7 +236,8 @@ def load_graph() -> tuple[RegionGraph, Graph, list[Route]]:
         routes.append(bus_route)
         routes.append(bus_return_route)
 
-    route_data = pd.read_excel(f"{map_path}/{railway_graph.layer}/routes.xlsx", index_col=None)
+    excel_path = f'/firebase_cred/{railway_graph.layer}/routes.xlsx' if (os.environ.get('CLOUD', 'False') == 'True') else f"{map_path}/{railway_graph.layer}/routes.xlsx"
+    route_data = pd.read_excel(excel_path, index_col=None)
     for i in range(len(route_data)):
         route_xl = route_data.iloc[i]
         node_id = (railway_graph.layer, int(route_xl['Node 1']))

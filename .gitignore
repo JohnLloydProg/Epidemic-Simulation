@@ -8,5 +8,6 @@ logfile.txt
 pyvenv.cfg
 *.json
 .env
+*.xlsx
 
 manila_daily_confirmed.csv
