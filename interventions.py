@@ -155,11 +155,12 @@ class EssentialCompanyOnly(Policy):
 
 
 class LimitCompanyCapacity(Policy):
-    def __init__(self, start_time:int, firms:list[Firm], capacity_ratio:float, compliance:float, end_time:None|int = None):
+    def __init__(self, start_time:int, firms:list[Firm], capacity_ratio:float, compliance:float, exempt_essential:bool = True, end_time:None|int = None):
         super().__init__(start_time, end_time)
         self.capacity_ratio = capacity_ratio
         self.firms = firms
         self.compliance = compliance
+        self.exempt_essential = exempt_essential
         self.original_capacity = {}
         self.original_workers = {}
         for firm in firms:
@@ -172,6 +173,9 @@ class LimitCompanyCapacity(Policy):
         simulation.company_capacity_compliance = self.compliance
         upper_bound = min(1, self.capacity_ratio + (1 - self.compliance))
         for firm in self.firms:
+            if (self.exempt_essential and firm.essential):
+                continue
+
             firm.max_capacity = math.ceil(self.capacity_ratio * firm.max_capacity)
             firm.max_workers = math.ceil(random.uniform(self.capacity_ratio, upper_bound) * firm.max_workers)
     
