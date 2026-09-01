@@ -247,7 +247,7 @@ class Simulation:
                     agent.SEIR_compartment = compartment
                     max_waning_period = math.ceil(self.disease.sample_waning_immunity_duration())
                     if config.get('IS_EPOCH_RESTART', False):
-                        waning_elapsed_floor = config.get('WANING_IMMUNITY_ELAPSED_FLOOR_MINUTES', 1)
+                        waning_elapsed_floor = config.get('WANING_IMMUNITY_ELAPSED_FLOOR_MINUTES', max_waning_period + 1)
                         range_start = max_waning_period - waning_elapsed_floor
                         if range_start < 1:
                             duration = 1
