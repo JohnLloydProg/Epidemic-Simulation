@@ -120,7 +120,7 @@ class Simulation:
     transpo_capacity_compliance = 0.7
     mask_compliance = 0.8
     distance_compliance = 0.7
-    essential_only = False
+    essential_only_ratio = 0.0
     quarantine = 0
     peak_hour:bool = False
     curfew:dict[str, int] = {}
@@ -462,7 +462,7 @@ class Simulation:
                 
                 will_work:set[int] = set()
                 for firm in self.graph.get_firms():
-                    if (not firm.essential and self.essential_only):
+                    if (not firm.essential and random.random() < self.essential_only_ratio):
                         continue
                     
                     in_schedule = list(firm.day_workers[day % 7])

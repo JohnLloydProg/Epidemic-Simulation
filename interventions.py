@@ -137,18 +137,37 @@ class TravelDistanceLimitation(Policy):
     def __str__(self):
         return f"TravelDistanceLimitation(start_time={self.start_time}, end_time={self.end_time}, max_travel_distance={self.max_travel_distance})"
 
-
+ESSENTIAL_RAMP_STEP_MINUTES = 1440
 class EssentialCompanyOnly(Policy):
-    def __init__(self, start_time:int, end_time:None|int = None):
+    def __init__(self, start_time:int, end_time:None|int = None, ramp_days:int = 5):
         super().__init__(start_time, end_time)
+        self.ramp_days = ramp_days
+        self._ramp_duration = max(1, ramp_days) * ESSENTIAL_RAMP_STEP_MINUTES
+        self._ramp_start_time = 0
+        self._ramp_start_value = 0.0
+        self._ramp_target_value = 0.0
     
     def implement(self, simulation):
         super().implement(simulation)
-        simulation.essential_only = True
+        self._begin_ramp(simulation, self.start_time, 0.0, 1.0)
 
     def revert(self, simulation):
         super().revert(simulation)
-        simulation.essential_only = False
+        self._begin_ramp(simulation, self.end_time, 1.0, 0.0)
+
+    def _begin_ramp(self, simulation, time, start_value, target_value):
+        self._ramp_start_time = time
+        self._ramp_start_value = start_value
+        self._ramp_target_value = target_value
+        simulation.essential_only_ratio = start_value
+        manager.emit(time + ESSENTIAL_RAMP_STEP_MINUTES, manager.Event(manager.ESSENTIAL_RAMP_TICK, self))
+
+    def _advance_ramp(self, simulation, time):
+        elapsed = time - self._ramp_start_time
+        fraction = min(1.0, elapsed / self._ramp_duration) if self._ramp_duration else 1.0
+        simulation.essential_only_ratio = self._ramp_start_value + (self._ramp_target_value - self._ramp_start_value) * fraction
+        if fraction < 1.0:
+            manager.emit(time + ESSENTIAL_RAMP_STEP_MINUTES, manager.Event(manager.ESSENTIAL_RAMP_TICK, self))
     
     def __str__(self):
         return f"EssentialCompanyOnly(start_time={self.start_time}, end_time={self.end_time})"
@@ -397,3 +416,6 @@ def handle_policy_events(simulation, event:manager.Event, time:int):
             manager.emit(time + (3 * config.get('TIME_STEP', 2)), manager.Event(manager.SEED_TO_I, agent))
 
         policy._schedule_next(time)
+    elif (event.type == manager.ESSENTIAL_RAMP_TICK):
+        for policy in policies:
+            policy._advance_ramp(simulation, time)
