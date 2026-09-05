@@ -6,7 +6,7 @@ from multiprocessing import Process
 from graphing.mapping import load_graph
 from graphing.graph import RegionGraph
 from agents.agent import AGE_RANGE_DISTRIBUTION, Agent, WorkingAgent, next_occurrence_of_hour, handle_agent_events
-from agents.core import WEEKEND_FIRMS
+from agents.core import WEEKEND_FIRMS, RETAIL_TYPE_INDUSTRIES
 from transport.transportation import Transportation, RoutedTransportation, handle_route_events, handle_transportation_events, BusRoute, JeepRoute, TrainRoute
 from interventions import handle_policy_events
 from routing_table import build_routing_cache
@@ -433,7 +433,7 @@ class Simulation:
                     if (not firm.susceptible_agents or firm.no_infected_agents == 0):
                         continue
 
-                    if (firm.industry[1] >= 3):
+                    if (firm.industry[0] in RETAIL_TYPE_INDUSTRIES):
                         chance_per_contact = self.disease.sample_infection_firm_retail_CPC()
                     else:
                         chance_per_contact = self.disease.sample_infection_firm_work_CPC()

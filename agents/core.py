@@ -46,6 +46,15 @@ ESSENTIAL_FRACTION = {
     "Other": 0.0,
 }
 
+RETAIL_TYPE_INDUSTRIES = {
+    "Wholesale & Retail",
+    "Accom & Food",
+    "Finance & Insurance",
+    "Education",
+    "Arts & Entertainment",
+    "Other",
+}
+
 def generate_resident_count(max_size=10):
     r, p = 15.490, 0.8479  # fitted to Manila City's exact 2020 AHS = 3.7792
     size = np.random.negative_binomial(r, p) + 1  # +1 shift: min possible output = 1
