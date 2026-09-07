@@ -215,7 +215,7 @@ def handle_transportation_events(event:manager.Event, time:int, simulation):
 
                 if (transport.current_node.id == agent.checkpoints[0].end_node.id):
                     agent.alight_transportation()
-                    agent.arrival(time, simulation.company_capacity_compliance)
+                    agent.arrival(time, simulation.company_capacity_compliance, simulation.mask_compliance)
             
             getting_off_external = int(transport.external_passenger * random.uniform(0.2, 0.5))
             transport.external_passenger -= getting_off_external
@@ -245,13 +245,13 @@ def handle_transportation_events(event:manager.Event, time:int, simulation):
             agent = transport.agents[0]
             if (transport.current_node.id == agent.destination.node.id):
                 agent.alight_transportation()
-                agent.arrival(time, simulation.company_capacity_compliance, transport.current_node)
+                agent.arrival(time, simulation.company_capacity_compliance, simulation.mask_compliance, transport.current_node)
             else:
                 if (transport.path):
                     transport.transport(time)
                 else:
                     agent.alight_transportation()
-                    agent.arrival(time, simulation.company_capacity_compliance, agent.destination.node)
+                    agent.arrival(time, simulation.company_capacity_compliance, simulation.mask_compliance, agent.destination.node)
     elif (event.type == manager.TRANSPORTATION_DESPAWN):
         LOGGER.debug(f"Handling transportation despawn for {len(event.get_objects())} transportations at time {time}.")
         for transport in _transportations:

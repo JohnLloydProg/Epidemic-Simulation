@@ -146,7 +146,7 @@ class Agent:
         self.current_node = self.current_establishment.node
         self.current_node.agents.append(self)
         if (self.current_node.id == destination.node.id):
-            self.arrived_at_destination(time, company_compliance)
+            self.arrived_at_destination(time, company_compliance, mask_compliance)
         else:
             path:list[Edge] = shortest_edge_path(self.current_node.id, self.destination.node.id, self.city, self.railway)
             if (not path):
@@ -169,7 +169,7 @@ class Agent:
         self.current_node = self.current_establishment.node
         self.current_node.agents.append(self)
         if (self.current_node.id == destination.node.id):
-            self.arrived_at_destination(time, company_compliance)
+            self.arrived_at_destination(time, company_compliance, mask_compliance)
         else:
             key = (self.current_node.id, destination.node.id)
             cached_checkpoint = routing_cache.get(key, [])
@@ -188,7 +188,7 @@ class Agent:
 
             
 
-    def arrival(self, time:int, compliance_rate:float, current_node:Node=None):
+    def arrival(self, time:int, compliance_rate:float, mask_compliance:float, current_node:Node=None):
         if (self.commuting and self.state == 'travelling'):
             finished_checkpoint = self.checkpoints.pop(0)
             self.current_node = finished_checkpoint.end_node
@@ -200,18 +200,21 @@ class Agent:
             self.current_node.agents.append(self)
         
         if (self.current_node == self.destination.node):
-            self.arrived_at_destination(time, compliance_rate)
+            self.arrived_at_destination(time, compliance_rate, mask_compliance)
 
-    def arrived_at_destination(self, time:int, compliance_rate:float):
+    def arrived_at_destination(self, time:int, compliance_rate:float, mask_compliance:float=1):
         if (self.SEIR_compartment == 'D'):
             return
 
         self.arrival_time = time
         self.current_establishment = self.destination
-        self.current_establishment.add_agent(self)
         self.current_node.agents.remove(self)
         self.current_node = None
         if (isinstance(self.destination, Firm)):
+            masked_multiplier = random.uniform(0.5, 0.7) if (self.masked and random.random() < mask_compliance) else 1
+            asymptomatic_multiplier = 1 if self.symptomatic else random.uniform(0.4, 0.6)
+            self.infection_multiplier = masked_multiplier * asymptomatic_multiplier
+            self.current_establishment.add_agent(self)
             if (isinstance(self, WorkingAgent) and self.destination == self.firm):
                 if (random.random() < self.firm.testing_probability and self.SEIR_compartment == 'I'):
                     self.isolate = True
@@ -266,6 +269,14 @@ class Agent:
                 else:
                     manager.emit(time + random.randint(30, 120), manager.Event(manager.AGENT_GO_HOME, self))
         elif (isinstance(self.destination, Household)):
+            has_symptomatic = any([agent.symptomatic and agent.SEIR_compartment != "D"  for agent in self.household.resident_agents])
+            if (has_symptomatic):
+                masked_multiplier = random.uniform(0.5, 0.7) if (self.masked and random.random() < mask_compliance) else 1
+                asymptomatic_multiplier = 1 if self.symptomatic else random.uniform(0.4, 0.6)
+                self.infection_multiplier = masked_multiplier * asymptomatic_multiplier
+            else:
+                self.infection_multiplier = 1 if self.symptomatic else random.uniform(0.4, 0.6)
+            self.current_establishment.add_agent(self)
             self.set_state('home')
     
     def move(self, time:int):
@@ -307,11 +318,10 @@ def handle_agent_events(event:manager.Event, time:int, simulation):
     if (event.type == manager.AGENT_ARRIVAL):
         LOGGER.debug(f"Handling agent arrival for {len(agents)} agents at time {time}.")
         for agent in agents:
-            agent.arrival(time, simulation.company_capacity_compliance)
+            agent.arrival(time, simulation.company_capacity_compliance, simulation.mask_compliance)
     elif (event.type == manager.AGENT_REMOVED):
         for agent in agents:
             mortality_rate = compute_mortality_rate(agent.age)
-            # TO ADD: Recovery chance depending on age, health condition, etc.
             if (random.random() <= mortality_rate):
                 agent.SEIR_compartment = 'D'
                 if (agent.current_establishment):
@@ -319,6 +329,7 @@ def handle_agent_events(event:manager.Event, time:int, simulation):
             else:
                 agent.SEIR_compartment = 'R'
                 agent.isolate = False
+                agent.symptomatic = False
 
                 if (random.random() < simulation.disease.waning_immunity_probability):
                     immunity_duration = simulation.disease.sample_waning_immunity_duration()

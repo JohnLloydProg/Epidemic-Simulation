@@ -468,6 +468,18 @@ class Simulation:
                     in_schedule = list(firm.day_workers[day % 7])
                     agents = random.sample(in_schedule, min(len(in_schedule), firm.max_workers))
                     will_work.update(daily_work(agents, self.quarantine, self.curfew, time))
+
+                for household in self.graph.get_households():
+                    has_symptomatic = any([agent.symptomatic and agent.SEIR_compartment != "D"  for agent in household.resident_agents])
+                    for agent in household.resident_agents:
+                        if (has_symptomatic):
+                            masked_multiplier = random.uniform(0.5, 0.7) if (agent.masked and random.random() < self.mask_compliance) else 1
+                            asymptomatic_multiplier = 1 if agent.symptomatic else random.uniform(0.4, 0.6)
+                            agent.infection_multiplier = masked_multiplier * asymptomatic_multiplier
+                        else:
+                            agent.infection_multiplier = 1 if agent.symptomatic else random.uniform(0.4, 0.6)
+
+                        
                 
                 valid_start_hour, valid_end_hour = self.get_valid_hours()
                 if (self.designated_persons):
