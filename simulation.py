@@ -75,6 +75,28 @@ def get_transport_count(transportations:list[RoutedTransportation]):
         transport_types[transport.method] = transport_types.get(transport.method, 0) + 1
     return transport_types
 
+def get_daily_ridership(agents:list[Agent]) -> dict[str, int]:
+    """Aggregates cumulative daily trip counts per transportation type (e.g. 'jeep', 'bus', 'rail', 'private', 'walking')."""
+    totals = {}
+    for agent in agents:
+        for mode, count in getattr(agent, 'daily_rides', {}).items():
+            totals[mode] = totals.get(mode, 0) + count
+    return totals
+
+def get_average_trip_distance(agents:list[Agent]) -> float:
+    """Average per-agent trip distance traveled for the day."""
+    if (not agents):
+        return 0
+    total_distance = sum(getattr(agent, 'daily_distance', 0) for agent in agents)
+    return round(total_distance / len(agents), 2)
+
+def reset_daily_agent_metrics(agents:list[Agent]):
+    """Resets per-agent daily trip trackers for the next day."""
+    for agent in agents:
+        agent.daily_trips = 0
+        agent.daily_distance = 0
+        agent.daily_rides = {}
+
 def _split_wrapping_interval(start: float, end: float) -> list[tuple[float, float]]:
     if start <= end:
         return [(start, end)]
@@ -125,6 +147,7 @@ class Simulation:
     peak_hour:bool = False
     curfew:dict[str, int] = {}
     step_counter = 0
+    movement_policy_active_count = 0
 
     def __init__(self, headless=True):
         logging.basicConfig(handlers=[logging.FileHandler("logfile.txt", 'w'), logging.StreamHandler(sys.stdout)], 
@@ -145,6 +168,10 @@ class Simulation:
         self.active_cases = []
         self.collection_id = config.get("COLLECTION_ID")
         self.simulation_id = str(uuid.uuid4())
+
+        """Daily aggregate trackers (reset each logged day)"""
+        self.hourly_trip_counts = [0] * 24
+        self.node_arrivals = {}
 
         """Load environment and initialize route spawning events"""
         environment = load_graph()
@@ -348,7 +375,7 @@ class Simulation:
 
         last_logged_day = None 
 
-        def log_data_to_firestore(day, seir_data, occupancies_data, travelling_data):
+        def log_data_to_firestore(day, seir_data, trips_per_transpo, average_trip_distance, trips_per_hour, node_arrivals):
             global running
             try:
                 doc_ref = db.collection(self.collection_id).document(self.simulation_id)
@@ -357,16 +384,15 @@ class Simulation:
                     **seir_data,
                 }}, merge=True)
                 doc_ref.update({f"{str(day)}.Total":total_population})
-                doc_ref.update({f"{str(day)}.Vehicle_Occupancy": json.dumps(occupancies_data)})
-                doc_ref.update({f"{str(day)}.Travelling_Agents": json.dumps(travelling_data)})
+                doc_ref.update({f"{str(day)}.Total Trips per Transpo": trips_per_transpo})
+                doc_ref.update({f"{str(day)}.Average Trip Distance": average_trip_distance})
+                doc_ref.update({f"{str(day)}.Trips per hr": trips_per_hour})
+                if (node_arrivals):
+                    doc_ref.update({f"{str(day)}.Node_Arrivals": {str(node_id): count for node_id, count in node_arrivals.items()}})
             except Exception as e:
                 LOGGER.error(f"Firestore Sync Error: {e}")
                 running = False
 
-        daily_hourly_occupancies = {}
-        daily_hourly_travelling = {}
-        last_sampled_hour = None
-        
         LOGGER.info('Starting simulation...')
         while ((time // (60 * 24) < self.duration) and running):
             minute = time % 60
@@ -375,40 +401,24 @@ class Simulation:
             time_record = time_ns()
             self.peak_hour = (9 >= hour >= 6) or (20 >= hour >= 17)
             
-            # --- HOURLY SNAPSHOT ---
-            if minute == (60 - self.time_step) and last_sampled_hour != hour:
-                last_sampled_hour = hour
-                
-                # Vehicle Occupancy Tracker
-                occupancy_lists = {}
-                for transpo in self.transportations:
-                    v_type = transpo.method
-                    if v_type not in occupancy_lists:
-                        occupancy_lists[v_type] = []
-                    occupancy_lists[v_type].append(transpo.occupancy())
-                
-                hour_avg = {}
-                for v_type, occ_list in occupancy_lists.items():
-                    hour_avg[v_type] = round(sum(occ_list) / len(occ_list), 2) if len(occ_list) > 0 else 0
-                    
-                daily_hourly_occupancies[f"{hour:02d}:00"] = hour_avg
-                
-                # Travelling Agent Tracker
-                current_states = get_agent_states(self.agents)
-                daily_hourly_travelling[f"{hour:02d}:00"] = current_states.get('travelling', 0)
-            
             # --- FIRESTORE LOGGING ---
             if hour == 23 and minute == (60 - self.time_step) and last_logged_day != str(day):
                 last_logged_day = str(day)
                 actual_log_time = (day * 24 * 60) + (hour * 60) + minute 
                 current_status = generate_status(self.agents, actual_log_time, self.active_cases)
                 
-                log_data_to_firestore(day, current_status.SEIR_compartments, daily_hourly_occupancies, daily_hourly_travelling)
-                LOGGER.debug(f"\nLogged Day {day} to Firestore with Hourly Occupancies and Travel Data.")
+                trips_per_transpo = get_daily_ridership(self.agents)
+                average_trip_distance = get_average_trip_distance(self.agents)
+                trips_per_hour = list(self.hourly_trip_counts)
+
+                log_data_to_firestore(day, current_status.SEIR_compartments,
+                                       trips_per_transpo, average_trip_distance, trips_per_hour, self.node_arrivals)
+                LOGGER.debug(f"\nLogged Day {day} to Firestore.")
                 
                 # Reset for the next day
-                daily_hourly_occupancies = {}
-                daily_hourly_travelling = {}
+                reset_daily_agent_metrics(self.agents)
+                self.hourly_trip_counts = [0] * 24
+                self.node_arrivals = {}
 
             """Routine every 30 minutes"""
             if (minute == 0 or minute == 30):
@@ -603,5 +613,3 @@ if __name__ == '__main__':
     LOGGER.info(f"Simulation Start: {datetime.now().isoformat()}")
     Simulation(os.environ.get('HEADLESS', 'True') == 'True')
     LOGGER.info(f"Simulation End: {datetime.now().isoformat()}")
-
-        

@@ -99,11 +99,17 @@ class Agent:
         self.railway = railway
         self.id = Agent.id
         Agent.id += 1
+
+        """Daily tracking metrics (reset each simulation day)"""
+        self.daily_trips = 0
+        self.daily_distance = 0
+        self.daily_rides = {}
     
     def ride_transportation(self, transportation:Transportation, time:int, compliance_rate:float=1):
         if (isinstance(transportation, RoutedTransportation) and transportation.is_full() and random.random() < compliance_rate):
             return
-        
+
+        self.daily_rides[transportation.method] = self.daily_rides.get(transportation.method, 0) + 1
         self.transportation = transportation
         self.boarding_time = time
         transportation.agents.append(self)
@@ -137,7 +143,7 @@ class Agent:
             infection_event = manager.Event(manager.AGENT_INFECTED, self)
             manager.emit(time + incubation_period, infection_event)
     
-    def set_path(self, destination:Establishment, time:int, company_compliance:float, mask_compliance:float):
+    def set_path(self, destination:Establishment, time:int, company_compliance:float, mask_compliance:float, simulation=None):
         self.current_establishment.remove_agent(self)
         masked_multiplier = random.uniform(0.5, 0.7) if (self.masked and random.random() < mask_compliance) else 1
         asymptomatic_multiplier = 1 if self.symptomatic else random.uniform(0.4, 0.6)
@@ -146,11 +152,13 @@ class Agent:
         self.current_node = self.current_establishment.node
         self.current_node.agents.append(self)
         if (self.current_node.id == destination.node.id):
-            self.arrived_at_destination(time, company_compliance, mask_compliance)
+            self.arrived_at_destination(time, company_compliance, mask_compliance, simulation)
         else:
             path:list[Edge] = shortest_edge_path(self.current_node.id, self.destination.node.id, self.city, self.railway)
             if (not path):
                 raise ValueError(f"No path found from node {self.current_node.id} to node {self.destination.node.id}.")
+
+            self.daily_distance += sum(edge.distance for edge in path)
 
             if (self.current_node not in path[0].nodes or self.destination.node not in path[-1].nodes):
                 raise ValueError(f"Invalid path: {[(edge.nodes[0].id, edge.nodes[1].id) for edge in path]} for current node {self.current_node.id} and destination node {destination.node.id}.")
@@ -160,7 +168,7 @@ class Agent:
             self.set_state('travelling')
             transport.transport(time)
 
-    def set_checkpoints(self, destination:Establishment, routing_cache:dict, routes:list[Route], time:int, company_compliance:float, mask_compliance:float):
+    def set_checkpoints(self, destination:Establishment, routing_cache:dict, routes:list[Route], time:int, company_compliance:float, mask_compliance:float, simulation=None):
         self.current_establishment.remove_agent(self)
         masked_multiplier = random.uniform(0.5, 0.7) if (self.masked and random.random() < mask_compliance) else 1
         asymptomatic_multiplier = 1 if self.symptomatic else random.uniform(0.4, 0.6)
@@ -169,8 +177,15 @@ class Agent:
         self.current_node = self.current_establishment.node
         self.current_node.agents.append(self)
         if (self.current_node.id == destination.node.id):
-            self.arrived_at_destination(time, company_compliance, mask_compliance)
+            self.arrived_at_destination(time, company_compliance, mask_compliance, simulation)
         else:
+            try:
+                trip_path = shortest_edge_path(self.current_node.id, destination.node.id, self.city, self.railway)
+                if (trip_path):
+                    self.daily_distance += sum(edge.distance for edge in trip_path)
+            except ValueError:
+                pass  # Failsafe: approximate reporting distance only, never blocks routing
+
             key = (self.current_node.id, destination.node.id)
             cached_checkpoint = routing_cache.get(key, [])
             if (cached_checkpoint): 
@@ -188,7 +203,7 @@ class Agent:
 
             
 
-    def arrival(self, time:int, compliance_rate:float, mask_compliance:float, current_node:Node=None):
+    def arrival(self, time:int, compliance_rate:float, mask_compliance:float, current_node:Node=None, simulation=None):
         if (self.commuting and self.state == 'travelling'):
             finished_checkpoint = self.checkpoints.pop(0)
             self.current_node = finished_checkpoint.end_node
@@ -200,11 +215,19 @@ class Agent:
             self.current_node.agents.append(self)
         
         if (self.current_node == self.destination.node):
-            self.arrived_at_destination(time, compliance_rate, mask_compliance)
+            self.arrived_at_destination(time, compliance_rate, mask_compliance, simulation)
 
-    def arrived_at_destination(self, time:int, compliance_rate:float, mask_compliance:float=1):
+    def arrived_at_destination(self, time:int, compliance_rate:float, mask_compliance:float=1, simulation=None):
         if (self.SEIR_compartment == 'D'):
             return
+
+        self.daily_trips += 1
+        arrival_node_id = self.current_node.id if self.current_node else None
+        if (simulation is not None):
+            hour_bucket = (time // 60) % 24
+            simulation.hourly_trip_counts[hour_bucket] += 1
+            if (arrival_node_id is not None and getattr(simulation, 'movement_policy_active_count', 0) > 0):
+                simulation.node_arrivals[arrival_node_id] = simulation.node_arrivals.get(arrival_node_id, 0) + 1
 
         self.arrival_time = time
         self.current_establishment = self.destination
@@ -286,6 +309,8 @@ class Agent:
         current_checkpoint = self.checkpoints[0]
 
         if (current_checkpoint.mode == 'walk'):
+            self.daily_rides['walking'] = self.daily_rides.get('walking', 0) + 1
+
             self.current_node.agents.remove(self)
             self.current_node = None
             
@@ -318,7 +343,7 @@ def handle_agent_events(event:manager.Event, time:int, simulation):
     if (event.type == manager.AGENT_ARRIVAL):
         LOGGER.debug(f"Handling agent arrival for {len(agents)} agents at time {time}.")
         for agent in agents:
-            agent.arrival(time, simulation.company_capacity_compliance, simulation.mask_compliance)
+            agent.arrival(time, simulation.company_capacity_compliance, simulation.mask_compliance, simulation=simulation)
     elif (event.type == manager.AGENT_REMOVED):
         for agent in agents:
             mortality_rate = compute_mortality_rate(agent.age)
@@ -374,9 +399,9 @@ def handle_agent_events(event:manager.Event, time:int, simulation):
         LOGGER.debug(f"Handling agent go home for {len(agents)} agents at time {time}.")
         for agent in agents:
             if (agent.commuting):
-                agent.set_checkpoints(agent.household, simulation.routing_table, simulation.routes, time, simulation.company_capacity_compliance, simulation.mask_compliance)
+                agent.set_checkpoints(agent.household, simulation.routing_table, simulation.routes, time, simulation.company_capacity_compliance, simulation.mask_compliance, simulation)
             else:
-                agent.set_path(agent.household, time, simulation.company_capacity_compliance, simulation.mask_compliance)
+                agent.set_path(agent.household, time, simulation.company_capacity_compliance, simulation.mask_compliance, simulation)
     elif (event.type == manager.AGENT_GO_SHOPPING):
         LOGGER.debug(f"Handling agent go shopping for {len(agents)} agents at time {time}.")
         for agent in agents:
@@ -399,16 +424,16 @@ def handle_agent_events(event:manager.Event, time:int, simulation):
 
 
             if (agent.commuting):
-                agent.set_checkpoints(destination, simulation.routing_table, simulation.routes, time, simulation.company_capacity_compliance, simulation.mask_compliance)
+                agent.set_checkpoints(destination, simulation.routing_table, simulation.routes, time, simulation.company_capacity_compliance, simulation.mask_compliance, simulation)
             else:
-                agent.set_path(destination, time, simulation.company_capacity_compliance, simulation.mask_compliance)
+                agent.set_path(destination, time, simulation.company_capacity_compliance, simulation.mask_compliance, simulation)
     elif (event.type == manager.AGENT_GO_WORK):
         LOGGER.debug(f"Handling agent go work for {len(agents)} agents at time {time}.")
         for agent in agents:
             if (agent.commuting):
-                agent.set_checkpoints(agent.firm, simulation.routing_table, simulation.routes, time, simulation.company_capacity_compliance, simulation.mask_compliance)
+                agent.set_checkpoints(agent.firm, simulation.routing_table, simulation.routes, time, simulation.company_capacity_compliance, simulation.mask_compliance, simulation)
             else:
-                agent.set_path(agent.firm, time, simulation.company_capacity_compliance, simulation.mask_compliance)
+                agent.set_path(agent.firm, time, simulation.company_capacity_compliance, simulation.mask_compliance, simulation)
     elif (event.type == manager.AGENT_FINISHED_WORK):
         LOGGER.debug(f"Handling agent finished work for {len(agents)} agents at time {time}.")
         for agent in agents:

@@ -43,12 +43,14 @@ class LimitTranspoCapacity(Policy):
         simulation.transpo_capacity_compliance = self.compliance
         for route in self.routes:
             route.capacity_ratio = self.new_capacity_ratio
+        simulation.movement_policy_active_count += 1
 
     def revert(self, simulation):
         super().revert(simulation)
         simulation.transpo_capacity_compliance = 1
         for route in self.routes:
             route.capacity_ratio = 1
+        simulation.movement_policy_active_count = max(0, simulation.movement_policy_active_count - 1)
 
     def __str__(self):
         return f"LimitTranspoCapacity(start_time={self.start_time}, end_time={self.end_time}, routes={[route.id for route in self.routes]}, new_capacity_ratio={self.new_capacity_ratio})"
@@ -80,6 +82,8 @@ class RouteReduction(Policy):
 
         for route in self.removed_routes:
             manager.cancel(manager.TRANSPORTATION_SPAWN, route)
+
+        simulation.movement_policy_active_count += 1
             
     def revert(self, simulation):
         super().revert(simulation)
@@ -88,6 +92,8 @@ class RouteReduction(Policy):
         for route in self.removed_routes:
             simulation.routes.append(route)
             manager.emit(self.end_time + (3 * config.get('TIME_STEP', 2)), manager.Event(manager.TRANSPORTATION_SPAWN, route))
+
+        simulation.movement_policy_active_count = max(0, simulation.movement_policy_active_count - 1)
     
     def __str__(self):
         return f"RouteReduction(start_time={self.start_time}, end_time={self.end_time}, routes={[route.id for route in self.removed_routes]})"
@@ -128,11 +134,13 @@ class TravelDistanceLimitation(Policy):
         self.original_distance_compliance = simulation.distance_compliance
         simulation.distance_compliance = self.compliance
         simulation.max_travel_distance = self.max_travel_distance
+        simulation.movement_policy_active_count += 1
 
     def revert(self, simulation):
         super().revert(simulation)
         simulation.distance_compliance = self.original_distance_compliance
         simulation.max_travel_distance = None
+        simulation.movement_policy_active_count = max(0, simulation.movement_policy_active_count - 1)
     
     def __str__(self):
         return f"TravelDistanceLimitation(start_time={self.start_time}, end_time={self.end_time}, max_travel_distance={self.max_travel_distance})"
@@ -150,10 +158,12 @@ class EssentialCompanyOnly(Policy):
     def implement(self, simulation):
         super().implement(simulation)
         self._begin_ramp(simulation, self.start_time, 0.0, 1.0)
+        simulation.movement_policy_active_count += 1
 
     def revert(self, simulation):
         super().revert(simulation)
         self._begin_ramp(simulation, self.end_time, 1.0, 0.0)
+        simulation.movement_policy_active_count = max(0, simulation.movement_policy_active_count - 1)
 
     def _begin_ramp(self, simulation, time, start_value, target_value):
         self._ramp_start_time = time
@@ -234,11 +244,13 @@ class DesignatedPerson(Policy):
     def implement(self, simulation):
         super().implement(simulation)
         simulation.designated_persons = self.compliance
+        simulation.movement_policy_active_count += 1
         
     
     def revert(self, simulation):
         super().revert(simulation)
         simulation.designated_persons = 0
+        simulation.movement_policy_active_count = max(0, simulation.movement_policy_active_count - 1)
     
     def __str__(self):
         return f"DesignatedPerson(start_time={self.start_time}, end_time={self.end_time})"
@@ -256,11 +268,13 @@ class Curfew(Policy):
             "start_hour": self.curfew_start_hour,
             "end_hour": self.curfew_end_hour
         }
+        simulation.movement_policy_active_count += 1
 
     
     def revert(self, simulation):
         super().revert(simulation)
         simulation.curfew = {}
+        simulation.movement_policy_active_count = max(0, simulation.movement_policy_active_count - 1)
     
     def __str__(self):
         return f"Curfew(start_time={self.start_time}, end_time={self.end_time})"
@@ -281,6 +295,7 @@ class BikeTranspo(Policy):
             agent.commuting = False
             agent.private = 'bike'
             self.changed_agents.append(agent)
+        simulation.movement_policy_active_count += 1
     
     def revert(self, simulation):
         super().revert(simulation)
@@ -288,6 +303,7 @@ class BikeTranspo(Policy):
             original_commuting, original_private = self.original_transpos[agent.id]
             agent.commuting = original_commuting
             agent.private = original_private
+        simulation.movement_policy_active_count = max(0, simulation.movement_policy_active_count - 1)
     
     def __str__(self):
         return f"BikeTranspo(start_time={self.start_time}, end_time={self.end_time}, population_portion={self.population_portion})"
