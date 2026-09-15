@@ -412,6 +412,8 @@ def handle_agent_events(event:manager.Event, time:int, simulation):
             if (isinstance(agent, WorkingAgent) and agent.firm in choices):
                 choices.remove(agent.firm)
             if (not choices):
+                if (isinstance(agent.current_establishment, Firm)):
+                    manager.emit(time + config.get("TIME_STEP", 2), manager.Event(manager.AGENT_GO_HOME, agent))
                 continue
             destination = random.choice(choices)
             if (simulation.max_travel_distance):
@@ -424,6 +426,10 @@ def handle_agent_events(event:manager.Event, time:int, simulation):
                         choices:list[Firm] = [firm for firm in agent.city.get_firms() if firm.working_agents]
                     if (isinstance(agent, WorkingAgent) and agent.firm in choices):
                         choices.remove(agent.firm)
+                    if (not choices):
+                        tries = 3
+                        continue
+                    
                     destination = random.choice(choices)
                     distance = sum(edge.distance for edge in shortest_edge_path(agent.current_establishment.node.id, destination.node.id, agent.city, agent.railway))
                     tries += 1
