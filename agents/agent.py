@@ -390,13 +390,22 @@ def handle_agent_events(event:manager.Event, time:int, simulation):
                 continue
             destination = random.choice(choices)
             if (simulation.max_travel_distance):
+                tries = 0
                 distance = sum(edge.distance for edge in shortest_edge_path(agent.current_establishment.node.id, destination.node.id, agent.city, agent.railway))
-                if (distance > simulation.max_travel_distance and random.random() < simulation.distance_compliance):
-                    choices:list[Firm] = [firm for firm in agent.city.get_close_firms(agent.current_establishment.region) if firm.working_agents]
+                while (distance > simulation.max_travel_distance and random.random() < simulation.distance_compliance and tries < 3):
+                    if (random.random() < 0.8):
+                        choices:list[Firm] = [firm for firm in agent.city.get_close_firms(agent.current_establishment.region) if firm.working_agents]
+                    else:
+                        choices:list[Firm] = [firm for firm in agent.city.get_firms() if firm.working_agents]
                     if (isinstance(agent, WorkingAgent) and agent.firm in choices):
                         choices.remove(agent.firm)
                     destination = random.choice(choices)
+                    distance = sum(edge.distance for edge in shortest_edge_path(agent.current_establishment.node.id, destination.node.id, agent.city, agent.railway))
 
+                if (tries >= 3):
+                    if (isinstance(agent.current_establishment, Firm)):
+                        manager.emit(time + config.get("TIME_STEP", 2), manager.Event(manager.AGENT_GO_HOME, agent))
+                    continue
 
             if (agent.commuting):
                 agent.set_checkpoints(destination, simulation.routing_table, simulation.routes, time, simulation.company_capacity_compliance, simulation.mask_compliance)
