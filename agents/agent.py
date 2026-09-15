@@ -401,6 +401,7 @@ def handle_agent_events(event:manager.Event, time:int, simulation):
                         choices.remove(agent.firm)
                     destination = random.choice(choices)
                     distance = sum(edge.distance for edge in shortest_edge_path(agent.current_establishment.node.id, destination.node.id, agent.city, agent.railway))
+                    tries += 1
 
                 if (tries >= 3):
                     if (isinstance(agent.current_establishment, Firm)):
