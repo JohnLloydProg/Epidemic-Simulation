@@ -103,6 +103,18 @@ def reset_daily_agent_metrics(agents:list[Agent]):
         agent.daily_distance = 0
         agent.daily_rides = {}
 
+def segment_node_arrivals(node_arrivals:dict, chunk_size:int=200) -> dict[str, str]:
+    """Splits a Node_Arrivals dict into multiple smaller JSON-stringified fields
+    (Node_Arrivals_0, Node_Arrivals_1, ...) instead of one single large string,
+    so no individual field's payload grows unbounded with the number of distinct nodes tallied."""
+    items = list(node_arrivals.items())
+    segments = {}
+    for i in range(0, len(items), chunk_size):
+        chunk_items = items[i:i + chunk_size]
+        chunk_dict = {str(node_id): count for node_id, count in chunk_items}
+        segments[f"Node_Arrivals_{i // chunk_size}"] = json.dumps(chunk_dict)
+    return segments
+
 def _split_wrapping_interval(start: float, end: float) -> list[tuple[float, float]]:
     if start <= end:
         return [(start, end)]
@@ -179,6 +191,10 @@ class Simulation:
         self.hourly_trip_counts = [0] * 24
         self.node_arrivals = {}
         self.new_infections_today = 0
+
+        """Firestore document chunking (a single document is capped at 1 MiB)"""
+        self.firestore_chunk_index = 0
+        self.firestore_chunk_bytes = 0
 
         """Load environment and initialize route spawning events"""
         environment = load_graph()
@@ -361,8 +377,6 @@ class Simulation:
                         transportation.get_infected_density(),
                         (2 * self.time_step)/10, time
                         )
-                    if (agent.SEIR_compartment == 'E'):
-                        self.new_infections_today += 1
             self.step_counter = 0
 
         """Event based handling"""
@@ -384,22 +398,34 @@ class Simulation:
 
         last_logged_day = None 
 
+        FIRESTORE_CHUNK_SIZE_LIMIT = 900_000  # bytes; safety margin under Firestore's 1 MiB (1,048,576 byte) per-document cap
+
         def log_data_to_firestore(day, seir_data, trips_per_transpo, average_trip_distance, non_working_avg_distance, trips_per_hour, node_arrivals, new_infections):
             global running
             try:
-                doc_ref = db.collection(self.collection_id).document(self.simulation_id)
                 total_population = sum(seir_data.values())
-                doc_ref.set({str(day): {
+                day_payload = {
                     **seir_data,
-                }}, merge=True)
-                doc_ref.update({f"{str(day)}.Total":total_population})
-                doc_ref.update({f"{str(day)}.Total Trips per Transpo": json.dumps(trips_per_transpo)})
-                doc_ref.update({f"{str(day)}.Average Trip Distance": average_trip_distance})
-                doc_ref.update({f"{str(day)}.Non_Working_Average_Trip_Distance": non_working_avg_distance})
-                doc_ref.update({f"{str(day)}.Trips per hr": json.dumps(trips_per_hour)})
+                    "Total": total_population,
+                    "Total Trips per Transpo": json.dumps(trips_per_transpo),
+                    "Average Trip Distance": average_trip_distance,
+                    "Non_Working_Average_Trip_Distance": non_working_avg_distance,
+                    "Trips per hr": json.dumps(trips_per_hour),
+                    "New_Infections": new_infections,
+                }
                 if (node_arrivals):
-                    doc_ref.update({f"{str(day)}.Node_Arrivals": json.dumps({str(node_id): count for node_id, count in node_arrivals.items()})})
-                doc_ref.update({f"{str(day)}.New_Infections": new_infections})
+                    day_payload.update(segment_node_arrivals(node_arrivals))
+
+                payload_size = len(json.dumps(day_payload, default=str).encode('utf-8'))
+                if (self.firestore_chunk_bytes + payload_size > FIRESTORE_CHUNK_SIZE_LIMIT):
+                    self.firestore_chunk_index += 1
+                    self.firestore_chunk_bytes = 0
+                    LOGGER.info(f"Firestore document nearing size cap, starting chunk {self.firestore_chunk_index}.")
+
+                chunk_doc_id = self.simulation_id if self.firestore_chunk_index == 0 else f"{self.simulation_id}_{self.firestore_chunk_index}"
+                doc_ref = db.collection(self.collection_id).document(chunk_doc_id)
+                doc_ref.set({str(day): day_payload}, merge=True)
+                self.firestore_chunk_bytes += payload_size
             except Exception as e:
                 LOGGER.error(f"Firestore Sync Error: {e}")
                 running = False
@@ -452,8 +478,6 @@ class Simulation:
                             household.infected_density(),
                             0.5, time
                             )
-                        if (agent.SEIR_compartment == 'E'):
-                            self.new_infections_today += 1
 
                 for firm in self.graph.get_firms():
                     if (not firm.susceptible_agents or firm.no_infected_agents == 0):
@@ -476,8 +500,6 @@ class Simulation:
                             firm.infected_density(),
                             0.5, time
                             )
-                        if (agent.SEIR_compartment == 'E'):
-                            self.new_infections_today += 1
 
             # --- DAILY ROUTINE ---
             if (hour == 0 and minute == 0):
