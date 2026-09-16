@@ -51,17 +51,6 @@ def generate_status(agents:list[Agent], time:int, active_cases:list[tuple[int, i
     status = Status(time, seir, active_cases)
     return status
 
-def generate_seir_by_work_status(agents:list[Agent]) -> tuple[dict[str, int], dict[str, int]]:
-    """Splits SEIR compartment counts into working (WorkingAgent) vs non-working agents."""
-    working_seir = {compartment:0 for compartment in Simulation.compartments}
-    non_working_seir = {compartment:0 for compartment in Simulation.compartments}
-    for agent in agents:
-        target = working_seir if isinstance(agent, WorkingAgent) else non_working_seir
-        target[agent.SEIR_compartment] += 1
-    working_seir['Total'] = sum(working_seir.values())
-    non_working_seir['Total'] = sum(non_working_seir.values())
-    return working_seir, non_working_seir
-
 def get_agent_states(agents:list[Agent]) -> dict[str, int]:
     states = {}
     for agent in agents:
@@ -189,6 +178,7 @@ class Simulation:
         """Daily aggregate trackers (reset each logged day)"""
         self.hourly_trip_counts = [0] * 24
         self.node_arrivals = {}
+        self.new_infections_today = 0
 
         """Load environment and initialize route spawning events"""
         environment = load_graph()
@@ -371,6 +361,8 @@ class Simulation:
                         transportation.get_infected_density(),
                         (2 * self.time_step)/10, time
                         )
+                    if (agent.SEIR_compartment == 'E'):
+                        self.new_infections_today += 1
             self.step_counter = 0
 
         """Event based handling"""
@@ -392,7 +384,7 @@ class Simulation:
 
         last_logged_day = None 
 
-        def log_data_to_firestore(day, seir_data, working_seir_data, non_working_seir_data, trips_per_transpo, average_trip_distance, working_avg_distance, non_working_avg_distance, trips_per_hour, node_arrivals):
+        def log_data_to_firestore(day, seir_data, trips_per_transpo, average_trip_distance, non_working_avg_distance, trips_per_hour, node_arrivals, new_infections):
             global running
             try:
                 doc_ref = db.collection(self.collection_id).document(self.simulation_id)
@@ -401,15 +393,13 @@ class Simulation:
                     **seir_data,
                 }}, merge=True)
                 doc_ref.update({f"{str(day)}.Total":total_population})
-                doc_ref.update({f"{str(day)}.Working_SEIR": working_seir_data})
-                doc_ref.update({f"{str(day)}.Non_Working_SEIR": non_working_seir_data})
-                doc_ref.update({f"{str(day)}.Total Trips per Transpo": trips_per_transpo})
+                doc_ref.update({f"{str(day)}.Total Trips per Transpo": json.dumps(trips_per_transpo)})
                 doc_ref.update({f"{str(day)}.Average Trip Distance": average_trip_distance})
-                doc_ref.update({f"{str(day)}.Working_Average_Trip_Distance": working_avg_distance})
                 doc_ref.update({f"{str(day)}.Non_Working_Average_Trip_Distance": non_working_avg_distance})
-                doc_ref.update({f"{str(day)}.Trips per hr": trips_per_hour})
+                doc_ref.update({f"{str(day)}.Trips per hr": json.dumps(trips_per_hour)})
                 if (node_arrivals):
-                    doc_ref.update({f"{str(day)}.Node_Arrivals": {str(node_id): count for node_id, count in node_arrivals.items()}})
+                    doc_ref.update({f"{str(day)}.Node_Arrivals": json.dumps({str(node_id): count for node_id, count in node_arrivals.items()})})
+                doc_ref.update({f"{str(day)}.New_Infections": new_infections})
             except Exception as e:
                 LOGGER.error(f"Firestore Sync Error: {e}")
                 running = False
@@ -430,19 +420,19 @@ class Simulation:
                 
                 trips_per_transpo = get_daily_ridership(self.agents)
                 average_trip_distance = get_average_trip_distance(self.agents)
-                working_avg_distance, non_working_avg_distance = get_average_trip_distance_by_work_status(self.agents)
+                _, non_working_avg_distance = get_average_trip_distance_by_work_status(self.agents)
                 trips_per_hour = list(self.hourly_trip_counts)
-                working_seir, non_working_seir = generate_seir_by_work_status(self.agents)
 
-                log_data_to_firestore(day, current_status.SEIR_compartments, working_seir, non_working_seir,
-                                       trips_per_transpo, average_trip_distance, working_avg_distance, non_working_avg_distance,
-                                       trips_per_hour, self.node_arrivals)
+                log_data_to_firestore(day, current_status.SEIR_compartments,
+                                       trips_per_transpo, average_trip_distance, non_working_avg_distance,
+                                       trips_per_hour, self.node_arrivals, self.new_infections_today)
                 LOGGER.debug(f"\nLogged Day {day} to Firestore.")
                 
                 # Reset for the next day
                 reset_daily_agent_metrics(self.agents)
                 self.hourly_trip_counts = [0] * 24
                 self.node_arrivals = {}
+                self.new_infections_today = 0
 
             """Routine every 30 minutes"""
             if (minute == 0 or minute == 30):
@@ -462,6 +452,8 @@ class Simulation:
                             household.infected_density(),
                             0.5, time
                             )
+                        if (agent.SEIR_compartment == 'E'):
+                            self.new_infections_today += 1
 
                 for firm in self.graph.get_firms():
                     if (not firm.susceptible_agents or firm.no_infected_agents == 0):
@@ -484,6 +476,8 @@ class Simulation:
                             firm.infected_density(),
                             0.5, time
                             )
+                        if (agent.SEIR_compartment == 'E'):
+                            self.new_infections_today += 1
 
             # --- DAILY ROUTINE ---
             if (hour == 0 and minute == 0):

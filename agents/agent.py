@@ -30,6 +30,32 @@ def compute_for_chance_of_infection(chance_per_contact:float, contact_rate:float
     chance_of_not_infected = math.exp(-force_of_infection)
     return 1 - chance_of_not_infected
 
+def compute_checkpoint_distance(checkpoint:'Checkpoint', city:'RegionGraph', railway:'Graph') -> float:
+    """Computes the real distance traveled for a single checkpoint leg, using the same
+    edges the agent actually moves along (never a separate/approximate estimate)."""
+    if (checkpoint.start_node == checkpoint.end_node):
+        return 0
+
+    if (checkpoint.mode == 'walk'):
+        try:
+            path = shortest_edge_path(checkpoint.start_node.id, checkpoint.end_node.id, city, railway)
+            return sum(edge.distance for edge in path)
+        except ValueError:
+            LOGGER.warning(f"Could not resolve walk distance from {checkpoint.start_node.id} to {checkpoint.end_node.id}.")
+            return 0
+    else:  # 'ride'
+        route = checkpoint.route
+        if (not route):
+            return 0
+        try:
+            start_index = route.ordered_nodes.index(checkpoint.start_node)
+            end_index = route.ordered_nodes.index(checkpoint.end_node)
+        except ValueError:
+            LOGGER.warning(f"Could not locate ride leg {checkpoint.start_node.id} -> {checkpoint.end_node.id} on route {route.id}.")
+            return 0
+        low, high = min(start_index, end_index), max(start_index, end_index)
+        return sum(edge.distance for edge in route.path[low:high])
+
 @lru_cache(maxsize=128, typed=False)
 def compute_mortality_rate(age:int) -> float:
     exponent = (-10.2 + (0.106 * age))
@@ -179,27 +205,20 @@ class Agent:
         if (self.current_node.id == destination.node.id):
             self.arrived_at_destination(time, company_compliance, mask_compliance, simulation)
         else:
-            try:
-                trip_path = shortest_edge_path(self.current_node.id, destination.node.id, self.city, self.railway)
-                if (trip_path):
-                    self.daily_distance += sum(edge.distance for edge in trip_path)
-            except ValueError:
-                pass  # Failsafe: approximate reporting distance only, never blocks routing
-
             key = (self.current_node.id, destination.node.id)
             cached_checkpoint = routing_cache.get(key, [])
-            if (cached_checkpoint): 
+            if (cached_checkpoint):
                 self.checkpoints = list(cached_checkpoint)
-                self.set_state('travelling')
-                self.move(time)
             else:
                 raw_path = shortest_path(self.current_node, destination.node, routes)
                 if (not raw_path):
                     raise ValueError(f"Can't find path between {self.current_node.id} and {destination.node.id}")
                 routing_cache[key] = generate_checkpoints(raw_path)
                 self.checkpoints = list(routing_cache[key])
-                self.set_state('travelling')
-                self.move(time)
+
+            self.daily_distance += sum(compute_checkpoint_distance(checkpoint, self.city, self.railway) for checkpoint in self.checkpoints)
+            self.set_state('travelling')
+            self.move(time)
 
             
 
