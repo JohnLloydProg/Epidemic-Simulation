@@ -245,7 +245,7 @@ class Agent:
         if (simulation is not None):
             hour_bucket = (time // 60) % 24
             simulation.hourly_trip_counts[hour_bucket] += 1
-            if (arrival_node_id is not None and getattr(simulation, 'movement_policy_active_count', 0) > 0):
+            if (arrival_node_id is not None):
                 simulation.node_arrivals[arrival_node_id] = simulation.node_arrivals.get(arrival_node_id, 0) + 1
 
         self.arrival_time = time
