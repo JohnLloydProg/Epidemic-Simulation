@@ -58,7 +58,7 @@ def compute_checkpoint_distance(checkpoint:'Checkpoint', city:'RegionGraph', rai
 
 @lru_cache(maxsize=128, typed=False)
 def compute_mortality_rate(age:int) -> float:
-    exponent = (−6.895 + (0.0588 * age))
+    exponent = (-6.895 + (0.0588 * age))
     try:
         p_mortality = 1 / (1 + math.exp(-exponent))
     except OverflowError:
