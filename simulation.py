@@ -81,7 +81,7 @@ class Simulation:
 
         """Build routing cache for agents"""
         # With sim_data/, only zone anchors and gateways are trip ends, so only those pairs are cached
-        nodes = getattr(self.graph, 'anchor_nodes', None) or list(self.graph.nodes.values())
+        nodes = list(self.graph.nodes.values())
         self.routing_table = build_routing_cache(nodes, self.graph, self.railway_graph, self.routes)
 
         LOGGER.info(f'Simulation initialized with {len(self.agents)} agents.')
