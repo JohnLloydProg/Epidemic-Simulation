@@ -4,7 +4,8 @@ from graphing.core import Node
 from graphing.graph import Graph, RegionGraph
 from transport.transportation import Route
 from transport.checkpoint import generate_checkpoints, Checkpoint
-from graphing.mapping import shortest_path, load_graph
+from graphing.data_loader import load_graph_from_data
+from graphing.mapping import shortest_path
 import configuration as config
 import logging
 import pickle
@@ -55,7 +56,7 @@ def rehydrate_cache(dehydrated_cache:dict, city:RegionGraph, railway:Graph, rout
 def init_worker():
     global worker_city, worker_routes
     
-    city_data, _, routes_data = load_graph()
+    city_data, _, routes_data = load_graph_from_data()
     worker_city = city_data
     worker_routes = routes_data
 

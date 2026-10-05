@@ -87,6 +87,9 @@ def _edge_key(value, default_layer='city') -> tuple[str, int]:
 
 # --------------------------------------------------------------------------- loader
 def load_graph_from_data() -> tuple[RegionGraph, Graph, list]:
+    if (not config.__config):
+        config.init()
+
     base = data_dir() / 'base'
     case = load_case()
     LOGGER.info(f"Loading '{base}' with case '{case['case_id']}'...")

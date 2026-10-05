@@ -1,16 +1,18 @@
 from dotenv import load_dotenv
+import pygame as pg
 load_dotenv()
+pg.init()
 import configuration as config
 from graphing.graph import RegionGraph
 from agents.agent import Agent, handle_agent_events
 from transport.transportation import Transportation, RoutedTransportation, handle_route_events, handle_transportation_events, BusRoute, JeepRoute, TrainRoute
+from ui.button import ButtonBehavior, TextButton
 from graphing.data_loader import load_graph_from_data
 from routing_table import build_routing_cache
 from time import time_ns
 from datetime import datetime
 import manager
 import random
-import pygame as pg
 import logging
 import os
 import sys
@@ -54,6 +56,7 @@ class Simulation:
     routing_table:dict[tuple, list]
     simulation_multiplier = 5
     simulation_ns_per_time_unit = (10**9)//simulation_multiplier
+    buttons:dict[str, ButtonBehavior] = {}
     step_counter = 0
 
     def __init__(self):
@@ -69,7 +72,7 @@ class Simulation:
         self.active_cases = []
 
         """Load environment and initialize route spawning events"""
-        environment = load_graph_from_data()()
+        environment = load_graph_from_data()
         self.graph = environment[0]
         self.railway_graph = environment[1]
         self.routes = environment[2]
@@ -84,15 +87,20 @@ class Simulation:
         LOGGER.info(f'Simulation initialized with {len(self.agents)} agents.')
         
         """Mainly for visualization purposes"""
-        pg.init()
+        self.play = False
         self.clock = pg.time.Clock()
         self.window = pg.display.set_mode((1080, 720))
         self.font = pg.font.Font(None, 15)
         self.railway_graph.camera = self.graph.camera   # one shared view for both layers
         all_nodes = list(self.graph.nodes.values()) + list(self.railway_graph.nodes.values())
         self.graph.camera.fit([node.pos for node in all_nodes], self.window.get_size())
+        self.create_ui_elements()
         
         self.run()
+
+    def create_ui_elements(self):
+        """Create UI elements such as buttons"""
+        self.buttons['play'] = TextButton(20, 20, 100, 30, lambda: setattr(self, 'play', not self.play), (255, 0, 0), "Play")
 
     def handle_events(self, time:int):
         """Event based handling"""
@@ -106,10 +114,9 @@ class Simulation:
         delta = 0
         draw_time = 0
         simultation_time = 0
-        status = None
-        simulation_day_time = time_ns()
         running = True
         states = get_agent_states(self.agents)
+        travel_modes = {}
 
         LOGGER.info('Starting simulation...')
         while (running):
@@ -121,6 +128,7 @@ class Simulation:
             self.peak_hour = (9 >= hour >= 6) or (20 >= hour >= 17)
 
             for event in pg.event.get():
+                consumed = []
                 if (event.type == pg.QUIT):
                     running = False
                     return
@@ -140,10 +148,13 @@ class Simulation:
                         agent.set_path(time, self)
                     print("Generating an agent")
 
+                for button in self.buttons.values():
+                    button.clicked(event, consumed)
+
                 self.graph.camera.handle_event(event)
 
             """Handle events and update agent states"""
-            if (time_ns() - simultation_time >= self.simulation_ns_per_time_unit):
+            if (time_ns() - simultation_time >= self.simulation_ns_per_time_unit and self.play):
                 self.handle_events(time)
                 states = get_agent_states(self.agents)
 
@@ -172,12 +183,15 @@ class Simulation:
                 travel_text = self.font.render(f"Travel modes: {travel_modes}", False, (0, 0, 0))
                 occupancies:dict[str, list] = {}
                 for transpo in self.transportations:
-                    if (transpo.method in occupancies):
-                        occupancies[transpo.method].append(transpo.occupancy())
-                    else:
-                        occupancies[transpo.method] = [transpo.occupancy()]
                     if (isinstance(transpo, RoutedTransportation)):
-                        transpo.draw(self.window, self.graph.camera, time)
+                        if (transpo.method in occupancies):
+                            occupancies[transpo.method].append(transpo.occupancy())
+                        else:
+                            occupancies[transpo.method] = [transpo.occupancy()]
+                    transpo.draw(self.window, self.graph.camera, time)
+
+                for agent in self.agents:
+                    agent.draw(self.window, self.graph.camera, time)
                 metric_text = self.font.render(f"Transportation Used: {len(self.transportations)}, avg. occupancy: {[(method, round(max(occupancy), 2))for method, occupancy in occupancies.items()]}", False, (0, 0, 0))
                 available_transports = self.font.render(f"Live Transportation: {get_transport_count(self.transportations)}", False, (0, 0, 0))
                 
@@ -187,6 +201,9 @@ class Simulation:
                 pg.draw.circle(self.window, (0, 255, 0), pg.mouse.get_pos(), 5)
                 self.window.blit(metric_text, metric_text.get_rect(topleft=(20, 20)))
                 self.window.blit(text, text.get_rect(topright=(1060, 20)))
+
+                for button in self.buttons.values():
+                    button.draw(self.window)
 
                 pg.display.update()
     

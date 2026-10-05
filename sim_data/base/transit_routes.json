@@ -4,7 +4,7 @@
   "interval": "s",
   "speed": "m/s"
  },
- "notes": "Jeepney/bus from Sakay.ph GTFS (DOTC, 2015) snapped to OSM roads; train from the same feed. bidirectional=true means the simulation also runs the reversed path.",
+ "notes": "Jeepney/bus from Sakay.ph GTFS (DOTC, 2015) snapped to OSM roads; train from the same feed. bidirectional=true means the simulation also runs the reversed path. Intervals updated: jeepney default 5 min peak / 10 min off-peak, bus 10 / 15 min, LRT-1 3.5 / 5.5 min; routes on heavily shared roads get longer intervals so their combined flow stays within about one lane (1,800 pcu/h per direction; jeepney 1.5 pcu, bus 1.87 pcu). These are estimates for calibration, not observed per-route schedules.",
  "routes": [
   {
    "route_id": "LTFRB_PUB1153",
@@ -62,12 +62,14 @@
     618
    ],
    "length_in_area_m": 4567.2,
-   "interval_s": 60,
-   "peak_interval_s": 60,
+   "interval_s": 900,
+   "peak_interval_s": 600,
    "bidirectional": true,
    "speed_mps": null,
    "source": "sakay_gtfs_2015",
-   "aliases": []
+   "aliases": [],
+   "max_shared_routes": 149,
+   "interval_basis": "default"
   },
   {
    "route_id": "LTFRB_PUJ1937",
@@ -116,15 +118,17 @@
     1001
    ],
    "length_in_area_m": 3699.4,
-   "interval_s": 60,
-   "peak_interval_s": 60,
+   "interval_s": 600,
+   "peak_interval_s": 300,
    "bidirectional": true,
    "speed_mps": null,
    "source": "sakay_gtfs_2015",
    "aliases": [
     "LTFRB_PUJ1685",
     "LTFRB_PUJ1979"
-   ]
+   ],
+   "max_shared_routes": 61,
+   "interval_basis": "default"
   },
   {
    "route_id": "LTFRB_PUJ1680",
@@ -159,8 +163,8 @@
     371
    ],
    "length_in_area_m": 2449.1,
-   "interval_s": 60,
-   "peak_interval_s": 60,
+   "interval_s": 900,
+   "peak_interval_s": 450,
    "bidirectional": true,
    "speed_mps": null,
    "source": "sakay_gtfs_2015",
@@ -169,7 +173,9 @@
     "LTFRB_PUJ1675",
     "LTFRB_PUJ1684",
     "LTFRB_PUJ1978"
-   ]
+   ],
+   "max_shared_routes": 149,
+   "interval_basis": "corridor_limited (shares a road with 149 routes)"
   },
   {
    "route_id": "LTFRB_PUJ1944",
@@ -192,14 +198,16 @@
     371
    ],
    "length_in_area_m": 1446.7,
-   "interval_s": 60,
-   "peak_interval_s": 60,
+   "interval_s": 900,
+   "peak_interval_s": 450,
    "bidirectional": true,
    "speed_mps": null,
    "source": "sakay_gtfs_2015",
    "aliases": [
     "LTFRB_PUJ1056"
-   ]
+   ],
+   "max_shared_routes": 149,
+   "interval_basis": "corridor_limited (shares a road with 149 routes)"
   },
   {
    "route_id": "LTFRB_PUB1154",
@@ -238,12 +246,14 @@
     162
    ],
    "length_in_area_m": 2650.5,
-   "interval_s": 60,
-   "peak_interval_s": 60,
+   "interval_s": 900,
+   "peak_interval_s": 600,
    "bidirectional": true,
    "speed_mps": null,
    "source": "sakay_gtfs_2015",
-   "aliases": []
+   "aliases": [],
+   "max_shared_routes": 148,
+   "interval_basis": "default"
   },
   {
    "route_id": "LTFRB_PUJ1428",
@@ -303,12 +313,14 @@
     809
    ],
    "length_in_area_m": 5466.5,
-   "interval_s": 60,
-   "peak_interval_s": 60,
+   "interval_s": 900,
+   "peak_interval_s": 450,
    "bidirectional": true,
    "speed_mps": null,
    "source": "sakay_gtfs_2015",
-   "aliases": []
+   "aliases": [],
+   "max_shared_routes": 149,
+   "interval_basis": "corridor_limited (shares a road with 149 routes)"
   },
   {
    "route_id": "LTFRB_PUJ1429",
@@ -343,12 +355,14 @@
     1010
    ],
    "length_in_area_m": 2769.0,
-   "interval_s": 60,
-   "peak_interval_s": 60,
+   "interval_s": 600,
+   "peak_interval_s": 300,
    "bidirectional": true,
    "speed_mps": null,
    "source": "sakay_gtfs_2015",
-   "aliases": []
+   "aliases": [],
+   "max_shared_routes": 61,
+   "interval_basis": "default"
   },
   {
    "route_id": "LTFRB_PUJ1672",
@@ -397,14 +411,16 @@
     1001
    ],
    "length_in_area_m": 4094.4,
-   "interval_s": 60,
-   "peak_interval_s": 60,
+   "interval_s": 600,
+   "peak_interval_s": 300,
    "bidirectional": true,
    "speed_mps": null,
    "source": "sakay_gtfs_2015",
    "aliases": [
     "LTFRB_PUJ1715"
-   ]
+   ],
+   "max_shared_routes": 61,
+   "interval_basis": "default"
   },
   {
    "route_id": "LTFRB_PUB1197",
@@ -436,14 +452,16 @@
     992
    ],
    "length_in_area_m": 1911.2,
-   "interval_s": 60,
-   "peak_interval_s": 60,
+   "interval_s": 900,
+   "peak_interval_s": 600,
    "bidirectional": true,
    "speed_mps": null,
    "source": "sakay_gtfs_2015",
    "aliases": [
     "LTFRB_PUB1141"
-   ]
+   ],
+   "max_shared_routes": 149,
+   "interval_basis": "default"
   },
   {
    "route_id": "LTFRB_PUJ1544",
@@ -492,12 +510,14 @@
     371
    ],
    "length_in_area_m": 3825.9,
-   "interval_s": 60,
-   "peak_interval_s": 60,
+   "interval_s": 900,
+   "peak_interval_s": 450,
    "bidirectional": true,
    "speed_mps": null,
    "source": "sakay_gtfs_2015",
-   "aliases": []
+   "aliases": [],
+   "max_shared_routes": 149,
+   "interval_basis": "corridor_limited (shares a road with 149 routes)"
   },
   {
    "route_id": "LTFRB_PUB1007",
@@ -545,12 +565,14 @@
     805
    ],
    "length_in_area_m": 2972.5,
-   "interval_s": 60,
-   "peak_interval_s": 60,
+   "interval_s": 900,
+   "peak_interval_s": 600,
    "bidirectional": true,
    "speed_mps": null,
    "source": "sakay_gtfs_2015",
-   "aliases": []
+   "aliases": [],
+   "max_shared_routes": 149,
+   "interval_basis": "default"
   },
   {
    "route_id": "LTFRB_PUB1198",
@@ -573,12 +595,14 @@
     992
    ],
    "length_in_area_m": 1259.4,
-   "interval_s": 60,
-   "peak_interval_s": 60,
+   "interval_s": 900,
+   "peak_interval_s": 600,
    "bidirectional": true,
    "speed_mps": null,
    "source": "sakay_gtfs_2015",
-   "aliases": []
+   "aliases": [],
+   "max_shared_routes": 149,
+   "interval_basis": "default"
   },
   {
    "route_id": "LTFRB_PUJ1609",
@@ -638,15 +662,17 @@
     1038
    ],
    "length_in_area_m": 4541.9,
-   "interval_s": 60,
-   "peak_interval_s": 60,
+   "interval_s": 900,
+   "peak_interval_s": 450,
    "bidirectional": true,
    "speed_mps": null,
    "source": "sakay_gtfs_2015",
    "aliases": [
     "LTFRB_PUJ1247",
     "LTFRB_PUJ2048"
-   ]
+   ],
+   "max_shared_routes": 149,
+   "interval_basis": "corridor_limited (shares a road with 149 routes)"
   },
   {
    "route_id": "LTFRB_PUJ1671",
@@ -694,12 +720,14 @@
     809
    ],
    "length_in_area_m": 4167.7,
-   "interval_s": 60,
-   "peak_interval_s": 60,
+   "interval_s": 900,
+   "peak_interval_s": 450,
    "bidirectional": true,
    "speed_mps": null,
    "source": "sakay_gtfs_2015",
-   "aliases": []
+   "aliases": [],
+   "max_shared_routes": 149,
+   "interval_basis": "corridor_limited (shares a road with 149 routes)"
   },
   {
    "route_id": "LTFRB_PUB1136",
@@ -737,12 +765,14 @@
     702
    ],
    "length_in_area_m": 2395.8,
-   "interval_s": 60,
-   "peak_interval_s": 60,
+   "interval_s": 900,
+   "peak_interval_s": 600,
    "bidirectional": true,
    "speed_mps": null,
    "source": "sakay_gtfs_2015",
-   "aliases": []
+   "aliases": [],
+   "max_shared_routes": 149,
+   "interval_basis": "default"
   },
   {
    "route_id": "LTFRB_PUJ2323",
@@ -765,14 +795,16 @@
     992
    ],
    "length_in_area_m": 1387.2,
-   "interval_s": 60,
-   "peak_interval_s": 60,
+   "interval_s": 900,
+   "peak_interval_s": 450,
    "bidirectional": true,
    "speed_mps": null,
    "source": "sakay_gtfs_2015",
    "aliases": [
     "LTFRB_PUJ2255"
-   ]
+   ],
+   "max_shared_routes": 149,
+   "interval_basis": "corridor_limited (shares a road with 149 routes)"
   },
   {
    "route_id": "LTFRB_PUJ1608",
@@ -825,15 +857,17 @@
     371
    ],
    "length_in_area_m": 3636.3,
-   "interval_s": 60,
-   "peak_interval_s": 60,
+   "interval_s": 900,
+   "peak_interval_s": 450,
    "bidirectional": true,
    "speed_mps": null,
    "source": "sakay_gtfs_2015",
    "aliases": [
     "LTFRB_PUJ1175",
     "LTFRB_PUJ1086"
-   ]
+   ],
+   "max_shared_routes": 149,
+   "interval_basis": "corridor_limited (shares a road with 149 routes)"
   },
   {
    "route_id": "LTFRB_PUJ1545",
@@ -868,12 +902,14 @@
     1010
    ],
    "length_in_area_m": 2374.0,
-   "interval_s": 60,
-   "peak_interval_s": 60,
+   "interval_s": 600,
+   "peak_interval_s": 300,
    "bidirectional": true,
    "speed_mps": null,
    "source": "sakay_gtfs_2015",
-   "aliases": []
+   "aliases": [],
+   "max_shared_routes": 61,
+   "interval_basis": "default"
   },
   {
    "route_id": "LTFRB_PUJ1560",
@@ -902,8 +938,8 @@
     371
    ],
    "length_in_area_m": 1978.9,
-   "interval_s": 60,
-   "peak_interval_s": 60,
+   "interval_s": 900,
+   "peak_interval_s": 450,
    "bidirectional": true,
    "speed_mps": null,
    "source": "sakay_gtfs_2015",
@@ -912,7 +948,9 @@
     "LTFRB_PUJ1558",
     "LTFRB_PUJ1552",
     "LTFRB_PUJ1660"
-   ]
+   ],
+   "max_shared_routes": 149,
+   "interval_basis": "corridor_limited (shares a road with 149 routes)"
   },
   {
    "route_id": "LTFRB_PUJ1561",
@@ -951,12 +989,14 @@
     819
    ],
    "length_in_area_m": 3101.3,
-   "interval_s": 60,
-   "peak_interval_s": 60,
+   "interval_s": 900,
+   "peak_interval_s": 450,
    "bidirectional": true,
    "speed_mps": null,
    "source": "sakay_gtfs_2015",
-   "aliases": []
+   "aliases": [],
+   "max_shared_routes": 149,
+   "interval_basis": "corridor_limited (shares a road with 149 routes)"
   },
   {
    "route_id": "LTFRB_PUJ2324",
@@ -982,14 +1022,16 @@
     355
    ],
    "length_in_area_m": 1590.2,
-   "interval_s": 60,
-   "peak_interval_s": 60,
+   "interval_s": 900,
+   "peak_interval_s": 450,
    "bidirectional": true,
    "speed_mps": null,
    "source": "sakay_gtfs_2015",
    "aliases": [
     "LTFRB_PUJ2256"
-   ]
+   ],
+   "max_shared_routes": 149,
+   "interval_basis": "corridor_limited (shares a road with 149 routes)"
   },
   {
    "route_id": "LTFRB_PUJ1540",
@@ -1036,12 +1078,14 @@
     371
    ],
    "length_in_area_m": 3747.9,
-   "interval_s": 60,
-   "peak_interval_s": 60,
+   "interval_s": 900,
+   "peak_interval_s": 450,
    "bidirectional": true,
    "speed_mps": null,
    "source": "sakay_gtfs_2015",
-   "aliases": []
+   "aliases": [],
+   "max_shared_routes": 149,
+   "interval_basis": "corridor_limited (shares a road with 149 routes)"
   },
   {
    "route_id": "LTFRB_PUJ1615",
@@ -1057,12 +1101,14 @@
     872
    ],
    "length_in_area_m": 950.2,
-   "interval_s": 60,
-   "peak_interval_s": 60,
+   "interval_s": 600,
+   "peak_interval_s": 300,
    "bidirectional": true,
    "speed_mps": null,
    "source": "sakay_gtfs_2015",
-   "aliases": []
+   "aliases": [],
+   "max_shared_routes": 61,
+   "interval_basis": "default"
   },
   {
    "route_id": "LTFRB_PUJ1614",
@@ -1081,12 +1127,14 @@
     809
    ],
    "length_in_area_m": 1179.9,
-   "interval_s": 60,
-   "peak_interval_s": 60,
+   "interval_s": 600,
+   "peak_interval_s": 300,
    "bidirectional": true,
    "speed_mps": null,
    "source": "sakay_gtfs_2015",
-   "aliases": []
+   "aliases": [],
+   "max_shared_routes": 61,
+   "interval_basis": "default"
   },
   {
    "route_id": "LTFRB_PUB1008",
@@ -1125,12 +1173,14 @@
     1038
    ],
    "length_in_area_m": 2673.2,
-   "interval_s": 60,
-   "peak_interval_s": 60,
+   "interval_s": 900,
+   "peak_interval_s": 600,
    "bidirectional": true,
    "speed_mps": null,
    "source": "sakay_gtfs_2015",
-   "aliases": []
+   "aliases": [],
+   "max_shared_routes": 148,
+   "interval_basis": "default"
   },
   {
    "route_id": "LTFRB_PUJ1676",
@@ -1172,12 +1222,14 @@
     1001
    ],
    "length_in_area_m": 3163.7,
-   "interval_s": 60,
-   "peak_interval_s": 60,
+   "interval_s": 600,
+   "peak_interval_s": 300,
    "bidirectional": true,
    "speed_mps": null,
    "source": "sakay_gtfs_2015",
-   "aliases": []
+   "aliases": [],
+   "max_shared_routes": 61,
+   "interval_basis": "default"
   },
   {
    "route_id": "LTFRB_PUJ1557",
@@ -1213,12 +1265,14 @@
     699
    ],
    "length_in_area_m": 2689.8,
-   "interval_s": 60,
-   "peak_interval_s": 60,
+   "interval_s": 900,
+   "peak_interval_s": 450,
    "bidirectional": true,
    "speed_mps": null,
    "source": "sakay_gtfs_2015",
-   "aliases": []
+   "aliases": [],
+   "max_shared_routes": 149,
+   "interval_basis": "corridor_limited (shares a road with 149 routes)"
   },
   {
    "route_id": "LTFRB_PUJ1866",
@@ -1257,12 +1311,14 @@
     371
    ],
    "length_in_area_m": 2283.7,
-   "interval_s": 60,
-   "peak_interval_s": 60,
+   "interval_s": 900,
+   "peak_interval_s": 450,
    "bidirectional": true,
    "speed_mps": null,
    "source": "sakay_gtfs_2015",
-   "aliases": []
+   "aliases": [],
+   "max_shared_routes": 149,
+   "interval_basis": "corridor_limited (shares a road with 149 routes)"
   },
   {
    "route_id": "LTFRB_PUB1135",
@@ -1298,12 +1354,14 @@
     371
    ],
    "length_in_area_m": 2363.7,
-   "interval_s": 60,
-   "peak_interval_s": 60,
+   "interval_s": 900,
+   "peak_interval_s": 600,
    "bidirectional": true,
    "speed_mps": null,
    "source": "sakay_gtfs_2015",
-   "aliases": []
+   "aliases": [],
+   "max_shared_routes": 149,
+   "interval_basis": "default"
   },
   {
    "route_id": "LTFRB_PUB1099",
@@ -1350,12 +1408,14 @@
     808
    ],
    "length_in_area_m": 3675.9,
-   "interval_s": 60,
-   "peak_interval_s": 60,
+   "interval_s": 900,
+   "peak_interval_s": 600,
    "bidirectional": true,
    "speed_mps": null,
    "source": "sakay_gtfs_2015",
-   "aliases": []
+   "aliases": [],
+   "max_shared_routes": 149,
+   "interval_basis": "default"
   },
   {
    "route_id": "LTFRB_PUB1098",
@@ -1406,12 +1466,14 @@
     431
    ],
    "length_in_area_m": 3937.2,
-   "interval_s": 60,
-   "peak_interval_s": 60,
+   "interval_s": 900,
+   "peak_interval_s": 600,
    "bidirectional": true,
    "speed_mps": null,
    "source": "sakay_gtfs_2015",
-   "aliases": []
+   "aliases": [],
+   "max_shared_routes": 149,
+   "interval_basis": "default"
   },
   {
    "route_id": "LTFRB_PUJ1863",
@@ -1462,12 +1524,14 @@
     371
    ],
    "length_in_area_m": 3756.8,
-   "interval_s": 60,
-   "peak_interval_s": 60,
+   "interval_s": 900,
+   "peak_interval_s": 450,
    "bidirectional": true,
    "speed_mps": null,
    "source": "sakay_gtfs_2015",
-   "aliases": []
+   "aliases": [],
+   "max_shared_routes": 149,
+   "interval_basis": "corridor_limited (shares a road with 149 routes)"
   },
   {
    "route_id": "LTFRB_PUJ1795",
@@ -1538,8 +1602,8 @@
     224
    ],
    "length_in_area_m": 6038.9,
-   "interval_s": 60,
-   "peak_interval_s": 60,
+   "interval_s": 900,
+   "peak_interval_s": 450,
    "bidirectional": true,
    "speed_mps": null,
    "source": "sakay_gtfs_2015",
@@ -1548,7 +1612,9 @@
     "LTFRB_PUJ2078",
     "LTFRB_PUJ1793",
     "LTFRB_PUJ1755"
-   ]
+   ],
+   "max_shared_routes": 149,
+   "interval_basis": "corridor_limited (shares a road with 149 routes)"
   },
   {
    "route_id": "LTFRB_PUJ1867",
@@ -1584,12 +1650,14 @@
     819
    ],
    "length_in_area_m": 2901.0,
-   "interval_s": 60,
-   "peak_interval_s": 60,
+   "interval_s": 900,
+   "peak_interval_s": 450,
    "bidirectional": true,
    "speed_mps": null,
    "source": "sakay_gtfs_2015",
-   "aliases": []
+   "aliases": [],
+   "max_shared_routes": 149,
+   "interval_basis": "corridor_limited (shares a road with 149 routes)"
   },
   {
    "route_id": "LTFRB_PUJ1721",
@@ -1657,12 +1725,14 @@
     292
    ],
    "length_in_area_m": 6058.9,
-   "interval_s": 60,
-   "peak_interval_s": 60,
+   "interval_s": 900,
+   "peak_interval_s": 450,
    "bidirectional": true,
    "speed_mps": null,
    "source": "sakay_gtfs_2015",
-   "aliases": []
+   "aliases": [],
+   "max_shared_routes": 149,
+   "interval_basis": "corridor_limited (shares a road with 149 routes)"
   },
   {
    "route_id": "LTFRB_PUJ1897",
@@ -1728,15 +1798,17 @@
     809
    ],
    "length_in_area_m": 5354.9,
-   "interval_s": 60,
-   "peak_interval_s": 60,
+   "interval_s": 900,
+   "peak_interval_s": 450,
    "bidirectional": true,
    "speed_mps": null,
    "source": "sakay_gtfs_2015",
    "aliases": [
     "LTFRB_PUJ1462",
     "LTFRB_PUJ2341"
-   ]
+   ],
+   "max_shared_routes": 149,
+   "interval_basis": "corridor_limited (shares a road with 149 routes)"
   },
   {
    "route_id": "LTFRB_PUJ1482",
@@ -1790,12 +1862,14 @@
     371
    ],
    "length_in_area_m": 3982.8,
-   "interval_s": 60,
-   "peak_interval_s": 60,
+   "interval_s": 900,
+   "peak_interval_s": 450,
    "bidirectional": true,
    "speed_mps": null,
    "source": "sakay_gtfs_2015",
-   "aliases": []
+   "aliases": [],
+   "max_shared_routes": 149,
+   "interval_basis": "corridor_limited (shares a road with 149 routes)"
   },
   {
    "route_id": "LTFRB_PUJ1559",
@@ -1835,15 +1909,17 @@
     819
    ],
    "length_in_area_m": 3065.0,
-   "interval_s": 60,
-   "peak_interval_s": 60,
+   "interval_s": 900,
+   "peak_interval_s": 450,
    "bidirectional": true,
    "speed_mps": null,
    "source": "sakay_gtfs_2015",
    "aliases": [
     "LTFRB_PUJ1532",
     "LTFRB_PUJ1659"
-   ]
+   ],
+   "max_shared_routes": 149,
+   "interval_basis": "corridor_limited (shares a road with 149 routes)"
   },
   {
    "route_id": "LTFRB_PUJ1792",
@@ -1904,8 +1980,8 @@
     809
    ],
    "length_in_area_m": 5495.4,
-   "interval_s": 60,
-   "peak_interval_s": 60,
+   "interval_s": 900,
+   "peak_interval_s": 450,
    "bidirectional": true,
    "speed_mps": null,
    "source": "sakay_gtfs_2015",
@@ -1916,7 +1992,9 @@
     "LTFRB_PUJ1794",
     "LTFRB_PUJ1754",
     "LTFRB_PUJ2049"
-   ]
+   ],
+   "max_shared_routes": 149,
+   "interval_basis": "corridor_limited (shares a road with 149 routes)"
   },
   {
    "route_id": "LTFRB_PUJ1896",
@@ -1983,8 +2061,8 @@
     1038
    ],
    "length_in_area_m": 5569.4,
-   "interval_s": 60,
-   "peak_interval_s": 60,
+   "interval_s": 900,
+   "peak_interval_s": 450,
    "bidirectional": true,
    "speed_mps": null,
    "source": "sakay_gtfs_2015",
@@ -1992,7 +2070,9 @@
     "LTFRB_PUJ1723",
     "LTFRB_PUJ1463",
     "LTFRB_PUJ1791"
-   ]
+   ],
+   "max_shared_routes": 149,
+   "interval_basis": "corridor_limited (shares a road with 149 routes)"
   },
   {
    "route_id": "LTFRB_PUJ2570",
@@ -2054,15 +2134,17 @@
     224
    ],
    "length_in_area_m": 5088.6,
-   "interval_s": 60,
-   "peak_interval_s": 60,
+   "interval_s": 900,
+   "peak_interval_s": 450,
    "bidirectional": true,
    "speed_mps": null,
    "source": "sakay_gtfs_2015",
    "aliases": [
     "LTFRB_PUJ2501",
     "LTFRB_PUJ2499"
-   ]
+   ],
+   "max_shared_routes": 149,
+   "interval_basis": "corridor_limited (shares a road with 149 routes)"
   },
   {
    "route_id": "LTFRB_PUJ1534",
@@ -2111,15 +2193,17 @@
     371
    ],
    "length_in_area_m": 3985.1,
-   "interval_s": 60,
-   "peak_interval_s": 60,
+   "interval_s": 900,
+   "peak_interval_s": 450,
    "bidirectional": true,
    "speed_mps": null,
    "source": "sakay_gtfs_2015",
    "aliases": [
     "LTFRB_PUJ1538",
     "LTFRB_PUJ1536"
-   ]
+   ],
+   "max_shared_routes": 149,
+   "interval_basis": "corridor_limited (shares a road with 149 routes)"
   },
   {
    "route_id": "LTFRB_PUB1167",
@@ -2198,12 +2282,14 @@
     618
    ],
    "length_in_area_m": 6084.5,
-   "interval_s": 60,
-   "peak_interval_s": 60,
+   "interval_s": 900,
+   "peak_interval_s": 600,
    "bidirectional": true,
    "speed_mps": null,
    "source": "sakay_gtfs_2015",
-   "aliases": []
+   "aliases": [],
+   "max_shared_routes": 149,
+   "interval_basis": "default"
   },
   {
    "route_id": "LTFRB_PUJ2539",
@@ -2242,12 +2328,14 @@
     451
    ],
    "length_in_area_m": 3563.2,
-   "interval_s": 60,
-   "peak_interval_s": 60,
+   "interval_s": 600,
+   "peak_interval_s": 300,
    "bidirectional": true,
    "speed_mps": null,
    "source": "sakay_gtfs_2015",
-   "aliases": []
+   "aliases": [],
+   "max_shared_routes": 61,
+   "interval_basis": "default"
   },
   {
    "route_id": "LTFRB_PUJ2142",
@@ -2301,12 +2389,14 @@
     224
    ],
    "length_in_area_m": 4323.2,
-   "interval_s": 60,
-   "peak_interval_s": 60,
+   "interval_s": 600,
+   "peak_interval_s": 300,
    "bidirectional": true,
    "speed_mps": null,
    "source": "sakay_gtfs_2015",
-   "aliases": []
+   "aliases": [],
+   "max_shared_routes": 56,
+   "interval_basis": "default"
   },
   {
    "route_id": "LTFRB_PUB1168",
@@ -2346,12 +2436,14 @@
     808
    ],
    "length_in_area_m": 2643.9,
-   "interval_s": 60,
-   "peak_interval_s": 60,
+   "interval_s": 900,
+   "peak_interval_s": 600,
    "bidirectional": true,
    "speed_mps": null,
    "source": "sakay_gtfs_2015",
-   "aliases": []
+   "aliases": [],
+   "max_shared_routes": 148,
+   "interval_basis": "default"
   },
   {
    "route_id": "LTFRB_PUJ2141",
@@ -2402,12 +2494,14 @@
     371
    ],
    "length_in_area_m": 3740.3,
-   "interval_s": 60,
-   "peak_interval_s": 60,
+   "interval_s": 900,
+   "peak_interval_s": 450,
    "bidirectional": true,
    "speed_mps": null,
    "source": "sakay_gtfs_2015",
-   "aliases": []
+   "aliases": [],
+   "max_shared_routes": 149,
+   "interval_basis": "corridor_limited (shares a road with 149 routes)"
   },
   {
    "route_id": "LTFRB_PUJ1483",
@@ -2475,12 +2569,14 @@
     1154
    ],
    "length_in_area_m": 5056.0,
-   "interval_s": 60,
-   "peak_interval_s": 60,
+   "interval_s": 900,
+   "peak_interval_s": 450,
    "bidirectional": true,
    "speed_mps": null,
    "source": "sakay_gtfs_2015",
-   "aliases": []
+   "aliases": [],
+   "max_shared_routes": 149,
+   "interval_basis": "corridor_limited (shares a road with 149 routes)"
   },
   {
    "route_id": "LTFRB_PUJ1475",
@@ -2547,12 +2643,14 @@
     224
    ],
    "length_in_area_m": 5875.5,
-   "interval_s": 60,
-   "peak_interval_s": 60,
+   "interval_s": 900,
+   "peak_interval_s": 450,
    "bidirectional": true,
    "speed_mps": null,
    "source": "sakay_gtfs_2015",
-   "aliases": []
+   "aliases": [],
+   "max_shared_routes": 149,
+   "interval_basis": "corridor_limited (shares a road with 149 routes)"
   },
   {
    "route_id": "LTFRB_PUJ1543",
@@ -2599,12 +2697,14 @@
     1001
    ],
    "length_in_area_m": 3257.9,
-   "interval_s": 60,
-   "peak_interval_s": 60,
+   "interval_s": 600,
+   "peak_interval_s": 300,
    "bidirectional": true,
    "speed_mps": null,
    "source": "sakay_gtfs_2015",
-   "aliases": []
+   "aliases": [],
+   "max_shared_routes": 51,
+   "interval_basis": "default"
   },
   {
    "route_id": "LTFRB_PUJ1535",
@@ -2637,15 +2737,17 @@
     487
    ],
    "length_in_area_m": 2136.8,
-   "interval_s": 60,
-   "peak_interval_s": 60,
+   "interval_s": 600,
+   "peak_interval_s": 300,
    "bidirectional": true,
    "speed_mps": null,
    "source": "sakay_gtfs_2015",
    "aliases": [
     "LTFRB_PUJ1539",
     "LTFRB_PUJ1537"
-   ]
+   ],
+   "max_shared_routes": 61,
+   "interval_basis": "default"
   },
   {
    "route_id": "LTFRB_PUJ1989",
@@ -2709,14 +2811,16 @@
     224
    ],
    "length_in_area_m": 5011.4,
-   "interval_s": 60,
-   "peak_interval_s": 60,
+   "interval_s": 900,
+   "peak_interval_s": 450,
    "bidirectional": true,
    "speed_mps": null,
    "source": "sakay_gtfs_2015",
    "aliases": [
     "LTFRB_PUJ2076"
-   ]
+   ],
+   "max_shared_routes": 149,
+   "interval_basis": "corridor_limited (shares a road with 149 routes)"
   },
   {
    "route_id": "LTFRB_PUJ1722",
@@ -2784,14 +2888,16 @@
     809
    ],
    "length_in_area_m": 5531.4,
-   "interval_s": 60,
-   "peak_interval_s": 60,
+   "interval_s": 900,
+   "peak_interval_s": 450,
    "bidirectional": true,
    "speed_mps": null,
    "source": "sakay_gtfs_2015",
    "aliases": [
     "LTFRB_PUJ1790"
-   ]
+   ],
+   "max_shared_routes": 149,
+   "interval_basis": "corridor_limited (shares a road with 149 routes)"
   },
   {
    "route_id": "LTFRB_PUJ2538",
@@ -2838,12 +2944,14 @@
     809
    ],
    "length_in_area_m": 4002.4,
-   "interval_s": 60,
-   "peak_interval_s": 60,
+   "interval_s": 900,
+   "peak_interval_s": 450,
    "bidirectional": true,
    "speed_mps": null,
    "source": "sakay_gtfs_2015",
-   "aliases": []
+   "aliases": [],
+   "max_shared_routes": 149,
+   "interval_basis": "corridor_limited (shares a road with 149 routes)"
   },
   {
    "route_id": "LTFRB_PUJ1460",
@@ -2904,8 +3012,8 @@
     809
    ],
    "length_in_area_m": 5478.9,
-   "interval_s": 60,
-   "peak_interval_s": 60,
+   "interval_s": 900,
+   "peak_interval_s": 450,
    "bidirectional": true,
    "speed_mps": null,
    "source": "sakay_gtfs_2015",
@@ -2916,7 +3024,9 @@
     "LTFRB_PUJ1077",
     "LTFRB_PUJ2251",
     "LTFRB_PUJ2181"
-   ]
+   ],
+   "max_shared_routes": 149,
+   "interval_basis": "corridor_limited (shares a road with 149 routes)"
   },
   {
    "route_id": "LTFRB_PUJ2571",
@@ -2974,14 +3084,16 @@
     809
    ],
    "length_in_area_m": 4919.8,
-   "interval_s": 60,
-   "peak_interval_s": 60,
+   "interval_s": 900,
+   "peak_interval_s": 450,
    "bidirectional": true,
    "speed_mps": null,
    "source": "sakay_gtfs_2015",
    "aliases": [
     "LTFRB_PUJ2504"
-   ]
+   ],
+   "max_shared_routes": 149,
+   "interval_basis": "corridor_limited (shares a road with 149 routes)"
   },
   {
    "route_id": "LTFRB_PUJ1526",
@@ -3000,12 +3112,14 @@
     1093
    ],
    "length_in_area_m": 650.0,
-   "interval_s": 60,
-   "peak_interval_s": 60,
+   "interval_s": 600,
+   "peak_interval_s": 300,
    "bidirectional": true,
    "speed_mps": null,
    "source": "sakay_gtfs_2015",
-   "aliases": []
+   "aliases": [],
+   "max_shared_routes": 5,
+   "interval_basis": "default"
   },
   {
    "route_id": "LTFRB_PUJ1988",
@@ -3053,14 +3167,16 @@
     371
    ],
    "length_in_area_m": 3776.8,
-   "interval_s": 60,
-   "peak_interval_s": 60,
+   "interval_s": 900,
+   "peak_interval_s": 450,
    "bidirectional": true,
    "speed_mps": null,
    "source": "sakay_gtfs_2015",
    "aliases": [
     "LTFRB_PUJ2075"
-   ]
+   ],
+   "max_shared_routes": 149,
+   "interval_basis": "corridor_limited (shares a road with 149 routes)"
   },
   {
    "route_id": "LTFRB_PUJ2584",
@@ -3083,14 +3199,16 @@
     825
    ],
    "length_in_area_m": 836.7,
-   "interval_s": 60,
-   "peak_interval_s": 60,
+   "interval_s": 600,
+   "peak_interval_s": 300,
    "bidirectional": true,
    "speed_mps": null,
    "source": "sakay_gtfs_2015",
    "aliases": [
     "LTFRB_PUJ2212"
-   ]
+   ],
+   "max_shared_routes": 5,
+   "interval_basis": "default"
   },
   {
    "route_id": "LTFRB_PUB1104",
@@ -3153,12 +3271,14 @@
     411
    ],
    "length_in_area_m": 4594.9,
-   "interval_s": 60,
-   "peak_interval_s": 60,
+   "interval_s": 900,
+   "peak_interval_s": 600,
    "bidirectional": true,
    "speed_mps": null,
    "source": "sakay_gtfs_2015",
-   "aliases": []
+   "aliases": [],
+   "max_shared_routes": 149,
+   "interval_basis": "default"
   },
   {
    "route_id": "LTFRB_PUJ2377",
@@ -3195,14 +3315,16 @@
     451
    ],
    "length_in_area_m": 2685.0,
-   "interval_s": 60,
-   "peak_interval_s": 60,
+   "interval_s": 600,
+   "peak_interval_s": 300,
    "bidirectional": true,
    "speed_mps": null,
    "source": "sakay_gtfs_2015",
    "aliases": [
     "LTFRB_PUJ2224"
-   ]
+   ],
+   "max_shared_routes": 61,
+   "interval_basis": "default"
   },
   {
    "route_id": "LTFRB_PUJ1055",
@@ -3232,12 +3354,14 @@
     598
    ],
    "length_in_area_m": 2352.3,
-   "interval_s": 60,
-   "peak_interval_s": 60,
+   "interval_s": 900,
+   "peak_interval_s": 450,
    "bidirectional": true,
    "speed_mps": null,
    "source": "sakay_gtfs_2015",
-   "aliases": []
+   "aliases": [],
+   "max_shared_routes": 149,
+   "interval_basis": "corridor_limited (shares a road with 149 routes)"
   },
   {
    "route_id": "LTFRB_PUJ1542",
@@ -3270,14 +3394,16 @@
     371
    ],
    "length_in_area_m": 2422.9,
-   "interval_s": 60,
-   "peak_interval_s": 60,
+   "interval_s": 900,
+   "peak_interval_s": 450,
    "bidirectional": true,
    "speed_mps": null,
    "source": "sakay_gtfs_2015",
    "aliases": [
     "LTFRB_PUJ1226"
-   ]
+   ],
+   "max_shared_routes": 149,
+   "interval_basis": "corridor_limited (shares a road with 149 routes)"
   },
   {
    "route_id": "LTFRB_PUJ1757",
@@ -3341,14 +3467,16 @@
     340
    ],
    "length_in_area_m": 5393.4,
-   "interval_s": 60,
-   "peak_interval_s": 60,
+   "interval_s": 900,
+   "peak_interval_s": 450,
    "bidirectional": true,
    "speed_mps": null,
    "source": "sakay_gtfs_2015",
    "aliases": [
     "LTFRB_PUJ1756"
-   ]
+   ],
+   "max_shared_routes": 149,
+   "interval_basis": "corridor_limited (shares a road with 149 routes)"
   },
   {
    "route_id": "LTFRB_PUJ1478",
@@ -3415,8 +3543,8 @@
     809
    ],
    "length_in_area_m": 5701.4,
-   "interval_s": 60,
-   "peak_interval_s": 60,
+   "interval_s": 900,
+   "peak_interval_s": 450,
    "bidirectional": true,
    "speed_mps": null,
    "source": "sakay_gtfs_2015",
@@ -3424,7 +3552,9 @@
     "LTFRB_PUJ2245",
     "LTFRB_PUJ1168",
     "LTFRB_PUJ2055"
-   ]
+   ],
+   "max_shared_routes": 149,
+   "interval_basis": "corridor_limited (shares a road with 149 routes)"
   },
   {
    "route_id": "LTFRB_PUJ1328",
@@ -3495,12 +3625,14 @@
     809
    ],
    "length_in_area_m": 5807.8,
-   "interval_s": 60,
-   "peak_interval_s": 60,
+   "interval_s": 900,
+   "peak_interval_s": 450,
    "bidirectional": true,
    "speed_mps": null,
    "source": "sakay_gtfs_2015",
-   "aliases": []
+   "aliases": [],
+   "max_shared_routes": 149,
+   "interval_basis": "corridor_limited (shares a road with 149 routes)"
   },
   {
    "route_id": "LTFRB_PUJ1995",
@@ -3563,12 +3695,14 @@
     340
    ],
    "length_in_area_m": 5017.2,
-   "interval_s": 60,
-   "peak_interval_s": 60,
+   "interval_s": 900,
+   "peak_interval_s": 450,
    "bidirectional": true,
    "speed_mps": null,
    "source": "sakay_gtfs_2015",
-   "aliases": []
+   "aliases": [],
+   "max_shared_routes": 149,
+   "interval_basis": "corridor_limited (shares a road with 149 routes)"
   },
   {
    "route_id": "LTFRB_PUJ2505",
@@ -3613,14 +3747,16 @@
     202
    ],
    "length_in_area_m": 3910.5,
-   "interval_s": 60,
-   "peak_interval_s": 60,
+   "interval_s": 900,
+   "peak_interval_s": 450,
    "bidirectional": true,
    "speed_mps": null,
    "source": "sakay_gtfs_2015",
    "aliases": [
     "LTFRB_PUJ2572"
-   ]
+   ],
+   "max_shared_routes": 149,
+   "interval_basis": "corridor_limited (shares a road with 149 routes)"
   },
   {
    "route_id": "LTFRB_PUB1105",
@@ -3663,12 +3799,14 @@
     162
    ],
    "length_in_area_m": 2698.9,
-   "interval_s": 60,
-   "peak_interval_s": 60,
+   "interval_s": 900,
+   "peak_interval_s": 600,
    "bidirectional": true,
    "speed_mps": null,
    "source": "sakay_gtfs_2015",
-   "aliases": []
+   "aliases": [],
+   "max_shared_routes": 148,
+   "interval_basis": "default"
   },
   {
    "route_id": "LTFRB_PUJ1355",
@@ -3737,12 +3875,14 @@
     1001
    ],
    "length_in_area_m": 6690.2,
-   "interval_s": 60,
-   "peak_interval_s": 60,
+   "interval_s": 900,
+   "peak_interval_s": 450,
    "bidirectional": true,
    "speed_mps": null,
    "source": "sakay_gtfs_2015",
-   "aliases": []
+   "aliases": [],
+   "max_shared_routes": 149,
+   "interval_basis": "corridor_limited (shares a road with 149 routes)"
   },
   {
    "route_id": "LTFRB_PUB1109",
@@ -3793,12 +3933,14 @@
     1038
    ],
    "length_in_area_m": 3407.1,
-   "interval_s": 60,
-   "peak_interval_s": 60,
+   "interval_s": 900,
+   "peak_interval_s": 600,
    "bidirectional": true,
    "speed_mps": null,
    "source": "sakay_gtfs_2015",
-   "aliases": []
+   "aliases": [],
+   "max_shared_routes": 149,
+   "interval_basis": "default"
   },
   {
    "route_id": "LTFRB_PUJ1855",
@@ -3845,12 +3987,14 @@
     371
    ],
    "length_in_area_m": 3419.3,
-   "interval_s": 60,
-   "peak_interval_s": 60,
+   "interval_s": 900,
+   "peak_interval_s": 450,
    "bidirectional": true,
    "speed_mps": null,
    "source": "sakay_gtfs_2015",
-   "aliases": []
+   "aliases": [],
+   "max_shared_routes": 149,
+   "interval_basis": "corridor_limited (shares a road with 149 routes)"
   },
   {
    "route_id": "LTFRB_PUJ2569",
@@ -3890,12 +4034,14 @@
     809
    ],
    "length_in_area_m": 3655.0,
-   "interval_s": 60,
-   "peak_interval_s": 60,
+   "interval_s": 900,
+   "peak_interval_s": 450,
    "bidirectional": true,
    "speed_mps": null,
    "source": "sakay_gtfs_2015",
-   "aliases": []
+   "aliases": [],
+   "max_shared_routes": 149,
+   "interval_basis": "corridor_limited (shares a road with 149 routes)"
   },
   {
    "route_id": "LTFRB_PUJ1856",
@@ -3956,12 +4102,14 @@
     340
    ],
    "length_in_area_m": 4787.0,
-   "interval_s": 60,
-   "peak_interval_s": 60,
+   "interval_s": 900,
+   "peak_interval_s": 450,
    "bidirectional": true,
    "speed_mps": null,
    "source": "sakay_gtfs_2015",
-   "aliases": []
+   "aliases": [],
+   "max_shared_routes": 149,
+   "interval_basis": "corridor_limited (shares a road with 149 routes)"
   },
   {
    "route_id": "LTFRB_PUJ1383",
@@ -4020,8 +4168,8 @@
     224
    ],
    "length_in_area_m": 4840.2,
-   "interval_s": 60,
-   "peak_interval_s": 60,
+   "interval_s": 900,
+   "peak_interval_s": 450,
    "bidirectional": true,
    "speed_mps": null,
    "source": "sakay_gtfs_2015",
@@ -4032,7 +4180,9 @@
     "LTFRB_PUJ1088",
     "LTFRB_PUJ1245",
     "LTFRB_PUJ1186"
-   ]
+   ],
+   "max_shared_routes": 149,
+   "interval_basis": "corridor_limited (shares a road with 149 routes)"
   },
   {
    "route_id": "LTFRB_PUJ2258",
@@ -4061,12 +4211,14 @@
     819
    ],
    "length_in_area_m": 1908.8,
-   "interval_s": 60,
-   "peak_interval_s": 60,
+   "interval_s": 900,
+   "peak_interval_s": 450,
    "bidirectional": true,
    "speed_mps": null,
    "source": "sakay_gtfs_2015",
-   "aliases": []
+   "aliases": [],
+   "max_shared_routes": 149,
+   "interval_basis": "corridor_limited (shares a road with 149 routes)"
   },
   {
    "route_id": "LTFRB_PUJ1075",
@@ -4129,14 +4281,16 @@
     809
    ],
    "length_in_area_m": 5415.8,
-   "interval_s": 60,
-   "peak_interval_s": 60,
+   "interval_s": 900,
+   "peak_interval_s": 450,
    "bidirectional": true,
    "speed_mps": null,
    "source": "sakay_gtfs_2015",
    "aliases": [
     "LTFRB_PUJ1177"
-   ]
+   ],
+   "max_shared_routes": 149,
+   "interval_basis": "corridor_limited (shares a road with 149 routes)"
   },
   {
    "route_id": "LTFRB_PUJ1333",
@@ -4198,12 +4352,14 @@
     809
    ],
    "length_in_area_m": 5703.7,
-   "interval_s": 60,
-   "peak_interval_s": 60,
+   "interval_s": 900,
+   "peak_interval_s": 450,
    "bidirectional": true,
    "speed_mps": null,
    "source": "sakay_gtfs_2015",
-   "aliases": []
+   "aliases": [],
+   "max_shared_routes": 149,
+   "interval_basis": "corridor_limited (shares a road with 149 routes)"
   },
   {
    "route_id": "LTFRB_PUJ1076",
@@ -4266,12 +4422,14 @@
     480
    ],
    "length_in_area_m": 5666.6,
-   "interval_s": 60,
-   "peak_interval_s": 60,
+   "interval_s": 900,
+   "peak_interval_s": 450,
    "bidirectional": true,
    "speed_mps": null,
    "source": "sakay_gtfs_2015",
-   "aliases": []
+   "aliases": [],
+   "max_shared_routes": 149,
+   "interval_basis": "corridor_limited (shares a road with 149 routes)"
   },
   {
    "route_id": "LTFRB_PUJ1994",
@@ -4314,12 +4472,14 @@
     371
    ],
    "length_in_area_m": 2959.7,
-   "interval_s": 60,
-   "peak_interval_s": 60,
+   "interval_s": 900,
+   "peak_interval_s": 450,
    "bidirectional": true,
    "speed_mps": null,
    "source": "sakay_gtfs_2015",
-   "aliases": []
+   "aliases": [],
+   "max_shared_routes": 149,
+   "interval_basis": "corridor_limited (shares a road with 149 routes)"
   },
   {
    "route_id": "LTFRB_PUJ1759",
@@ -4363,12 +4523,14 @@
     42
    ],
    "length_in_area_m": 3143.2,
-   "interval_s": 60,
-   "peak_interval_s": 60,
+   "interval_s": 900,
+   "peak_interval_s": 450,
    "bidirectional": true,
    "speed_mps": null,
    "source": "sakay_gtfs_2015",
-   "aliases": []
+   "aliases": [],
+   "max_shared_routes": 149,
+   "interval_basis": "corridor_limited (shares a road with 149 routes)"
   },
   {
    "route_id": "LTFRB_PUJ1073",
@@ -4416,12 +4578,14 @@
     371
    ],
    "length_in_area_m": 3814.4,
-   "interval_s": 60,
-   "peak_interval_s": 60,
+   "interval_s": 900,
+   "peak_interval_s": 450,
    "bidirectional": true,
    "speed_mps": null,
    "source": "sakay_gtfs_2015",
-   "aliases": []
+   "aliases": [],
+   "max_shared_routes": 149,
+   "interval_basis": "corridor_limited (shares a road with 149 routes)"
   },
   {
    "route_id": "LTFRB_PUJ1230",
@@ -4477,12 +4641,14 @@
     370
    ],
    "length_in_area_m": 4372.4,
-   "interval_s": 60,
-   "peak_interval_s": 60,
+   "interval_s": 900,
+   "peak_interval_s": 450,
    "bidirectional": true,
    "speed_mps": null,
    "source": "sakay_gtfs_2015",
-   "aliases": []
+   "aliases": [],
+   "max_shared_routes": 149,
+   "interval_basis": "corridor_limited (shares a road with 149 routes)"
   },
   {
    "route_id": "LTFRB_PUJ1758",
@@ -4519,12 +4685,14 @@
     371
    ],
    "length_in_area_m": 2237.6,
-   "interval_s": 60,
-   "peak_interval_s": 60,
+   "interval_s": 900,
+   "peak_interval_s": 450,
    "bidirectional": true,
    "speed_mps": null,
    "source": "sakay_gtfs_2015",
-   "aliases": []
+   "aliases": [],
+   "max_shared_routes": 149,
+   "interval_basis": "corridor_limited (shares a road with 149 routes)"
   },
   {
    "route_id": "LTFRB_PUJ2236",
@@ -4580,14 +4748,16 @@
     224
    ],
    "length_in_area_m": 4232.2,
-   "interval_s": 60,
-   "peak_interval_s": 60,
+   "interval_s": 900,
+   "peak_interval_s": 450,
    "bidirectional": true,
    "speed_mps": null,
    "source": "sakay_gtfs_2015",
    "aliases": [
     "LTFRB_PUJ2238"
-   ]
+   ],
+   "max_shared_routes": 149,
+   "interval_basis": "corridor_limited (shares a road with 149 routes)"
   },
   {
    "route_id": "LTFRB_PUJ2342",
@@ -4640,12 +4810,14 @@
     621
    ],
    "length_in_area_m": 4336.2,
-   "interval_s": 60,
-   "peak_interval_s": 60,
+   "interval_s": 900,
+   "peak_interval_s": 450,
    "bidirectional": true,
    "speed_mps": null,
    "source": "sakay_gtfs_2015",
-   "aliases": []
+   "aliases": [],
+   "max_shared_routes": 149,
+   "interval_basis": "corridor_limited (shares a road with 149 routes)"
   },
   {
    "route_id": "LTFRB_PUJ1094",
@@ -4710,14 +4882,16 @@
     224
    ],
    "length_in_area_m": 5673.4,
-   "interval_s": 60,
-   "peak_interval_s": 60,
+   "interval_s": 900,
+   "peak_interval_s": 450,
    "bidirectional": true,
    "speed_mps": null,
    "source": "sakay_gtfs_2015",
    "aliases": [
     "LTFRB_PUJ1178"
-   ]
+   ],
+   "max_shared_routes": 149,
+   "interval_basis": "corridor_limited (shares a road with 149 routes)"
   },
   {
    "route_id": "LTFRB_PUJ1416",
@@ -4789,12 +4963,14 @@
     809
    ],
    "length_in_area_m": 5973.2,
-   "interval_s": 60,
-   "peak_interval_s": 60,
+   "interval_s": 900,
+   "peak_interval_s": 450,
    "bidirectional": true,
    "speed_mps": null,
    "source": "sakay_gtfs_2015",
-   "aliases": []
+   "aliases": [],
+   "max_shared_routes": 149,
+   "interval_basis": "corridor_limited (shares a road with 149 routes)"
   },
   {
    "route_id": "LTFRB_PUJ1332",
@@ -4827,12 +5003,14 @@
     487
    ],
    "length_in_area_m": 2531.8,
-   "interval_s": 60,
-   "peak_interval_s": 60,
+   "interval_s": 600,
+   "peak_interval_s": 300,
    "bidirectional": true,
    "speed_mps": null,
    "source": "sakay_gtfs_2015",
-   "aliases": []
+   "aliases": [],
+   "max_shared_routes": 61,
+   "interval_basis": "default"
   },
   {
    "route_id": "LTFRB_PUJ2608",
@@ -4849,8 +5027,8 @@
     308
    ],
    "length_in_area_m": 676.4,
-   "interval_s": 60,
-   "peak_interval_s": 60,
+   "interval_s": 900,
+   "peak_interval_s": 450,
    "bidirectional": true,
    "speed_mps": null,
    "source": "sakay_gtfs_2015",
@@ -4859,7 +5037,9 @@
     "LTFRB_PUJ2606",
     "LTFRB_PUJ2604",
     "LTFRB_PUJ2610"
-   ]
+   ],
+   "max_shared_routes": 149,
+   "interval_basis": "corridor_limited (shares a road with 149 routes)"
   },
   {
    "route_id": "LTFRB_PUJ2086",
@@ -4916,12 +5096,14 @@
     480
    ],
    "length_in_area_m": 4602.8,
-   "interval_s": 60,
-   "peak_interval_s": 60,
+   "interval_s": 900,
+   "peak_interval_s": 450,
    "bidirectional": true,
    "speed_mps": null,
    "source": "sakay_gtfs_2015",
-   "aliases": []
+   "aliases": [],
+   "max_shared_routes": 149,
+   "interval_basis": "corridor_limited (shares a road with 149 routes)"
   },
   {
    "route_id": "LTFRB_PUJ1382",
@@ -4969,8 +5151,8 @@
     371
    ],
    "length_in_area_m": 3760.3,
-   "interval_s": 60,
-   "peak_interval_s": 60,
+   "interval_s": 900,
+   "peak_interval_s": 450,
    "bidirectional": true,
    "speed_mps": null,
    "source": "sakay_gtfs_2015",
@@ -4980,7 +5162,9 @@
     "LTFRB_PUJ1166",
     "LTFRB_PUJ1244",
     "LTFRB_PUJ1087"
-   ]
+   ],
+   "max_shared_routes": 149,
+   "interval_basis": "corridor_limited (shares a road with 149 routes)"
   },
   {
    "route_id": "LTFRB_PUJ1227",
@@ -5026,12 +5210,14 @@
     1001
    ],
    "length_in_area_m": 3205.2,
-   "interval_s": 60,
-   "peak_interval_s": 60,
+   "interval_s": 600,
+   "peak_interval_s": 300,
    "bidirectional": true,
    "speed_mps": null,
    "source": "sakay_gtfs_2015",
-   "aliases": []
+   "aliases": [],
+   "max_shared_routes": 61,
+   "interval_basis": "default"
   },
   {
    "route_id": "LTFRB_PUJ1071",
@@ -5081,14 +5267,16 @@
     371
    ],
    "length_in_area_m": 3697.2,
-   "interval_s": 60,
-   "peak_interval_s": 60,
+   "interval_s": 900,
+   "peak_interval_s": 450,
    "bidirectional": true,
    "speed_mps": null,
    "source": "sakay_gtfs_2015",
    "aliases": [
     "LTFRB_PUJ1085"
-   ]
+   ],
+   "max_shared_routes": 149,
+   "interval_basis": "corridor_limited (shares a road with 149 routes)"
   },
   {
    "route_id": "LTFRB_PUJ1354",
@@ -5131,12 +5319,14 @@
     291
    ],
    "length_in_area_m": 3911.8,
-   "interval_s": 60,
-   "peak_interval_s": 60,
+   "interval_s": 900,
+   "peak_interval_s": 450,
    "bidirectional": true,
    "speed_mps": null,
    "source": "sakay_gtfs_2015",
-   "aliases": []
+   "aliases": [],
+   "max_shared_routes": 149,
+   "interval_basis": "corridor_limited (shares a road with 149 routes)"
   },
   {
    "route_id": "LTFRB_PUJ1072",
@@ -5195,15 +5385,17 @@
     1038
    ],
    "length_in_area_m": 4578.2,
-   "interval_s": 60,
-   "peak_interval_s": 60,
+   "interval_s": 900,
+   "peak_interval_s": 450,
    "bidirectional": true,
    "speed_mps": null,
    "source": "sakay_gtfs_2015",
    "aliases": [
     "LTFRB_PUJ1164",
     "LTFRB_PUJ1174"
-   ]
+   ],
+   "max_shared_routes": 149,
+   "interval_basis": "corridor_limited (shares a road with 149 routes)"
   },
   {
    "route_id": "LTFRB_PUJ1080",
@@ -5259,12 +5451,14 @@
     292
    ],
    "length_in_area_m": 4860.2,
-   "interval_s": 60,
-   "peak_interval_s": 60,
+   "interval_s": 900,
+   "peak_interval_s": 450,
    "bidirectional": true,
    "speed_mps": null,
    "source": "sakay_gtfs_2015",
-   "aliases": []
+   "aliases": [],
+   "max_shared_routes": 149,
+   "interval_basis": "corridor_limited (shares a road with 149 routes)"
   },
   {
    "route_id": "LTFRB_PUJ1417",
@@ -5342,12 +5536,14 @@
     1154
    ],
    "length_in_area_m": 6313.2,
-   "interval_s": 60,
-   "peak_interval_s": 60,
+   "interval_s": 900,
+   "peak_interval_s": 450,
    "bidirectional": true,
    "speed_mps": null,
    "source": "sakay_gtfs_2015",
-   "aliases": []
+   "aliases": [],
+   "max_shared_routes": 149,
+   "interval_basis": "corridor_limited (shares a road with 149 routes)"
   },
   {
    "route_id": "LTFRB_PUJ1078",
@@ -5414,12 +5610,14 @@
     224
    ],
    "length_in_area_m": 5912.3,
-   "interval_s": 60,
-   "peak_interval_s": 60,
+   "interval_s": 900,
+   "peak_interval_s": 450,
    "bidirectional": true,
    "speed_mps": null,
    "source": "sakay_gtfs_2015",
-   "aliases": []
+   "aliases": [],
+   "max_shared_routes": 149,
+   "interval_basis": "corridor_limited (shares a road with 149 routes)"
   },
   {
    "route_id": "LTFRB_PUJ2050",
@@ -5489,14 +5687,16 @@
     224
    ],
    "length_in_area_m": 5824.4,
-   "interval_s": 60,
-   "peak_interval_s": 60,
+   "interval_s": 900,
+   "peak_interval_s": 450,
    "bidirectional": true,
    "speed_mps": null,
    "source": "sakay_gtfs_2015",
    "aliases": [
     "LTFRB_PUJ2056"
-   ]
+   ],
+   "max_shared_routes": 149,
+   "interval_basis": "corridor_limited (shares a road with 149 routes)"
   },
   {
    "route_id": "LTFRB_PUJ1091",
@@ -5551,15 +5751,17 @@
     371
    ],
    "length_in_area_m": 3812.8,
-   "interval_s": 60,
-   "peak_interval_s": 60,
+   "interval_s": 900,
+   "peak_interval_s": 450,
    "bidirectional": true,
    "speed_mps": null,
    "source": "sakay_gtfs_2015",
    "aliases": [
     "LTFRB_PUJ2085",
     "LTFRB_PUJ2047"
-   ]
+   ],
+   "max_shared_routes": 149,
+   "interval_basis": "corridor_limited (shares a road with 149 routes)"
   },
   {
    "route_id": "LTFRB_PUJ2257",
@@ -5592,12 +5794,14 @@
     992
    ],
    "length_in_area_m": 1670.8,
-   "interval_s": 60,
-   "peak_interval_s": 60,
+   "interval_s": 900,
+   "peak_interval_s": 450,
    "bidirectional": true,
    "speed_mps": null,
    "source": "sakay_gtfs_2015",
-   "aliases": []
+   "aliases": [],
+   "max_shared_routes": 149,
+   "interval_basis": "corridor_limited (shares a road with 149 routes)"
   },
   {
    "route_id": "LTFRB_PUJ1176",
@@ -5672,12 +5876,14 @@
     1154
    ],
    "length_in_area_m": 6083.5,
-   "interval_s": 60,
-   "peak_interval_s": 60,
+   "interval_s": 900,
+   "peak_interval_s": 450,
    "bidirectional": true,
    "speed_mps": null,
    "source": "sakay_gtfs_2015",
-   "aliases": []
+   "aliases": [],
+   "max_shared_routes": 149,
+   "interval_basis": "corridor_limited (shares a road with 149 routes)"
   },
   {
    "route_id": "LTFRB_PUJ2279",
@@ -5696,12 +5902,14 @@
     825
    ],
    "length_in_area_m": 323.2,
-   "interval_s": 60,
-   "peak_interval_s": 60,
+   "interval_s": 600,
+   "peak_interval_s": 300,
    "bidirectional": true,
    "speed_mps": null,
    "source": "sakay_gtfs_2015",
-   "aliases": []
+   "aliases": [],
+   "max_shared_routes": 2,
+   "interval_basis": "default"
   },
   {
    "route_id": "LTFRB_PUJ1360",
@@ -5721,15 +5929,17 @@
     320
    ],
    "length_in_area_m": 709.7,
-   "interval_s": 60,
-   "peak_interval_s": 60,
+   "interval_s": 600,
+   "peak_interval_s": 300,
    "bidirectional": true,
    "speed_mps": null,
    "source": "sakay_gtfs_2015",
    "aliases": [
     "LTFRB_PUJ1924",
     "LTFRB_PUJ1925"
-   ]
+   ],
+   "max_shared_routes": 18,
+   "interval_basis": "default"
   },
   {
    "route_id": "LTFRB_PUJ1246",
@@ -5782,12 +5992,14 @@
     371
    ],
    "length_in_area_m": 3789.5,
-   "interval_s": 60,
-   "peak_interval_s": 60,
+   "interval_s": 900,
+   "peak_interval_s": 450,
    "bidirectional": true,
    "speed_mps": null,
    "source": "sakay_gtfs_2015",
-   "aliases": []
+   "aliases": [],
+   "max_shared_routes": 149,
+   "interval_basis": "corridor_limited (shares a road with 149 routes)"
   },
   {
    "route_id": "LTFRB_PUJ1179",
@@ -5848,12 +6060,14 @@
     809
    ],
    "length_in_area_m": 5533.0,
-   "interval_s": 60,
-   "peak_interval_s": 60,
+   "interval_s": 900,
+   "peak_interval_s": 450,
    "bidirectional": true,
    "speed_mps": null,
    "source": "sakay_gtfs_2015",
-   "aliases": []
+   "aliases": [],
+   "max_shared_routes": 149,
+   "interval_basis": "corridor_limited (shares a road with 149 routes)"
   },
   {
    "route_id": "LTFRB_PUJ1169",
@@ -5922,12 +6136,14 @@
     1154
    ],
    "length_in_area_m": 6126.2,
-   "interval_s": 60,
-   "peak_interval_s": 60,
+   "interval_s": 900,
+   "peak_interval_s": 450,
    "bidirectional": true,
    "speed_mps": null,
    "source": "sakay_gtfs_2015",
-   "aliases": []
+   "aliases": [],
+   "max_shared_routes": 149,
+   "interval_basis": "corridor_limited (shares a road with 149 routes)"
   },
   {
    "route_id": "LTFRB_PUJ1165",
@@ -5977,12 +6193,14 @@
     371
    ],
    "length_in_area_m": 3609.5,
-   "interval_s": 60,
-   "peak_interval_s": 60,
+   "interval_s": 900,
+   "peak_interval_s": 450,
    "bidirectional": true,
    "speed_mps": null,
    "source": "sakay_gtfs_2015",
-   "aliases": []
+   "aliases": [],
+   "max_shared_routes": 149,
+   "interval_basis": "corridor_limited (shares a road with 149 routes)"
   },
   {
    "route_id": "LTFRB_PUJ1171",
@@ -6050,12 +6268,14 @@
     224
    ],
    "length_in_area_m": 5890.2,
-   "interval_s": 60,
-   "peak_interval_s": 60,
+   "interval_s": 900,
+   "peak_interval_s": 450,
    "bidirectional": true,
    "speed_mps": null,
    "source": "sakay_gtfs_2015",
-   "aliases": []
+   "aliases": [],
+   "max_shared_routes": 149,
+   "interval_basis": "corridor_limited (shares a road with 149 routes)"
   },
   {
    "route_id": "LTFRB_PUJ2046",
@@ -6119,12 +6339,14 @@
     1038
    ],
    "length_in_area_m": 5542.6,
-   "interval_s": 60,
-   "peak_interval_s": 60,
+   "interval_s": 900,
+   "peak_interval_s": 450,
    "bidirectional": true,
    "speed_mps": null,
    "source": "sakay_gtfs_2015",
-   "aliases": []
+   "aliases": [],
+   "max_shared_routes": 149,
+   "interval_basis": "corridor_limited (shares a road with 149 routes)"
   },
   {
    "route_id": "LTFRB_PUJ1187",
@@ -6176,12 +6398,14 @@
     371
    ],
    "length_in_area_m": 3994.9,
-   "interval_s": 60,
-   "peak_interval_s": 60,
+   "interval_s": 900,
+   "peak_interval_s": 450,
    "bidirectional": true,
    "speed_mps": null,
    "source": "sakay_gtfs_2015",
-   "aliases": []
+   "aliases": [],
+   "max_shared_routes": 149,
+   "interval_basis": "corridor_limited (shares a road with 149 routes)"
   },
   {
    "route_id": "LTFRB_PUJ2045",
@@ -6247,12 +6471,14 @@
     809
    ],
    "length_in_area_m": 5499.3,
-   "interval_s": 60,
-   "peak_interval_s": 60,
+   "interval_s": 900,
+   "peak_interval_s": 450,
    "bidirectional": true,
    "speed_mps": null,
    "source": "sakay_gtfs_2015",
-   "aliases": []
+   "aliases": [],
+   "max_shared_routes": 149,
+   "interval_basis": "corridor_limited (shares a road with 149 routes)"
   },
   {
    "route_id": "LTFRB_PUJ1262",
@@ -6318,12 +6544,14 @@
     224
    ],
    "length_in_area_m": 5183.0,
-   "interval_s": 60,
-   "peak_interval_s": 60,
+   "interval_s": 900,
+   "peak_interval_s": 450,
    "bidirectional": true,
    "speed_mps": null,
    "source": "sakay_gtfs_2015",
-   "aliases": []
+   "aliases": [],
+   "max_shared_routes": 149,
+   "interval_basis": "corridor_limited (shares a road with 149 routes)"
   },
   {
    "route_id": "LTFRB_PUJ2599",
@@ -6355,12 +6583,14 @@
     809
    ],
    "length_in_area_m": 2624.2,
-   "interval_s": 60,
-   "peak_interval_s": 60,
+   "interval_s": 900,
+   "peak_interval_s": 450,
    "bidirectional": true,
    "speed_mps": null,
    "source": "sakay_gtfs_2015",
-   "aliases": []
+   "aliases": [],
+   "max_shared_routes": 149,
+   "interval_basis": "corridor_limited (shares a road with 149 routes)"
   },
   {
    "route_id": "LTFRB_PUJ2607",
@@ -6375,8 +6605,8 @@
     992
    ],
    "length_in_area_m": 356.4,
-   "interval_s": 60,
-   "peak_interval_s": 60,
+   "interval_s": 900,
+   "peak_interval_s": 450,
    "bidirectional": true,
    "speed_mps": null,
    "source": "sakay_gtfs_2015",
@@ -6385,7 +6615,9 @@
     "LTFRB_PUJ2601",
     "LTFRB_PUJ2603",
     "LTFRB_PUJ2609"
-   ]
+   ],
+   "max_shared_routes": 149,
+   "interval_basis": "corridor_limited (shares a road with 149 routes)"
   },
   {
    "route_id": "LTFRB_PUB1108",
@@ -6428,12 +6660,14 @@
     162
    ],
    "length_in_area_m": 3006.9,
-   "interval_s": 60,
-   "peak_interval_s": 60,
+   "interval_s": 900,
+   "peak_interval_s": 600,
    "bidirectional": true,
    "speed_mps": null,
    "source": "sakay_gtfs_2015",
-   "aliases": []
+   "aliases": [],
+   "max_shared_routes": 149,
+   "interval_basis": "default"
   },
   {
    "route_id": "LTFRB_PUJ1547",
@@ -6480,12 +6714,14 @@
     1083
    ],
    "length_in_area_m": 4356.0,
-   "interval_s": 60,
-   "peak_interval_s": 60,
+   "interval_s": 900,
+   "peak_interval_s": 450,
    "bidirectional": true,
    "speed_mps": null,
    "source": "sakay_gtfs_2015",
-   "aliases": []
+   "aliases": [],
+   "max_shared_routes": 149,
+   "interval_basis": "corridor_limited (shares a road with 149 routes)"
   },
   {
    "route_id": "LTFRB_PUJ1170",
@@ -6550,12 +6786,14 @@
     809
    ],
    "length_in_area_m": 5659.4,
-   "interval_s": 60,
-   "peak_interval_s": 60,
+   "interval_s": 900,
+   "peak_interval_s": 450,
    "bidirectional": true,
    "speed_mps": null,
    "source": "sakay_gtfs_2015",
-   "aliases": []
+   "aliases": [],
+   "max_shared_routes": 149,
+   "interval_basis": "corridor_limited (shares a road with 149 routes)"
   },
   {
    "route_id": "LTFRB_PUJ1275",
@@ -6624,12 +6862,14 @@
     556
    ],
    "length_in_area_m": 5061.2,
-   "interval_s": 60,
-   "peak_interval_s": 60,
+   "interval_s": 900,
+   "peak_interval_s": 450,
    "bidirectional": true,
    "speed_mps": null,
    "source": "sakay_gtfs_2015",
-   "aliases": []
+   "aliases": [],
+   "max_shared_routes": 149,
+   "interval_basis": "corridor_limited (shares a road with 149 routes)"
   },
   {
    "route_id": "LTFRB_PUJ1181",
@@ -6679,12 +6919,14 @@
     371
    ],
    "length_in_area_m": 3619.6,
-   "interval_s": 60,
-   "peak_interval_s": 60,
+   "interval_s": 900,
+   "peak_interval_s": 450,
    "bidirectional": true,
    "speed_mps": null,
    "source": "sakay_gtfs_2015",
-   "aliases": []
+   "aliases": [],
+   "max_shared_routes": 149,
+   "interval_basis": "corridor_limited (shares a road with 149 routes)"
   },
   {
    "route_id": "LTFRB_PUJ2380",
@@ -6743,12 +6985,14 @@
     809
    ],
    "length_in_area_m": 5372.1,
-   "interval_s": 60,
-   "peak_interval_s": 60,
+   "interval_s": 900,
+   "peak_interval_s": 450,
    "bidirectional": true,
    "speed_mps": null,
    "source": "sakay_gtfs_2015",
-   "aliases": []
+   "aliases": [],
+   "max_shared_routes": 149,
+   "interval_basis": "corridor_limited (shares a road with 149 routes)"
   },
   {
    "route_id": "LTFRB_PUJ2156",
@@ -6762,12 +7006,14 @@
     142
    ],
    "length_in_area_m": 447.1,
-   "interval_s": 60,
-   "peak_interval_s": 60,
+   "interval_s": 600,
+   "peak_interval_s": 300,
    "bidirectional": true,
    "speed_mps": null,
    "source": "sakay_gtfs_2015",
-   "aliases": []
+   "aliases": [],
+   "max_shared_routes": 3,
+   "interval_basis": "default"
   },
   {
    "route_id": "LTFRB_PUJ2081",
@@ -6829,12 +7075,14 @@
     556
    ],
    "length_in_area_m": 5025.2,
-   "interval_s": 60,
-   "peak_interval_s": 60,
+   "interval_s": 900,
+   "peak_interval_s": 450,
    "bidirectional": true,
    "speed_mps": null,
    "source": "sakay_gtfs_2015",
-   "aliases": []
+   "aliases": [],
+   "max_shared_routes": 149,
+   "interval_basis": "corridor_limited (shares a road with 149 routes)"
   },
   {
    "route_id": "LTFRB_PUJ2082",
@@ -6913,12 +7161,14 @@
     224
    ],
    "length_in_area_m": 5505.8,
-   "interval_s": 60,
-   "peak_interval_s": 60,
+   "interval_s": 900,
+   "peak_interval_s": 450,
    "bidirectional": true,
    "speed_mps": null,
    "source": "sakay_gtfs_2015",
-   "aliases": []
+   "aliases": [],
+   "max_shared_routes": 149,
+   "interval_basis": "corridor_limited (shares a road with 149 routes)"
   },
   {
    "route_id": "LTFRB_PUJ2163",
@@ -6957,12 +7207,14 @@
     992
    ],
    "length_in_area_m": 3056.6,
-   "interval_s": 60,
-   "peak_interval_s": 60,
+   "interval_s": 900,
+   "peak_interval_s": 450,
    "bidirectional": true,
    "speed_mps": null,
    "source": "sakay_gtfs_2015",
-   "aliases": []
+   "aliases": [],
+   "max_shared_routes": 149,
+   "interval_basis": "corridor_limited (shares a road with 149 routes)"
   },
   {
    "route_id": "LTFRB_PUJ1180",
@@ -7021,12 +7273,14 @@
     710
    ],
    "length_in_area_m": 4683.5,
-   "interval_s": 60,
-   "peak_interval_s": 60,
+   "interval_s": 900,
+   "peak_interval_s": 450,
    "bidirectional": true,
    "speed_mps": null,
    "source": "sakay_gtfs_2015",
-   "aliases": []
+   "aliases": [],
+   "max_shared_routes": 149,
+   "interval_basis": "corridor_limited (shares a road with 149 routes)"
   },
   {
    "route_id": "LTFRB_PUJ2472",
@@ -7094,12 +7348,14 @@
     35
    ],
    "length_in_area_m": 5078.7,
-   "interval_s": 60,
-   "peak_interval_s": 60,
+   "interval_s": 900,
+   "peak_interval_s": 450,
    "bidirectional": true,
    "speed_mps": null,
    "source": "sakay_gtfs_2015",
-   "aliases": []
+   "aliases": [],
+   "max_shared_routes": 149,
+   "interval_basis": "corridor_limited (shares a road with 149 routes)"
   },
   {
    "route_id": "LTFRB_PUJ2600",
@@ -7122,12 +7378,14 @@
     308
    ],
    "length_in_area_m": 1888.5,
-   "interval_s": 60,
-   "peak_interval_s": 60,
+   "interval_s": 900,
+   "peak_interval_s": 450,
    "bidirectional": true,
    "speed_mps": null,
    "source": "sakay_gtfs_2015",
-   "aliases": []
+   "aliases": [],
+   "max_shared_routes": 149,
+   "interval_basis": "corridor_limited (shares a road with 149 routes)"
   },
   {
    "route_id": "LTFRB_PUJ2222",
@@ -7162,12 +7420,14 @@
     202
    ],
    "length_in_area_m": 2673.0,
-   "interval_s": 60,
-   "peak_interval_s": 60,
+   "interval_s": 900,
+   "peak_interval_s": 450,
    "bidirectional": true,
    "speed_mps": null,
    "source": "sakay_gtfs_2015",
-   "aliases": []
+   "aliases": [],
+   "max_shared_routes": 149,
+   "interval_basis": "corridor_limited (shares a road with 149 routes)"
   },
   {
    "route_id": "LTFRB_PUJ2376",
@@ -7191,15 +7451,17 @@
     992
    ],
    "length_in_area_m": 1168.2,
-   "interval_s": 60,
-   "peak_interval_s": 60,
+   "interval_s": 900,
+   "peak_interval_s": 450,
    "bidirectional": true,
    "speed_mps": null,
    "source": "sakay_gtfs_2015",
    "aliases": [
     "LTFRB_PUJ2223",
     "LTFRB_PUJ2502"
-   ]
+   ],
+   "max_shared_routes": 149,
+   "interval_basis": "corridor_limited (shares a road with 149 routes)"
   },
   {
    "route_id": "LTFRB_PUJ2037",
@@ -7244,12 +7506,14 @@
     371
    ],
    "length_in_area_m": 3136.2,
-   "interval_s": 60,
-   "peak_interval_s": 60,
+   "interval_s": 900,
+   "peak_interval_s": 450,
    "bidirectional": true,
    "speed_mps": null,
    "source": "sakay_gtfs_2015",
-   "aliases": []
+   "aliases": [],
+   "max_shared_routes": 149,
+   "interval_basis": "corridor_limited (shares a road with 149 routes)"
   },
   {
    "route_id": "LTFRB_PUJ2242",
@@ -7294,14 +7558,16 @@
     1038
    ],
    "length_in_area_m": 3349.6,
-   "interval_s": 60,
-   "peak_interval_s": 60,
+   "interval_s": 900,
+   "peak_interval_s": 450,
    "bidirectional": true,
    "speed_mps": null,
    "source": "sakay_gtfs_2015",
    "aliases": [
     "LTFRB_PUJ2244"
-   ]
+   ],
+   "max_shared_routes": 149,
+   "interval_basis": "corridor_limited (shares a road with 149 routes)"
   },
   {
    "route_id": "LTFRB_PUJ1274",
@@ -7364,12 +7630,14 @@
     1038
    ],
    "length_in_area_m": 4585.4,
-   "interval_s": 60,
-   "peak_interval_s": 60,
+   "interval_s": 900,
+   "peak_interval_s": 450,
    "bidirectional": true,
    "speed_mps": null,
    "source": "sakay_gtfs_2015",
-   "aliases": []
+   "aliases": [],
+   "max_shared_routes": 149,
+   "interval_basis": "corridor_limited (shares a road with 149 routes)"
   },
   {
    "route_id": "LTFRB_PUJ2038",
@@ -7419,12 +7687,14 @@
     202
    ],
    "length_in_area_m": 3865.3,
-   "interval_s": 60,
-   "peak_interval_s": 60,
+   "interval_s": 900,
+   "peak_interval_s": 450,
    "bidirectional": true,
    "speed_mps": null,
    "source": "sakay_gtfs_2015",
-   "aliases": []
+   "aliases": [],
+   "max_shared_routes": 149,
+   "interval_basis": "corridor_limited (shares a road with 149 routes)"
   },
   {
    "route_id": "LTFRB_PUJ1081",
@@ -7486,12 +7756,14 @@
     556
    ],
    "length_in_area_m": 5008.7,
-   "interval_s": 60,
-   "peak_interval_s": 60,
+   "interval_s": 900,
+   "peak_interval_s": 450,
    "bidirectional": true,
    "speed_mps": null,
    "source": "sakay_gtfs_2015",
-   "aliases": []
+   "aliases": [],
+   "max_shared_routes": 149,
+   "interval_basis": "corridor_limited (shares a road with 149 routes)"
   },
   {
    "route_id": "LTFRB_PUJ2243",
@@ -7535,14 +7807,16 @@
     992
    ],
    "length_in_area_m": 3211.1,
-   "interval_s": 60,
-   "peak_interval_s": 60,
+   "interval_s": 900,
+   "peak_interval_s": 450,
    "bidirectional": true,
    "speed_mps": null,
    "source": "sakay_gtfs_2015",
    "aliases": [
     "LTFRB_PUJ2177"
-   ]
+   ],
+   "max_shared_routes": 149,
+   "interval_basis": "corridor_limited (shares a road with 149 routes)"
   },
   {
    "route_id": "LTFRB_PUJ1263",
@@ -7611,12 +7885,14 @@
     556
    ],
    "length_in_area_m": 5169.2,
-   "interval_s": 60,
-   "peak_interval_s": 60,
+   "interval_s": 900,
+   "peak_interval_s": 450,
    "bidirectional": true,
    "speed_mps": null,
    "source": "sakay_gtfs_2015",
-   "aliases": []
+   "aliases": [],
+   "max_shared_routes": 149,
+   "interval_basis": "corridor_limited (shares a road with 149 routes)"
   },
   {
    "route_id": "LTFRB_PUJ2381",
@@ -7667,12 +7943,14 @@
     1038
    ],
    "length_in_area_m": 4561.7,
-   "interval_s": 60,
-   "peak_interval_s": 60,
+   "interval_s": 900,
+   "peak_interval_s": 450,
    "bidirectional": true,
    "speed_mps": null,
    "source": "sakay_gtfs_2015",
-   "aliases": []
+   "aliases": [],
+   "max_shared_routes": 149,
+   "interval_basis": "corridor_limited (shares a road with 149 routes)"
   },
   {
    "route_id": "LTFRB_PUJ2277",
@@ -7688,12 +7966,14 @@
     371
    ],
    "length_in_area_m": 663.8,
-   "interval_s": 60,
-   "peak_interval_s": 60,
+   "interval_s": 600,
+   "peak_interval_s": 300,
    "bidirectional": true,
    "speed_mps": null,
    "source": "sakay_gtfs_2015",
-   "aliases": []
+   "aliases": [],
+   "max_shared_routes": 94,
+   "interval_basis": "default"
   },
   {
    "route_id": "LTFRB_PUJ2246",
@@ -7739,12 +8019,14 @@
     1038
    ],
    "length_in_area_m": 3705.2,
-   "interval_s": 60,
-   "peak_interval_s": 60,
+   "interval_s": 900,
+   "peak_interval_s": 450,
    "bidirectional": true,
    "speed_mps": null,
    "source": "sakay_gtfs_2015",
-   "aliases": []
+   "aliases": [],
+   "max_shared_routes": 149,
+   "interval_basis": "corridor_limited (shares a road with 149 routes)"
   },
   {
    "route_id": "LTFRB_PUJ2221",
@@ -7779,12 +8061,14 @@
     992
    ],
    "length_in_area_m": 2598.2,
-   "interval_s": 60,
-   "peak_interval_s": 60,
+   "interval_s": 900,
+   "peak_interval_s": 450,
    "bidirectional": true,
    "speed_mps": null,
    "source": "sakay_gtfs_2015",
-   "aliases": []
+   "aliases": [],
+   "max_shared_routes": 149,
+   "interval_basis": "corridor_limited (shares a road with 149 routes)"
   },
   {
    "route_id": "LTFRB_PUJ1261",
@@ -7850,12 +8134,14 @@
     556
    ],
    "length_in_area_m": 4969.7,
-   "interval_s": 60,
-   "peak_interval_s": 60,
+   "interval_s": 900,
+   "peak_interval_s": 450,
    "bidirectional": true,
    "speed_mps": null,
    "source": "sakay_gtfs_2015",
-   "aliases": []
+   "aliases": [],
+   "max_shared_routes": 149,
+   "interval_basis": "corridor_limited (shares a road with 149 routes)"
   },
   {
    "route_id": "LTFRB_PUJ1260",
@@ -7919,12 +8205,14 @@
     480
    ],
    "length_in_area_m": 4945.6,
-   "interval_s": 60,
-   "peak_interval_s": 60,
+   "interval_s": 900,
+   "peak_interval_s": 450,
    "bidirectional": true,
    "speed_mps": null,
    "source": "sakay_gtfs_2015",
-   "aliases": []
+   "aliases": [],
+   "max_shared_routes": 149,
+   "interval_basis": "corridor_limited (shares a road with 149 routes)"
   },
   {
    "route_id": "LTFRB_PUJ2178",
@@ -7979,12 +8267,14 @@
     224
    ],
    "length_in_area_m": 3876.6,
-   "interval_s": 60,
-   "peak_interval_s": 60,
+   "interval_s": 900,
+   "peak_interval_s": 450,
    "bidirectional": true,
    "speed_mps": null,
    "source": "sakay_gtfs_2015",
-   "aliases": []
+   "aliases": [],
+   "max_shared_routes": 149,
+   "interval_basis": "corridor_limited (shares a road with 149 routes)"
   },
   {
    "route_id": "LTFRB_PUJ2164",
@@ -8021,12 +8311,14 @@
     1038
    ],
    "length_in_area_m": 3247.6,
-   "interval_s": 60,
-   "peak_interval_s": 60,
+   "interval_s": 600,
+   "peak_interval_s": 300,
    "bidirectional": true,
    "speed_mps": null,
    "source": "sakay_gtfs_2015",
-   "aliases": []
+   "aliases": [],
+   "max_shared_routes": 70,
+   "interval_basis": "default"
   },
   {
    "route_id": "LTFRB_PUJ1361",
@@ -8048,12 +8340,14 @@
     317
    ],
    "length_in_area_m": 976.9,
-   "interval_s": 60,
-   "peak_interval_s": 60,
+   "interval_s": 600,
+   "peak_interval_s": 300,
    "bidirectional": true,
    "speed_mps": null,
    "source": "sakay_gtfs_2015",
-   "aliases": []
+   "aliases": [],
+   "max_shared_routes": 18,
+   "interval_basis": "default"
   },
   {
    "route_id": "LTFRB_PUJ2500",
@@ -8112,12 +8406,14 @@
     809
    ],
    "length_in_area_m": 5274.8,
-   "interval_s": 60,
-   "peak_interval_s": 60,
+   "interval_s": 900,
+   "peak_interval_s": 450,
    "bidirectional": true,
    "speed_mps": null,
    "source": "sakay_gtfs_2015",
-   "aliases": []
+   "aliases": [],
+   "max_shared_routes": 149,
+   "interval_basis": "corridor_limited (shares a road with 149 routes)"
   },
   {
    "route_id": "LTFRB_PUJ1327",
@@ -8194,12 +8490,14 @@
     1154
    ],
    "length_in_area_m": 6063.7,
-   "interval_s": 60,
-   "peak_interval_s": 60,
+   "interval_s": 900,
+   "peak_interval_s": 450,
    "bidirectional": true,
    "speed_mps": null,
    "source": "sakay_gtfs_2015",
-   "aliases": []
+   "aliases": [],
+   "max_shared_routes": 149,
+   "interval_basis": "corridor_limited (shares a road with 149 routes)"
   },
   {
    "route_id": "LTFRB_PUJ2044",
@@ -8251,12 +8549,14 @@
     1001
    ],
    "length_in_area_m": 4324.1,
-   "interval_s": 60,
-   "peak_interval_s": 60,
+   "interval_s": 600,
+   "peak_interval_s": 300,
    "bidirectional": true,
    "speed_mps": null,
    "source": "sakay_gtfs_2015",
-   "aliases": []
+   "aliases": [],
+   "max_shared_routes": 61,
+   "interval_basis": "default"
   },
   {
    "route_id": "LTFRB_PUJ2183",
@@ -8315,12 +8615,14 @@
     911
    ],
    "length_in_area_m": 4443.9,
-   "interval_s": 60,
-   "peak_interval_s": 60,
+   "interval_s": 900,
+   "peak_interval_s": 450,
    "bidirectional": true,
    "speed_mps": null,
    "source": "sakay_gtfs_2015",
-   "aliases": []
+   "aliases": [],
+   "max_shared_routes": 149,
+   "interval_basis": "corridor_limited (shares a road with 149 routes)"
   },
   {
    "route_id": "LTFRB_PUJ2043",
@@ -8365,12 +8667,14 @@
     809
    ],
    "length_in_area_m": 3810.3,
-   "interval_s": 60,
-   "peak_interval_s": 60,
+   "interval_s": 900,
+   "peak_interval_s": 450,
    "bidirectional": true,
    "speed_mps": null,
    "source": "sakay_gtfs_2015",
-   "aliases": []
+   "aliases": [],
+   "max_shared_routes": 149,
+   "interval_basis": "corridor_limited (shares a road with 149 routes)"
   },
   {
    "route_id": "LTFRB_PUJ1326",
@@ -8433,12 +8737,14 @@
     936
    ],
    "length_in_area_m": 5160.1,
-   "interval_s": 60,
-   "peak_interval_s": 60,
+   "interval_s": 900,
+   "peak_interval_s": 450,
    "bidirectional": true,
    "speed_mps": null,
    "source": "sakay_gtfs_2015",
-   "aliases": []
+   "aliases": [],
+   "max_shared_routes": 149,
+   "interval_basis": "corridor_limited (shares a road with 149 routes)"
   },
   {
    "route_id": "LTFRB_PUJ2182",
@@ -8495,14 +8801,16 @@
     224
    ],
    "length_in_area_m": 4232.1,
-   "interval_s": 60,
-   "peak_interval_s": 60,
+   "interval_s": 900,
+   "peak_interval_s": 450,
    "bidirectional": true,
    "speed_mps": null,
    "source": "sakay_gtfs_2015",
    "aliases": [
     "LTFRB_PUJ2252"
-   ]
+   ],
+   "max_shared_routes": 149,
+   "interval_basis": "corridor_limited (shares a road with 149 routes)"
   },
   {
    "route_id": "LTFRB_PUB1025",
@@ -8547,12 +8855,14 @@
     992
    ],
    "length_in_area_m": 3062.0,
-   "interval_s": 60,
-   "peak_interval_s": 60,
+   "interval_s": 900,
+   "peak_interval_s": 600,
    "bidirectional": true,
    "speed_mps": null,
    "source": "sakay_gtfs_2015",
-   "aliases": []
+   "aliases": [],
+   "max_shared_routes": 149,
+   "interval_basis": "default"
   },
   {
    "route_id": "LTFRB_PUJ2498",
@@ -8614,12 +8924,14 @@
     809
    ],
    "length_in_area_m": 5478.8,
-   "interval_s": 60,
-   "peak_interval_s": 60,
+   "interval_s": 900,
+   "peak_interval_s": 450,
    "bidirectional": true,
    "speed_mps": null,
    "source": "sakay_gtfs_2015",
-   "aliases": []
+   "aliases": [],
+   "max_shared_routes": 149,
+   "interval_basis": "corridor_limited (shares a road with 149 routes)"
   },
   {
    "route_id": "LTFRB_PUJ1725",
@@ -8682,12 +8994,14 @@
     224
    ],
    "length_in_area_m": 4597.1,
-   "interval_s": 60,
-   "peak_interval_s": 60,
+   "interval_s": 600,
+   "peak_interval_s": 300,
    "bidirectional": true,
    "speed_mps": null,
    "source": "sakay_gtfs_2015",
-   "aliases": []
+   "aliases": [],
+   "max_shared_routes": 43,
+   "interval_basis": "default"
   },
   {
    "route_id": "LTFRB_PUJ2166",
@@ -8751,12 +9065,14 @@
     224
    ],
    "length_in_area_m": 4569.1,
-   "interval_s": 60,
-   "peak_interval_s": 60,
+   "interval_s": 900,
+   "peak_interval_s": 450,
    "bidirectional": true,
    "speed_mps": null,
    "source": "sakay_gtfs_2015",
-   "aliases": []
+   "aliases": [],
+   "max_shared_routes": 149,
+   "interval_basis": "corridor_limited (shares a road with 149 routes)"
   },
   {
    "route_id": "LTFRB_PUJ2241",
@@ -8801,12 +9117,14 @@
     992
    ],
    "length_in_area_m": 3118.1,
-   "interval_s": 60,
-   "peak_interval_s": 60,
+   "interval_s": 900,
+   "peak_interval_s": 450,
    "bidirectional": true,
    "speed_mps": null,
    "source": "sakay_gtfs_2015",
-   "aliases": []
+   "aliases": [],
+   "max_shared_routes": 149,
+   "interval_basis": "corridor_limited (shares a road with 149 routes)"
   },
   {
    "route_id": "LTFRB_PUJ2525",
@@ -8855,12 +9173,14 @@
     1154
    ],
    "length_in_area_m": 3679.8,
-   "interval_s": 60,
-   "peak_interval_s": 60,
+   "interval_s": 900,
+   "peak_interval_s": 450,
    "bidirectional": true,
    "speed_mps": null,
    "source": "sakay_gtfs_2015",
-   "aliases": []
+   "aliases": [],
+   "max_shared_routes": 149,
+   "interval_basis": "corridor_limited (shares a road with 149 routes)"
   },
   {
    "route_id": "LTFRB_PUB1026",
@@ -8898,12 +9218,14 @@
     162
    ],
    "length_in_area_m": 3540.8,
-   "interval_s": 60,
-   "peak_interval_s": 60,
+   "interval_s": 900,
+   "peak_interval_s": 600,
    "bidirectional": true,
    "speed_mps": null,
    "source": "sakay_gtfs_2015",
-   "aliases": []
+   "aliases": [],
+   "max_shared_routes": 149,
+   "interval_basis": "default"
   },
   {
    "route_id": "LTFRB_PUJ1724",
@@ -8960,12 +9282,14 @@
     1111
    ],
    "length_in_area_m": 4059.0,
-   "interval_s": 60,
-   "peak_interval_s": 60,
+   "interval_s": 600,
+   "peak_interval_s": 300,
    "bidirectional": true,
    "speed_mps": null,
    "source": "sakay_gtfs_2015",
-   "aliases": []
+   "aliases": [],
+   "max_shared_routes": 43,
+   "interval_basis": "default"
   },
   {
    "route_id": "LTFRB_PUJ1670",
@@ -9026,12 +9350,14 @@
     224
    ],
    "length_in_area_m": 4298.8,
-   "interval_s": 60,
-   "peak_interval_s": 60,
+   "interval_s": 600,
+   "peak_interval_s": 300,
    "bidirectional": true,
    "speed_mps": null,
    "source": "sakay_gtfs_2015",
-   "aliases": []
+   "aliases": [],
+   "max_shared_routes": 43,
+   "interval_basis": "default"
   },
   {
    "route_id": "LTFRB_PUJ2524",
@@ -9082,12 +9408,14 @@
     992
    ],
    "length_in_area_m": 3263.6,
-   "interval_s": 60,
-   "peak_interval_s": 60,
+   "interval_s": 900,
+   "peak_interval_s": 450,
    "bidirectional": true,
    "speed_mps": null,
    "source": "sakay_gtfs_2015",
-   "aliases": []
+   "aliases": [],
+   "max_shared_routes": 149,
+   "interval_basis": "corridor_limited (shares a road with 149 routes)"
   },
   {
    "route_id": "LTFRB_PUJ2473",
@@ -9134,12 +9462,14 @@
     1038
    ],
    "length_in_area_m": 3577.7,
-   "interval_s": 60,
-   "peak_interval_s": 60,
+   "interval_s": 900,
+   "peak_interval_s": 450,
    "bidirectional": true,
    "speed_mps": null,
    "source": "sakay_gtfs_2015",
-   "aliases": []
+   "aliases": [],
+   "max_shared_routes": 149,
+   "interval_basis": "corridor_limited (shares a road with 149 routes)"
   },
   {
    "route_id": "LTFRB_PUJ1973",
@@ -9199,12 +9529,14 @@
     28
    ],
    "length_in_area_m": 4130.6,
-   "interval_s": 60,
-   "peak_interval_s": 60,
+   "interval_s": 900,
+   "peak_interval_s": 450,
    "bidirectional": true,
    "speed_mps": null,
    "source": "sakay_gtfs_2015",
-   "aliases": []
+   "aliases": [],
+   "max_shared_routes": 149,
+   "interval_basis": "corridor_limited (shares a road with 149 routes)"
   },
   {
    "route_id": "LTFRB_PUJ2165",
@@ -9263,12 +9595,14 @@
     556
    ],
    "length_in_area_m": 4463.2,
-   "interval_s": 60,
-   "peak_interval_s": 60,
+   "interval_s": 900,
+   "peak_interval_s": 450,
    "bidirectional": true,
    "speed_mps": null,
    "source": "sakay_gtfs_2015",
-   "aliases": []
+   "aliases": [],
+   "max_shared_routes": 149,
+   "interval_basis": "corridor_limited (shares a road with 149 routes)"
   },
   {
    "route_id": "LTFRB_PUJ2187",
@@ -9325,12 +9659,14 @@
     809
    ],
    "length_in_area_m": 5334.1,
-   "interval_s": 60,
-   "peak_interval_s": 60,
+   "interval_s": 900,
+   "peak_interval_s": 450,
    "bidirectional": true,
    "speed_mps": null,
    "source": "sakay_gtfs_2015",
-   "aliases": []
+   "aliases": [],
+   "max_shared_routes": 149,
+   "interval_basis": "corridor_limited (shares a road with 149 routes)"
   },
   {
    "route_id": "LTFRB_PUJ2503",
@@ -9360,12 +9696,14 @@
     457
    ],
    "length_in_area_m": 2390.9,
-   "interval_s": 60,
-   "peak_interval_s": 60,
+   "interval_s": 600,
+   "peak_interval_s": 300,
    "bidirectional": true,
    "speed_mps": null,
    "source": "sakay_gtfs_2015",
-   "aliases": []
+   "aliases": [],
+   "max_shared_routes": 61,
+   "interval_basis": "default"
   },
   {
    "route_id": "LTFRB_PUJ1057",
@@ -9383,14 +9721,16 @@
     371
    ],
    "length_in_area_m": 927.6,
-   "interval_s": 60,
-   "peak_interval_s": 60,
+   "interval_s": 840,
+   "peak_interval_s": 420,
    "bidirectional": true,
    "speed_mps": null,
    "source": "sakay_gtfs_2015",
    "aliases": [
     "LTFRB_PUJ1058"
-   ]
+   ],
+   "max_shared_routes": 140,
+   "interval_basis": "corridor_limited (shares a road with 140 routes)"
   },
   {
    "route_id": "LTFRB_PUJ2184",
@@ -9441,12 +9781,14 @@
     224
    ],
    "length_in_area_m": 3782.9,
-   "interval_s": 60,
-   "peak_interval_s": 60,
+   "interval_s": 900,
+   "peak_interval_s": 450,
    "bidirectional": true,
    "speed_mps": null,
    "source": "sakay_gtfs_2015",
-   "aliases": []
+   "aliases": [],
+   "max_shared_routes": 149,
+   "interval_basis": "corridor_limited (shares a road with 149 routes)"
   },
   {
    "route_id": "LTFRB_PUJ1583",
@@ -9485,12 +9827,14 @@
     234
    ],
    "length_in_area_m": 2829.5,
-   "interval_s": 60,
-   "peak_interval_s": 60,
+   "interval_s": 600,
+   "peak_interval_s": 300,
    "bidirectional": true,
    "speed_mps": null,
    "source": "sakay_gtfs_2015",
-   "aliases": []
+   "aliases": [],
+   "max_shared_routes": 77,
+   "interval_basis": "default"
   },
   {
    "route_id": "LTFRB_PUB1053",
@@ -9543,12 +9887,14 @@
     872
    ],
    "length_in_area_m": 4702.3,
-   "interval_s": 60,
-   "peak_interval_s": 60,
+   "interval_s": 900,
+   "peak_interval_s": 600,
    "bidirectional": true,
    "speed_mps": null,
    "source": "sakay_gtfs_2015",
-   "aliases": []
+   "aliases": [],
+   "max_shared_routes": 149,
+   "interval_basis": "default"
   },
   {
    "route_id": "LTFRB_PUJ2400",
@@ -9573,12 +9919,14 @@
     699
    ],
    "length_in_area_m": 1522.9,
-   "interval_s": 60,
-   "peak_interval_s": 60,
+   "interval_s": 900,
+   "peak_interval_s": 450,
    "bidirectional": true,
    "speed_mps": null,
    "source": "sakay_gtfs_2015",
-   "aliases": []
+   "aliases": [],
+   "max_shared_routes": 149,
+   "interval_basis": "corridor_limited (shares a road with 149 routes)"
   },
   {
    "route_id": "LTFRB_PUB1054",
@@ -9611,12 +9959,14 @@
     881
    ],
    "length_in_area_m": 2250.9,
-   "interval_s": 60,
-   "peak_interval_s": 60,
+   "interval_s": 900,
+   "peak_interval_s": 600,
    "bidirectional": true,
    "speed_mps": null,
    "source": "sakay_gtfs_2015",
-   "aliases": []
+   "aliases": [],
+   "max_shared_routes": 6,
+   "interval_basis": "default"
   },
   {
    "route_id": "LTFRB_PUJ1918",
@@ -9634,12 +9984,14 @@
     751
    ],
    "length_in_area_m": 413.3,
-   "interval_s": 60,
-   "peak_interval_s": 60,
+   "interval_s": 600,
+   "peak_interval_s": 300,
    "bidirectional": true,
    "speed_mps": null,
    "source": "sakay_gtfs_2015",
-   "aliases": []
+   "aliases": [],
+   "max_shared_routes": 12,
+   "interval_basis": "default"
   },
   {
    "route_id": "LTFRB_PUB1055",
@@ -9690,12 +10042,14 @@
     872
    ],
    "length_in_area_m": 4662.1,
-   "interval_s": 60,
-   "peak_interval_s": 60,
+   "interval_s": 900,
+   "peak_interval_s": 600,
    "bidirectional": true,
    "speed_mps": null,
    "source": "sakay_gtfs_2015",
-   "aliases": []
+   "aliases": [],
+   "max_shared_routes": 149,
+   "interval_basis": "default"
   },
   {
    "route_id": "LTFRB_PUJ1389",
@@ -9727,12 +10081,14 @@
     621
    ],
    "length_in_area_m": 2309.8,
-   "interval_s": 60,
-   "peak_interval_s": 60,
+   "interval_s": 600,
+   "peak_interval_s": 300,
    "bidirectional": true,
    "speed_mps": null,
    "source": "sakay_gtfs_2015",
-   "aliases": []
+   "aliases": [],
+   "max_shared_routes": 77,
+   "interval_basis": "default"
   },
   {
    "route_id": "LTFRB_PUJ2429",
@@ -9764,12 +10120,14 @@
     621
    ],
    "length_in_area_m": 2243.6,
-   "interval_s": 60,
-   "peak_interval_s": 60,
+   "interval_s": 600,
+   "peak_interval_s": 300,
    "bidirectional": true,
    "speed_mps": null,
    "source": "sakay_gtfs_2015",
-   "aliases": []
+   "aliases": [],
+   "max_shared_routes": 77,
+   "interval_basis": "default"
   },
   {
    "route_id": "LTFRB_PUJ1678",
@@ -9828,12 +10186,14 @@
     1111
    ],
    "length_in_area_m": 4382.5,
-   "interval_s": 60,
-   "peak_interval_s": 60,
+   "interval_s": 600,
+   "peak_interval_s": 300,
    "bidirectional": true,
    "speed_mps": null,
    "source": "sakay_gtfs_2015",
-   "aliases": []
+   "aliases": [],
+   "max_shared_routes": 77,
+   "interval_basis": "default"
   },
   {
    "route_id": "LTFRB_PUJ1919",
@@ -9849,12 +10209,14 @@
     756
    ],
    "length_in_area_m": 480.5,
-   "interval_s": 60,
-   "peak_interval_s": 60,
+   "interval_s": 600,
+   "peak_interval_s": 300,
    "bidirectional": true,
    "speed_mps": null,
    "source": "sakay_gtfs_2015",
-   "aliases": []
+   "aliases": [],
+   "max_shared_routes": 11,
+   "interval_basis": "default"
   },
   {
    "route_id": "LTFRB_PUB1056",
@@ -9885,12 +10247,14 @@
     380
    ],
    "length_in_area_m": 2210.7,
-   "interval_s": 60,
-   "peak_interval_s": 60,
+   "interval_s": 900,
+   "peak_interval_s": 600,
    "bidirectional": true,
    "speed_mps": null,
    "source": "sakay_gtfs_2015",
-   "aliases": []
+   "aliases": [],
+   "max_shared_routes": 6,
+   "interval_basis": "default"
   },
   {
    "route_id": "LTFRB_PUJ2188",
@@ -9932,12 +10296,14 @@
     1038
    ],
    "length_in_area_m": 3635.0,
-   "interval_s": 60,
-   "peak_interval_s": 60,
+   "interval_s": 900,
+   "peak_interval_s": 450,
    "bidirectional": true,
    "speed_mps": null,
    "source": "sakay_gtfs_2015",
-   "aliases": []
+   "aliases": [],
+   "max_shared_routes": 149,
+   "interval_basis": "corridor_limited (shares a road with 149 routes)"
   },
   {
    "route_id": "LTFRB_PUJ1926",
@@ -9962,12 +10328,14 @@
     853
    ],
    "length_in_area_m": 1337.2,
-   "interval_s": 60,
-   "peak_interval_s": 60,
+   "interval_s": 600,
+   "peak_interval_s": 300,
    "bidirectional": true,
    "speed_mps": null,
    "source": "sakay_gtfs_2015",
-   "aliases": []
+   "aliases": [],
+   "max_shared_routes": 9,
+   "interval_basis": "default"
   },
   {
    "route_id": "LTFRB_PUJ1677",
@@ -10024,12 +10392,14 @@
     532
    ],
    "length_in_area_m": 4174.1,
-   "interval_s": 60,
-   "peak_interval_s": 60,
+   "interval_s": 600,
+   "peak_interval_s": 300,
    "bidirectional": true,
    "speed_mps": null,
    "source": "sakay_gtfs_2015",
-   "aliases": []
+   "aliases": [],
+   "max_shared_routes": 43,
+   "interval_basis": "default"
   },
   {
    "route_id": "LTFRB_PUB1185",
@@ -10069,12 +10439,14 @@
     992
    ],
    "length_in_area_m": 2819.3,
-   "interval_s": 60,
-   "peak_interval_s": 60,
+   "interval_s": 900,
+   "peak_interval_s": 600,
    "bidirectional": true,
    "speed_mps": null,
    "source": "sakay_gtfs_2015",
-   "aliases": []
+   "aliases": [],
+   "max_shared_routes": 149,
+   "interval_basis": "default"
   },
   {
    "route_id": "LTFRB_PUJ1293",
@@ -10119,12 +10491,14 @@
     819
    ],
    "length_in_area_m": 3392.5,
-   "interval_s": 60,
-   "peak_interval_s": 60,
+   "interval_s": 900,
+   "peak_interval_s": 450,
    "bidirectional": true,
    "speed_mps": null,
    "source": "sakay_gtfs_2015",
-   "aliases": []
+   "aliases": [],
+   "max_shared_routes": 149,
+   "interval_basis": "corridor_limited (shares a road with 149 routes)"
   },
   {
    "route_id": "LTFRB_PUJ1511",
@@ -10188,12 +10562,14 @@
     532
    ],
    "length_in_area_m": 4904.5,
-   "interval_s": 60,
-   "peak_interval_s": 60,
+   "interval_s": 600,
+   "peak_interval_s": 300,
    "bidirectional": true,
    "speed_mps": null,
    "source": "sakay_gtfs_2015",
-   "aliases": []
+   "aliases": [],
+   "max_shared_routes": 39,
+   "interval_basis": "default"
   },
   {
    "route_id": "LTFRB_PUJ1972",
@@ -10231,12 +10607,14 @@
     556
    ],
    "length_in_area_m": 2810.5,
-   "interval_s": 60,
-   "peak_interval_s": 60,
+   "interval_s": 900,
+   "peak_interval_s": 450,
    "bidirectional": true,
    "speed_mps": null,
    "source": "sakay_gtfs_2015",
-   "aliases": []
+   "aliases": [],
+   "max_shared_routes": 149,
+   "interval_basis": "corridor_limited (shares a road with 149 routes)"
   },
   {
    "route_id": "LTFRB_PUJ2316",
@@ -10263,12 +10641,14 @@
     1154
    ],
    "length_in_area_m": 1665.7,
-   "interval_s": 60,
-   "peak_interval_s": 60,
+   "interval_s": 600,
+   "peak_interval_s": 300,
    "bidirectional": true,
    "speed_mps": null,
    "source": "sakay_gtfs_2015",
-   "aliases": []
+   "aliases": [],
+   "max_shared_routes": 77,
+   "interval_basis": "default"
   },
   {
    "route_id": "LTFRB_PUJ1386",
@@ -10290,12 +10670,14 @@
     853
    ],
    "length_in_area_m": 1056.8,
-   "interval_s": 60,
-   "peak_interval_s": 60,
+   "interval_s": 600,
+   "peak_interval_s": 300,
    "bidirectional": true,
    "speed_mps": null,
    "source": "sakay_gtfs_2015",
-   "aliases": []
+   "aliases": [],
+   "max_shared_routes": 8,
+   "interval_basis": "default"
   },
   {
    "route_id": "LTFRB_PUJ1292",
@@ -10347,12 +10729,14 @@
     556
    ],
    "length_in_area_m": 3663.5,
-   "interval_s": 60,
-   "peak_interval_s": 60,
+   "interval_s": 900,
+   "peak_interval_s": 450,
    "bidirectional": true,
    "speed_mps": null,
    "source": "sakay_gtfs_2015",
-   "aliases": []
+   "aliases": [],
+   "max_shared_routes": 149,
+   "interval_basis": "corridor_limited (shares a road with 149 routes)"
   },
   {
    "route_id": "LTFRB_PUJ1549",
@@ -10406,12 +10790,14 @@
     532
    ],
    "length_in_area_m": 4114.3,
-   "interval_s": 60,
-   "peak_interval_s": 60,
+   "interval_s": 600,
+   "peak_interval_s": 300,
    "bidirectional": true,
    "speed_mps": null,
    "source": "sakay_gtfs_2015",
-   "aliases": []
+   "aliases": [],
+   "max_shared_routes": 39,
+   "interval_basis": "default"
   },
   {
    "route_id": "LTFRB_PUJ1388",
@@ -10444,12 +10830,14 @@
     320
    ],
    "length_in_area_m": 1677.1,
-   "interval_s": 60,
-   "peak_interval_s": 60,
+   "interval_s": 600,
+   "peak_interval_s": 300,
    "bidirectional": true,
    "speed_mps": null,
    "source": "sakay_gtfs_2015",
-   "aliases": []
+   "aliases": [],
+   "max_shared_routes": 24,
+   "interval_basis": "default"
   },
   {
    "route_id": "LTFRB_PUJ1387",
@@ -10469,12 +10857,14 @@
     739
    ],
    "length_in_area_m": 898.6,
-   "interval_s": 60,
-   "peak_interval_s": 60,
+   "interval_s": 600,
+   "peak_interval_s": 300,
    "bidirectional": true,
    "speed_mps": null,
    "source": "sakay_gtfs_2015",
-   "aliases": []
+   "aliases": [],
+   "max_shared_routes": 6,
+   "interval_basis": "default"
   },
   {
    "route_id": "LTFRB_PUJ2379",
@@ -10529,12 +10919,14 @@
     532
    ],
    "length_in_area_m": 4097.1,
-   "interval_s": 60,
-   "peak_interval_s": 60,
+   "interval_s": 600,
+   "peak_interval_s": 300,
    "bidirectional": true,
    "speed_mps": null,
    "source": "sakay_gtfs_2015",
-   "aliases": []
+   "aliases": [],
+   "max_shared_routes": 40,
+   "interval_basis": "default"
   },
   {
    "route_id": "LTFRB_PUJ1582",
@@ -10560,14 +10952,16 @@
     320
    ],
    "length_in_area_m": 1157.4,
-   "interval_s": 60,
-   "peak_interval_s": 60,
+   "interval_s": 600,
+   "peak_interval_s": 300,
    "bidirectional": true,
    "speed_mps": null,
    "source": "sakay_gtfs_2015",
    "aliases": [
     "LTFRB_PUJ2428"
-   ]
+   ],
+   "max_shared_routes": 18,
+   "interval_basis": "default"
   },
   {
    "route_id": "LTFRB_PUJ2378",
@@ -10618,12 +11012,14 @@
     70
    ],
    "length_in_area_m": 3990.4,
-   "interval_s": 60,
-   "peak_interval_s": 60,
+   "interval_s": 600,
+   "peak_interval_s": 300,
    "bidirectional": true,
    "speed_mps": null,
    "source": "sakay_gtfs_2015",
-   "aliases": []
+   "aliases": [],
+   "max_shared_routes": 77,
+   "interval_basis": "default"
   },
   {
    "route_id": "LTFRB_PUJ2399",
@@ -10641,12 +11037,14 @@
     992
    ],
    "length_in_area_m": 706.0,
-   "interval_s": 60,
-   "peak_interval_s": 60,
+   "interval_s": 900,
+   "peak_interval_s": 450,
    "bidirectional": true,
    "speed_mps": null,
    "source": "sakay_gtfs_2015",
-   "aliases": []
+   "aliases": [],
+   "max_shared_routes": 149,
+   "interval_basis": "corridor_limited (shares a road with 149 routes)"
   },
   {
    "route_id": "LTFRB_PUJ2315",
@@ -10675,12 +11073,14 @@
     944
    ],
    "length_in_area_m": 1537.4,
-   "interval_s": 60,
-   "peak_interval_s": 60,
+   "interval_s": 600,
+   "peak_interval_s": 300,
    "bidirectional": true,
    "speed_mps": null,
    "source": "sakay_gtfs_2015",
-   "aliases": []
+   "aliases": [],
+   "max_shared_routes": 77,
+   "interval_basis": "default"
   },
   {
    "route_id": "LTFRB_PUJ1548",
@@ -10728,14 +11128,16 @@
     1111
    ],
    "length_in_area_m": 3772.0,
-   "interval_s": 60,
-   "peak_interval_s": 60,
+   "interval_s": 600,
+   "peak_interval_s": 300,
    "bidirectional": true,
    "speed_mps": null,
    "source": "sakay_gtfs_2015",
    "aliases": [
     "LTFRB_PUJ1510"
-   ]
+   ],
+   "max_shared_routes": 77,
+   "interval_basis": "default"
   },
   {
    "route_id": "LTFRB_PUJ2383",
@@ -10756,14 +11158,16 @@
     1038
    ],
    "length_in_area_m": 676.6,
-   "interval_s": 60,
-   "peak_interval_s": 60,
+   "interval_s": 600,
+   "peak_interval_s": 300,
    "bidirectional": true,
    "speed_mps": null,
    "source": "sakay_gtfs_2015",
    "aliases": [
     "LTFRB_PUJ2382"
-   ]
+   ],
+   "max_shared_routes": 40,
+   "interval_basis": "default"
   },
   {
    "route_id": "LTFRB_PUB1186",
@@ -10783,12 +11187,14 @@
     881
    ],
    "length_in_area_m": 1189.2,
-   "interval_s": 60,
-   "peak_interval_s": 60,
+   "interval_s": 900,
+   "peak_interval_s": 600,
    "bidirectional": true,
    "speed_mps": null,
    "source": "sakay_gtfs_2015",
-   "aliases": []
+   "aliases": [],
+   "max_shared_routes": 6,
+   "interval_basis": "default"
   },
   {
    "route_id": "LTFRB_PUJ1584",
@@ -10816,12 +11222,14 @@
     1161
    ],
    "length_in_area_m": 1223.2,
-   "interval_s": 60,
-   "peak_interval_s": 60,
+   "interval_s": 600,
+   "peak_interval_s": 300,
    "bidirectional": true,
    "speed_mps": null,
    "source": "sakay_gtfs_2015",
-   "aliases": []
+   "aliases": [],
+   "max_shared_routes": 5,
+   "interval_basis": "default"
   },
   {
    "route_id": "LTFRB_PUJ1962",
@@ -10853,12 +11261,14 @@
     658
    ],
    "length_in_area_m": 1596.3,
-   "interval_s": 60,
-   "peak_interval_s": 60,
+   "interval_s": 600,
+   "peak_interval_s": 300,
    "bidirectional": true,
    "speed_mps": null,
    "source": "sakay_gtfs_2015",
-   "aliases": []
+   "aliases": [],
+   "max_shared_routes": 14,
+   "interval_basis": "default"
   },
   {
    "route_id": "LTFRB_PUJ1674",
@@ -10890,12 +11300,14 @@
     1150
    ],
    "length_in_area_m": 1811.8,
-   "interval_s": 60,
-   "peak_interval_s": 60,
+   "interval_s": 600,
+   "peak_interval_s": 300,
    "bidirectional": true,
    "speed_mps": null,
    "source": "sakay_gtfs_2015",
-   "aliases": []
+   "aliases": [],
+   "max_shared_routes": 18,
+   "interval_basis": "default"
   },
   {
    "route_id": "LTFRB_PUJ1673",
@@ -10922,12 +11334,14 @@
     374
    ],
    "length_in_area_m": 1353.4,
-   "interval_s": 60,
-   "peak_interval_s": 60,
+   "interval_s": 600,
+   "peak_interval_s": 300,
    "bidirectional": true,
    "speed_mps": null,
    "source": "sakay_gtfs_2015",
-   "aliases": []
+   "aliases": [],
+   "max_shared_routes": 18,
+   "interval_basis": "default"
   },
   {
    "route_id": "LTFRB_PUJ2394",
@@ -10962,12 +11376,14 @@
     452
    ],
    "length_in_area_m": 2422.8,
-   "interval_s": 60,
-   "peak_interval_s": 60,
+   "interval_s": 600,
+   "peak_interval_s": 300,
    "bidirectional": true,
    "speed_mps": null,
    "source": "sakay_gtfs_2015",
-   "aliases": []
+   "aliases": [],
+   "max_shared_routes": 61,
+   "interval_basis": "default"
   },
   {
    "route_id": "LTFRB_PUJ1652",
@@ -10986,12 +11402,14 @@
     92
    ],
    "length_in_area_m": 724.5,
-   "interval_s": 60,
-   "peak_interval_s": 60,
+   "interval_s": 600,
+   "peak_interval_s": 300,
    "bidirectional": true,
    "speed_mps": null,
    "source": "sakay_gtfs_2015",
-   "aliases": []
+   "aliases": [],
+   "max_shared_routes": 5,
+   "interval_basis": "default"
   },
   {
    "route_id": "LTFRB_PUJ1585",
@@ -11015,12 +11433,14 @@
     260
    ],
    "length_in_area_m": 972.8,
-   "interval_s": 60,
-   "peak_interval_s": 60,
+   "interval_s": 600,
+   "peak_interval_s": 300,
    "bidirectional": true,
    "speed_mps": null,
    "source": "sakay_gtfs_2015",
-   "aliases": []
+   "aliases": [],
+   "max_shared_routes": 5,
+   "interval_basis": "default"
   },
   {
    "route_id": "LTFRB_PUJ1286",
@@ -11048,12 +11468,14 @@
     522
    ],
    "length_in_area_m": 1251.7,
-   "interval_s": 60,
-   "peak_interval_s": 60,
+   "interval_s": 600,
+   "peak_interval_s": 300,
    "bidirectional": true,
    "speed_mps": null,
    "source": "sakay_gtfs_2015",
-   "aliases": []
+   "aliases": [],
+   "max_shared_routes": 9,
+   "interval_basis": "default"
   },
   {
    "route_id": "LTFRB_PUJ1508",
@@ -11081,12 +11503,14 @@
     540
    ],
    "length_in_area_m": 1943.5,
-   "interval_s": 60,
-   "peak_interval_s": 60,
+   "interval_s": 600,
+   "peak_interval_s": 300,
    "bidirectional": true,
    "speed_mps": null,
    "source": "sakay_gtfs_2015",
-   "aliases": []
+   "aliases": [],
+   "max_shared_routes": 77,
+   "interval_basis": "default"
   },
   {
    "route_id": "LTFRB_PUJ2568",
@@ -11116,12 +11540,14 @@
     1063
    ],
    "length_in_area_m": 1781.4,
-   "interval_s": 60,
-   "peak_interval_s": 60,
+   "interval_s": 600,
+   "peak_interval_s": 300,
    "bidirectional": true,
    "speed_mps": null,
    "source": "sakay_gtfs_2015",
-   "aliases": []
+   "aliases": [],
+   "max_shared_routes": 39,
+   "interval_basis": "default"
   },
   {
    "route_id": "LTFRB_PUJ1960",
@@ -11148,12 +11574,14 @@
     658
    ],
    "length_in_area_m": 1410.6,
-   "interval_s": 60,
-   "peak_interval_s": 60,
+   "interval_s": 600,
+   "peak_interval_s": 300,
    "bidirectional": true,
    "speed_mps": null,
    "source": "sakay_gtfs_2015",
-   "aliases": []
+   "aliases": [],
+   "max_shared_routes": 4,
+   "interval_basis": "default"
   },
   {
    "route_id": "LTFRB_PUJ1509",
@@ -11184,12 +11612,14 @@
     162
    ],
    "length_in_area_m": 1851.3,
-   "interval_s": 60,
-   "peak_interval_s": 60,
+   "interval_s": 600,
+   "peak_interval_s": 300,
    "bidirectional": true,
    "speed_mps": null,
    "source": "sakay_gtfs_2015",
-   "aliases": []
+   "aliases": [],
+   "max_shared_routes": 44,
+   "interval_basis": "default"
   },
   {
    "route_id": "LTFRB_PUJ2386",
@@ -11215,12 +11645,14 @@
     540
    ],
    "length_in_area_m": 1831.7,
-   "interval_s": 60,
-   "peak_interval_s": 60,
+   "interval_s": 600,
+   "peak_interval_s": 300,
    "bidirectional": true,
    "speed_mps": null,
    "source": "sakay_gtfs_2015",
-   "aliases": []
+   "aliases": [],
+   "max_shared_routes": 77,
+   "interval_basis": "default"
   },
   {
    "route_id": "LTFRB_PUJ2387",
@@ -11245,12 +11677,14 @@
     162
    ],
    "length_in_area_m": 1171.1,
-   "interval_s": 60,
-   "peak_interval_s": 60,
+   "interval_s": 600,
+   "peak_interval_s": 300,
    "bidirectional": true,
    "speed_mps": null,
    "source": "sakay_gtfs_2015",
-   "aliases": []
+   "aliases": [],
+   "max_shared_routes": 18,
+   "interval_basis": "default"
   },
   {
    "route_id": "LTFRB_PUJ2393",
@@ -11272,12 +11706,14 @@
     992
    ],
    "length_in_area_m": 1142.0,
-   "interval_s": 60,
-   "peak_interval_s": 60,
+   "interval_s": 900,
+   "peak_interval_s": 450,
    "bidirectional": true,
    "speed_mps": null,
    "source": "sakay_gtfs_2015",
-   "aliases": []
+   "aliases": [],
+   "max_shared_routes": 149,
+   "interval_basis": "corridor_limited (shares a road with 149 routes)"
   },
   {
    "route_id": "LTFRB_PUJ2414",
@@ -11296,12 +11732,14 @@
     162
    ],
    "length_in_area_m": 809.9,
-   "interval_s": 60,
-   "peak_interval_s": 60,
+   "interval_s": 600,
+   "peak_interval_s": 300,
    "bidirectional": true,
    "speed_mps": null,
    "source": "sakay_gtfs_2015",
-   "aliases": []
+   "aliases": [],
+   "max_shared_routes": 18,
+   "interval_basis": "default"
   },
   {
    "route_id": "LTFRB_PUJ1961",
@@ -11321,12 +11759,14 @@
     560
    ],
    "length_in_area_m": 581.0,
-   "interval_s": 60,
-   "peak_interval_s": 60,
+   "interval_s": 600,
+   "peak_interval_s": 300,
    "bidirectional": true,
    "speed_mps": null,
    "source": "sakay_gtfs_2015",
-   "aliases": []
+   "aliases": [],
+   "max_shared_routes": 9,
+   "interval_basis": "default"
   },
   {
    "route_id": "LTFRB_PUJ2413",
@@ -11344,12 +11784,14 @@
     738
    ],
    "length_in_area_m": 808.3,
-   "interval_s": 60,
-   "peak_interval_s": 60,
+   "interval_s": 600,
+   "peak_interval_s": 300,
    "bidirectional": true,
    "speed_mps": null,
    "source": "sakay_gtfs_2015",
-   "aliases": []
+   "aliases": [],
+   "max_shared_routes": 18,
+   "interval_basis": "default"
   },
   {
    "route_id": "LTFRB_PUJ1963",
@@ -11367,12 +11809,14 @@
     35
    ],
    "length_in_area_m": 490.8,
-   "interval_s": 60,
-   "peak_interval_s": 60,
+   "interval_s": 600,
+   "peak_interval_s": 300,
    "bidirectional": true,
    "speed_mps": null,
    "source": "sakay_gtfs_2015",
-   "aliases": []
+   "aliases": [],
+   "max_shared_routes": 9,
+   "interval_basis": "default"
   },
   {
    "route_id": "ROUTE_880747",
@@ -11386,11 +11830,32 @@
     3,
     4
    ],
-   "interval_s": 240,
-   "peak_interval_s": 240,
+   "interval_s": 330,
+   "peak_interval_s": 210,
    "bidirectional": true,
    "speed_mps": null,
-   "source": "sakay_gtfs_2015"
+   "source": "sakay_gtfs_2015",
+   "interval_basis": "LRMC peak headway 3.5 min; off-peak estimated"
   }
- ]
+ ],
+ "interval_defaults": {
+  "jeepney": {
+   "peak_s": 300,
+   "off_peak_s": 600
+  },
+  "bus": {
+   "peak_s": 600,
+   "off_peak_s": 900
+  },
+  "train": {
+   "peak_s": 210,
+   "off_peak_s": 330
+  },
+  "corridor_capacity_pcu_per_h_per_direction": 1800,
+  "pcu": {
+   "jeepney": 1.5,
+   "bus": 1.87
+  },
+  "rounded_to_s": 30
+ }
 }

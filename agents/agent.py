@@ -10,6 +10,7 @@ import logging
 import random
 import math
 import manager
+import pygame as pg
 
 LOGGER = logging.getLogger("Agent")
 
@@ -49,6 +50,8 @@ class Agent:
     checkpoints:list[Checkpoint]
     current_node:Node = None
     transportation:Transportation = None
+    path:list[Edge]
+    current_edge:Edge = None
     full_counter:int = 0
     state:str = 'home'
 
@@ -60,6 +63,9 @@ class Agent:
             self.private = 'car'
         self.city = city
         self.railway = railway
+        self.current_node = self.origin_node
+        self.current_node.agents.append(self)
+        self.path = []
         self.id = Agent.id
         Agent.id += 1
 
@@ -93,7 +99,7 @@ class Agent:
         self.current_node = self.origin_node
         self.current_node.agents.append(self)
         if (self.current_node.id == self.destination_node.id):
-            self.arrived_at_destination(time, simulation)
+            simulation.agents.remove(self)
         else:
             path:list[Edge] = shortest_edge_path(self.current_node.id, self.destination_node.id, self.city, self.railway)
             if (not path):
@@ -108,12 +114,13 @@ class Agent:
             self.ride_transportation(transport, time)
             self.set_state('travelling')
             transport.transport(time)
+            simulation.transportations.append(transport)
 
     def set_checkpoints(self, routing_cache:dict, routes:list[Route], time:int, simulation=None):
         self.current_node = self.origin_node
         self.current_node.agents.append(self)
         if (self.current_node.id == self.destination_node.id):
-            self.arrived_at_destination(time, simulation)
+            simulation.agents.remove(self)
         else:
             key = (self.current_node.id, self.destination_node.id)
             cached_checkpoint = routing_cache.get(key, [])
@@ -128,32 +135,26 @@ class Agent:
 
             self.daily_distance += sum(compute_checkpoint_distance(checkpoint, self.city, self.railway) for checkpoint in self.checkpoints)
             self.set_state('travelling')
-            self.move(time)
+            self.move(time, simulation)
 
             
 
     def arrival(self, time:int, current_node:Node=None, simulation=None):
+        self.current_edge = None
         if (self.commuting and self.state == 'travelling'):
             finished_checkpoint = self.checkpoints.pop(0)
             self.current_node = finished_checkpoint.end_node
             self.current_node.agents.append(self)
             if (self.checkpoints):
-                self.move(time)
+                self.move(time, simulation)
         elif (current_node):
             self.current_node = current_node
             self.current_node.agents.append(self)
         
         if (self.current_node == self.destination_node):
-            self.arrived_at_destination(time, simulation)
-
-    def arrived_at_destination(self, time:int, simulation=None):
-        self.daily_trips += 1
-
-        self.arrival_time = time
-        self.current_node.agents.remove(self)
-        self.current_node = None
+            simulation.agents.remove(self)
     
-    def move(self, time:int):
+    def move(self, time:int, simulation=None):
         if (not self.checkpoints):
             return
 
@@ -161,19 +162,53 @@ class Agent:
 
         if (current_checkpoint.mode == 'walk'):
             self.daily_rides['walking'] = self.daily_rides.get('walking', 0) + 1
-
-            self.current_node.agents.remove(self)
-            self.current_node = None
             
-            if (current_checkpoint.start_node == current_checkpoint.end_node):
+            if (current_checkpoint.start_node == current_checkpoint.end_node or current_checkpoint.start_node.id[0] != current_checkpoint.end_node.id[0]):
                 walking_time = 40
+                manager.emit(time + walking_time, manager.Event(manager.AGENT_ARRIVAL, self))
             else:
-                total_distance = sum(edge.distance for edge in shortest_edge_path(current_checkpoint.start_node.id, current_checkpoint.end_node.id, self.city, self.railway))
-                walking_time = math.ceil(total_distance / 2)  # Assuming walking speed is 1 unit per time
+                self.path = shortest_edge_path(current_checkpoint.start_node.id, current_checkpoint.end_node.id, self.city, self.railway)
+                if (not self.path):
+                    simulation.agents.remove(self)
+                    return
+                self.walk(time)
             self.set_state('travelling')
-            manager.emit(time + walking_time + config.get("TIME_STEP", 2), manager.Event(manager.AGENT_ARRIVAL, self))
+            
         elif (current_checkpoint.mode == 'ride'):
             self.set_state('waiting')
+
+    def update_position(self, time:int):
+        if (not self.current_edge):
+            return self.current_node.pos
+    
+        travel_time = math.ceil(self.current_edge.distance / 2)  # Assuming walking speed is 1 unit per time
+        time_elapsed = time - self.start_time
+        if (time_elapsed >= travel_time):
+            return self.current_edge.get_adjacent_node(self.current_node).pos
+        else:
+            start_pos = self.current_node.pos
+            end_pos = self.current_edge.get_adjacent_node(self.current_node).pos
+            progress_ratio = time_elapsed / travel_time
+            new_x = start_pos[0] + (end_pos[0] - start_pos[0]) * progress_ratio
+            new_y = start_pos[1] + (end_pos[1] - start_pos[1]) * progress_ratio
+            return (new_x, new_y)
+
+    def walk(self, time:int):
+        if (self.current_edge):
+            self.current_node = self.current_edge.get_adjacent_node(self.current_node)
+        self.current_edge = self.path.pop(0)
+        walking_time = math.ceil(self.current_edge.distance / 2)  # Assuming walking speed is 1 unit per time
+        if (not self.path):
+            event = manager.Event(manager.AGENT_ARRIVAL, self)
+        else:
+            event = manager.Event(manager.AGENT_WALK, self)
+        self.start_time = time
+        manager.emit(time + walking_time, event)
+    
+    def draw(self, window, camera, time:int):
+        if (self.state == 'travelling' and self.current_edge and self.path):
+            pos = self.update_position(time)
+            pg.draw.circle(window, (200, 200, 200), camera.to_screen(pos), 5)
 
 
 def handle_agent_events(event:manager.Event, time:int, simulation):
@@ -182,5 +217,9 @@ def handle_agent_events(event:manager.Event, time:int, simulation):
         LOGGER.debug(f"Handling agent arrival for {len(agents)} agents at time {time}.")
         for agent in agents:
             agent.arrival(time, simulation=simulation)
+    elif (event.type == manager.AGENT_WALK):
+        LOGGER.debug(f"Handling agent walk for {len(agents)} agents at time {time}.")
+        for agent in agents:
+            agent.walk(time)
     elif (event.type == manager.AGENT_SPAWN):
         pass
