@@ -15,7 +15,7 @@ class Route:
     spawn_time:int
     ordered_nodes:list[Node]
     transportations:list['RoutedTransportation']
-    expected_speed:int = 12
+    expected_speed:int = 5
     capacity_ratio:int = 1
     
 
@@ -90,14 +90,14 @@ class BusRoute(Route):
 
 
 class TrainRoute(Route):
-    expected_speed:int = 600
+    expected_speed:int = 10
 
     def __init__(self, spawn_node:Node, path:list[Edge], graph:Graph, spawn_time:int, peak_spawn:int):
         super().__init__(spawn_node, path, graph, spawn_time, peak_spawn)
 
     def generate_transportation(self, current_time) -> list['RoutedTransportation']:
         absolute_max = 1200
-        hour_of_day = (current_time // 60) % 24
+        hour_of_day = (current_time // 3600) % 24
         if 7 <= hour_of_day <= 9 or 17 <= hour_of_day <= 19:
             external_load_percentage = random.uniform(0.80, 0.95)
         else:

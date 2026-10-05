@@ -84,7 +84,7 @@ def shortest_path(start_node:Node, end_node:Node, routes:list[Route]) -> list[tu
     open_set = []
     heapq.heappush(open_set, State(start_node, 0, None, None))
 
-    TRANSFER_PENALTY = 5.0
+    TRANSFER_PENALTY = 120
 
     visited = {}
 
@@ -112,7 +112,7 @@ def shortest_path(start_node:Node, end_node:Node, routes:list[Route]) -> list[tu
             # 1. Walk to neighbors
             for edge in current_node.edges:
                 neighbor_node = edge.get_adjacent_node(current_node)
-                walk_cost = edge.distance / 75
+                walk_cost = edge.distance / 2
                 heapq.heappush(open_set, State(neighbor_node, current_state.cost + walk_cost, None, current_state))
                 
             # 2. Board available routes at this node

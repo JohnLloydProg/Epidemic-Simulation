@@ -104,7 +104,7 @@ class Agent:
             if (self.current_node not in path[0].nodes or self.destination_node not in path[-1].nodes):
                 raise ValueError(f"Invalid path: {[(edge.nodes[0].id, edge.nodes[1].id) for edge in path]} for current node {self.current_node.id} and destination node {self.destination_node.id}.")
             
-            transport = Transportation(method='private', speed=500, current_node=self.current_node, path=list(path))
+            transport = Transportation(method='private', speed=7, current_node=self.current_node, path=list(path))
             self.ride_transportation(transport, time)
             self.set_state('travelling')
             transport.transport(time)
@@ -166,10 +166,10 @@ class Agent:
             self.current_node = None
             
             if (current_checkpoint.start_node == current_checkpoint.end_node):
-                walking_time = 5
+                walking_time = 40
             else:
                 total_distance = sum(edge.distance for edge in shortest_edge_path(current_checkpoint.start_node.id, current_checkpoint.end_node.id, self.city, self.railway))
-                walking_time = math.ceil(total_distance / 5)  # Assuming walking speed is 1 unit per time
+                walking_time = math.ceil(total_distance / 2)  # Assuming walking speed is 1 unit per time
             self.set_state('travelling')
             manager.emit(time + walking_time + config.get("TIME_STEP", 2), manager.Event(manager.AGENT_ARRIVAL, self))
         elif (current_checkpoint.mode == 'ride'):
