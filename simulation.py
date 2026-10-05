@@ -1,18 +1,13 @@
 from dotenv import load_dotenv
 load_dotenv()
 import configuration as config
-from objects import Disease, Status
-from multiprocessing import Process
 from graphing.mapping import load_graph
 from graphing.graph import RegionGraph
-from agents.agent import AGE_RANGE_DISTRIBUTION, Agent, WorkingAgent, next_occurrence_of_hour, handle_agent_events
-from agents.core import WEEKEND_FIRMS, RETAIL_TYPE_INDUSTRIES
+from agents.agent import Agent, handle_agent_events
 from transport.transportation import Transportation, RoutedTransportation, handle_route_events, handle_transportation_events, BusRoute, JeepRoute, TrainRoute
-from interventions import handle_policy_events
 from routing_table import build_routing_cache
 from time import time_ns
 from datetime import datetime
-import interventions
 import manager
 import random
 import pygame as pg
@@ -29,27 +24,6 @@ from firebase_admin import firestore
 
 LOGGER = logging.getLogger('Simulation')
 
-def daily_work(agents:list[WorkingAgent], quarantine:float,  curfew:dict, time:int) -> set[int]:
-    will_work = set()
-    for agent in agents:
-        isolate = (agent.isolate and random.random() < quarantine)
-        dead = agent.SEIR_compartment == 'D'
-        out_curfew = shift_conflicts_with_curfew(agent.working_hours[0], agent.working_hours[1], curfew)
-        if (dead or isolate or out_curfew):
-            continue
-        agent.clocked_in = False
-        agent.finished_work = False
-        work_event = manager.Event(manager.AGENT_GO_WORK, agent)
-        manager.emit(next_occurrence_of_hour(time, agent.working_hours[0] - random.gauss(1, 0.5)), work_event)
-        will_work.add(agent.id)
-    return will_work
-
-def generate_status(agents:list[Agent], time:int, active_cases:list[tuple[int, int]]) -> Status:
-    seir = {compartment:0 for compartment in Simulation.compartments}
-    for agent in agents:
-        seir[agent.SEIR_compartment] += 1
-    status = Status(time, seir, active_cases)
-    return status
 
 def get_agent_states(agents:list[Agent]) -> dict[str, int]:
     states = {}
@@ -75,126 +49,31 @@ def get_transport_count(transportations:list[RoutedTransportation]):
         transport_types[transport.method] = transport_types.get(transport.method, 0) + 1
     return transport_types
 
-def get_daily_ridership(agents:list[Agent]) -> dict[str, int]:
-    """Aggregates cumulative daily trip counts per transportation type (e.g. 'jeep', 'bus', 'rail', 'private', 'walking')."""
-    totals = {}
-    for agent in agents:
-        for mode, count in getattr(agent, 'daily_rides', {}).items():
-            totals[mode] = totals.get(mode, 0) + count
-    return totals
-
-def get_average_trip_distance(agents:list[Agent]) -> float:
-    """Average per-agent trip distance traveled for the day."""
-    if (not agents):
-        return 0
-    total_distance = sum(getattr(agent, 'daily_distance', 0) for agent in agents)
-    return round(total_distance / len(agents), 2)
-
-def get_average_trip_distance_by_work_status(agents:list[Agent]) -> tuple[float, float]:
-    """Average per-agent daily trip distance, split into working (WorkingAgent) vs non-working agents."""
-    working_agents = [agent for agent in agents if isinstance(agent, WorkingAgent)]
-    non_working_agents = [agent for agent in agents if not isinstance(agent, WorkingAgent)]
-    return get_average_trip_distance(working_agents), get_average_trip_distance(non_working_agents)
-
-def reset_daily_agent_metrics(agents:list[Agent]):
-    """Resets per-agent daily trip trackers for the next day."""
-    for agent in agents:
-        agent.daily_trips = 0
-        agent.daily_distance = 0
-        agent.daily_rides = {}
-
-def segment_node_arrivals(node_arrivals:dict, chunk_size:int=200) -> dict[str, str]:
-    """Splits a Node_Arrivals dict into multiple smaller JSON-stringified fields
-    (Node_Arrivals_0, Node_Arrivals_1, ...) instead of one single large string,
-    so no individual field's payload grows unbounded with the number of distinct nodes tallied."""
-    items = list(node_arrivals.items())
-    segments = {}
-    for i in range(0, len(items), chunk_size):
-        chunk_items = items[i:i + chunk_size]
-        chunk_dict = {str(node_id): count for node_id, count in chunk_items}
-        segments[f"Node_Arrivals_{i // chunk_size}"] = json.dumps(chunk_dict)
-    return segments
-
-def _split_wrapping_interval(start: float, end: float) -> list[tuple[float, float]]:
-    if start <= end:
-        return [(start, end)]
-    return [(start, 24), (0, end)]
-
-def shift_conflicts_with_curfew(work_start: float, work_end: float, curfew: dict) -> bool:
-    if not curfew:
-        return False
-
-    curfew_start = curfew.get('start_hour')
-    curfew_end = curfew.get('end_hour')
-    if curfew_start is None or curfew_end is None:
-        return False
-
-    work_segments = _split_wrapping_interval(work_start, work_end)
-    curfew_segments = _split_wrapping_interval(curfew_start, curfew_end)
-
-    for w_start, w_end in work_segments:
-        for c_start, c_end in curfew_segments:
-            if w_start < c_end and c_start < w_end:
-                return True
-    return False
-
 
 class Simulation:
-    compartments = ['S', 'E', 'I', 'R', 'D']
     layer = 'city'
     agents:list[Agent]
-    working_agents:list[WorkingAgent]
     transportations:list[Transportation]
     graph:RegionGraph
     clock:pg.time.Clock
     window:pg.Surface
     font:pg.font.Font
     routing_table:dict[tuple, list]
-    active_cases:list[tuple[int, int]]
-    designated_persons = 0
-    no_per_compartment:dict
-    simulation_multiplier = 25
+    simulation_multiplier = 5
     simulation_ns_per_time_unit = (10**9)//simulation_multiplier
-    max_travel_distance = None
-    company_capacity_compliance = 0.85
-    transpo_capacity_compliance = 0.7
-    mask_compliance = 0.8
-    distance_compliance = 0.7
-    essential_only_ratio = 0.0
-    quarantine = 0
-    peak_hour:bool = False
-    curfew:dict[str, int] = {}
     step_counter = 0
-    movement_policy_active_count = 0
 
-    def __init__(self, headless=True):
+    def __init__(self):
         logging.basicConfig(handlers=[logging.FileHandler("logfile.txt", 'w'), logging.StreamHandler(sys.stdout)], 
                             level=logging.DEBUG if os.environ.get('DEBUG', 'False') == 'True' else logging.INFO)
-        LOGGER.info(f'Initializing simulation with headless = {headless}...')
         config.init()
         manager.init()
         
         """Initialize simulation parameters"""
-        self.disease = Disease()
         self.time_step = config.get('TIME_STEP', 2)
-        self.duration = config.get('DURATION')
-        self.no_per_compartment = config.get('SEIR_COUNT', {'I':4})
         self.agents = []
-        self.working_agents = []
         self.transportations = []
-        self.headless = headless
         self.active_cases = []
-        self.collection_id = config.get("COLLECTION_ID")
-        self.simulation_id = str(uuid.uuid4())
-
-        """Daily aggregate trackers (reset each logged day)"""
-        self.hourly_trip_counts = [0] * 24
-        self.node_arrivals = {}
-        self.new_infections_today = 0
-
-        """Firestore document chunking (a single document is capped at 1 MiB)"""
-        self.firestore_chunk_index = 0
-        self.firestore_chunk_bytes = 0
 
         """Load environment and initialize route spawning events"""
         environment = load_graph()
@@ -203,188 +82,30 @@ class Simulation:
         self.routes = environment[2]
         for route in self.routes:
             manager.emit(3, manager.Event(manager.TRANSPORTATION_SPAWN, route))
-        
-        """Loading planned policies to implement"""
-        pickled_policies:list[dict] = config.get('SCHEDULED_POLICIES', [])
-        for pickled_policy in pickled_policies:
-            policy = self.load_policy(pickled_policy)
-            manager.emit(policy.start_time, manager.Event(manager.IMPLEMENT_POLICY, policy))
 
         """Build routing cache for agents"""
-        establishment = self.graph.get_firms()
-        establishment.extend(self.graph.get_households())
-        self.routing_table = build_routing_cache(establishment, self.graph, self.railway_graph, self.routes)
+        nodes = list(self.graph.nodes.values())
+        self.routing_table = build_routing_cache(nodes, self.graph, self.railway_graph, self.routes)
 
-        """Generate agents"""
-        self.generate_agents()
         LOGGER.info(f'Simulation initialized with {len(self.agents)} agents.')
         
         """Mainly for visualization purposes"""
-        if (not headless):
-            pg.init()
-            self.clock = pg.time.Clock()
-            self.window = pg.display.set_mode((1080, 720))
-            self.font = pg.font.Font(None, 15)
+        pg.init()
+        self.clock = pg.time.Clock()
+        self.window = pg.display.set_mode((1080, 720))
+        self.font = pg.font.Font(None, 15)
+        self.railway_graph.camera = self.graph.camera   # one shared view for both layers
+        all_nodes = list(self.graph.nodes.values()) + list(self.railway_graph.nodes.values())
+        self.graph.camera.fit([node.pos for node in all_nodes], self.window.get_size())
         
         self.run()
-    
-    def generate_agents(self):
-        """Generate agents based on households"""
-        LOGGER.info('generating agents...')
-        for household in self.graph.get_households():
-            for _ in range(household.resident_count):
-                age_range = random.choices(list(AGE_RANGE_DISTRIBUTION.keys()), weights=list(AGE_RANGE_DISTRIBUTION.values()))[0]
-                age = random.randint(age_range[0], age_range[1])
-                if (random.random() < 0.947 and age >= 23 and age <= 65):
-                    work_range = random.choices([(8, 17), (20, 5), (15, 23), (10, 19), (13, 22)], weights=[0.6, 0.075, 0.075, 0.125, 0.125])[0]
-                    agent = WorkingAgent(age, self.graph, self.railway_graph, household, work_range)
-                    self.working_agents.append(agent)
-                else:
-                    agent = Agent(age, self.graph, self.railway_graph, household)
-                household.resident_agents.append(agent)
-                self.agents.append(agent)
-        
-        """Assign firms to agents"""
-        LOGGER.info('assigning firms to agents...')
-        firms = self.graph.get_firms()
-        for agent in self.working_agents:
-            firm = random.choice(firms)
-            tries = 0
-            while (len(firm.resident_agents) >= firm.max_workers):
-                firm = random.choice(firms)
-                tries += 1
-            agent.firm = firm
-            if (firm.industry in WEEKEND_FIRMS):
-                agent.weekend_worker = random.random() < 0.4
-                if (agent.weekend_worker):
-                    agent.day_offs.extend(random.sample(list(range(5)), k=2))
-            firm.resident_agents.append(agent)
-            if (not agent.weekend_worker):
-                for i in range(5):
-                    firm.day_workers[i].append(agent)
-            else:
-                for i in range(7):
-                    if (i not in agent.day_offs):
-                        firm.day_workers[i].append(agent)
-        
-        """Firm occupancy ratios"""
-        occupany_ratios = []
-        for firm in firms:
-            occupany_ratios.append((len(firm.resident_agents) / firm.max_workers) * 100)
-        LOGGER.info(f'Firm occupancy ratios: min={min(occupany_ratios)}%, max={max(occupany_ratios)}%, avg={sum(occupany_ratios)/len(occupany_ratios)}%, std={math.sqrt(sum((x - (sum(occupany_ratios)/len(occupany_ratios)))**2 for x in occupany_ratios)/len(occupany_ratios))}%')
-
-        """Assign initial SEIR compartments to agents. Assignment here is done randomly"""
-        LOGGER.info('assigning initial infections...')
-        assigned = set()
-        for compartment in self.compartments:
-            if (compartment in {'E', 'I'}):
-                un_assigned_agents = list(filter(lambda agent: agent.id not in assigned, self.working_agents))
-            else:
-                un_assigned_agents = list(filter(lambda agent: agent.id not in assigned, self.agents))
-            if (len(un_assigned_agents) == 0):
-                continue
-            agents = random.sample(un_assigned_agents, self.no_per_compartment.get(compartment, 0))
-            for agent in agents:
-                stagger_window = config.get('SEED_STAGGER_WINDOW_HOURS', 0) * 60  # minutes; defaults to 0 = old instant-seed behavior
-
-                if (compartment == 'I'):
-                    stagger_time = random.randint(0, stagger_window) if stagger_window > 0 else 0
-                    manager.emit(stagger_time, manager.Event(manager.SEED_TO_I, agent))
-                elif (compartment == 'E'):
-                    stagger_time = random.randint(0, stagger_window) if stagger_window > 0 else 0
-                    manager.emit(stagger_time, manager.Event(manager.SEED_TO_E, agent))
-                elif (compartment == "R" and random.random() < self.disease.waning_immunity_probability):
-                    agent.SEIR_compartment = compartment
-                    max_waning_period = math.ceil(self.disease.sample_waning_immunity_duration())
-                    if config.get('IS_EPOCH_RESTART', False):
-                        waning_elapsed_floor = config.get('WANING_IMMUNITY_ELAPSED_FLOOR_MINUTES', max_waning_period + 1)
-                        range_start = max_waning_period - waning_elapsed_floor
-                        if range_start < 1:
-                            duration = 1
-                        else:
-                            duration = random.randrange(range_start, max_waning_period, 30) if max_waning_period > 1 else 1
-                    else:
-                        duration = max_waning_period
-                    immunity_loss_event = manager.Event(manager.AGENT_IMMUNITY_LOSS, agent)
-                    manager.emit(duration, immunity_loss_event)
-                else:
-                    agent.SEIR_compartment = compartment
-                assigned.add(agent.id)
-
-    def get_valid_hours(self):
-        default_start, default_end = 10, 15
-        curfew_start = self.curfew.get('start_hour', 24)
-        curfew_end = self.curfew.get('end_hour', 0)
-
-        valid_start_hour = default_start
-        valid_end_hour = default_end
-
-        if curfew_start <= curfew_end:
-            valid_start_hour = max(valid_start_hour, curfew_end + 1)
-            valid_end_hour = min(valid_end_hour, curfew_start - 1)
-        else:
-            if curfew_end >= valid_start_hour:
-                valid_start_hour = curfew_end + 1
-            if curfew_start <= valid_end_hour:
-                valid_end_hour = curfew_start - 1
-
-        if valid_start_hour >= valid_end_hour:
-            valid_start_hour, valid_end_hour = default_start, default_start + 1
-        return (valid_start_hour, valid_end_hour)
-    
-    def load_policy(self, pickled_policy:dict) -> interventions.Policy:
-        policy_type = pickled_policy['type']
-        params:dict = pickled_policy['params']
-
-        if ('routes' in params):
-            if (params['routes'] == 'bus'):
-                params['routes'] = [route for route in self.routes if (isinstance(route, BusRoute))]
-            elif (params['routes'] == 'jeep'):
-                params['routes'] = [route for route in self.routes if (isinstance(route, JeepRoute))]
-            elif (params['routes'] == 'train'):
-                params['routes'] = [route for route in self.routes if (isinstance(route, TrainRoute))]
-            elif (params['routes'] == 'all'):
-                params['routes'] = self.routes
-        if ('firms' in params):
-            param:str|int = params['firms']
-            if (param == 'all'):
-                params['firms'] = self.graph.get_firms()
-            elif (isinstance(param, int)):
-                params['firms'] = [firm for firm in self.graph.get_firms() if (firm.industry[1] == param)]
-            elif (isinstance(param, str)):
-                params['firms'] = [firm for firm in self.graph.get_firms() if (firm.industry[0] == param)]
-            else:
-                raise ValueError('Passed parameter for firms in config is invalid!')
-
-        _cls = interventions.POLICY_CLASS_MAPPING[policy_type]
-        policy = _cls(**params)
-        return policy
 
     def handle_events(self, time:int):
-        self.step_counter += 1
-
-        """Tick-based events"""
-        if (self.step_counter == 2):
-            for transportation in self.transportations:
-                for agent in transportation.agents:
-                    if (agent.state != 'travelling'):
-                        continue
-
-                    agent.check_for_infection(
-                        self.disease.sample_infection_transport_CPC(),
-                        self.disease.sample_incubation_period(),
-                        transportation.get_contact_rate(), 
-                        transportation.get_infected_density(),
-                        (2 * self.time_step)/10, time
-                        )
-            self.step_counter = 0
-
         """Event based handling"""
         for event in manager.get(time):
             handle_agent_events(event, time, self)
             handle_transportation_events(event, time, self)
             handle_route_events(event, time, self)
-            handle_policy_events(self, event, time)
     
     def run(self):
         time = 0
@@ -396,260 +117,87 @@ class Simulation:
         running = True
         states = get_agent_states(self.agents)
 
-        last_logged_day = None 
-
-        FIRESTORE_CHUNK_SIZE_LIMIT = 900_000  # bytes; safety margin under Firestore's 1 MiB (1,048,576 byte) per-document cap
-
-        def log_data_to_firestore(day, seir_data, trips_per_transpo, average_trip_distance, non_working_avg_distance, trips_per_hour, node_arrivals, new_infections):
-            global running
-            try:
-                total_population = sum(seir_data.values())
-                day_payload = {
-                    **seir_data,
-                    "Total": total_population,
-                    "Total Trips per Transpo": json.dumps(trips_per_transpo),
-                    "Average Trip Distance": average_trip_distance,
-                    "Non_Working_Average_Trip_Distance": non_working_avg_distance,
-                    "Trips per hr": json.dumps(trips_per_hour),
-                    "New_Infections": new_infections,
-                }
-                if (node_arrivals):
-                    day_payload.update(segment_node_arrivals(node_arrivals))
-
-                payload_size = len(json.dumps(day_payload, default=str).encode('utf-8'))
-                if (self.firestore_chunk_bytes + payload_size > FIRESTORE_CHUNK_SIZE_LIMIT):
-                    self.firestore_chunk_index += 1
-                    self.firestore_chunk_bytes = 0
-                    LOGGER.info(f"Firestore document nearing size cap, starting chunk {self.firestore_chunk_index}.")
-
-                chunk_doc_id = self.simulation_id if self.firestore_chunk_index == 0 else f"{self.simulation_id}_{self.firestore_chunk_index}"
-                doc_ref = db.collection(self.collection_id).document(chunk_doc_id)
-                doc_ref.set({str(day): day_payload}, merge=True)
-                self.firestore_chunk_bytes += payload_size
-            except Exception as e:
-                LOGGER.error(f"Firestore Sync Error: {e}")
-                running = False
-
         LOGGER.info('Starting simulation...')
-        while ((time // (60 * 24) < self.duration) and running):
-            minute = time % 60
-            hour = (time // 60) % 24
-            day = time // (60 * 24)
+        while (running):
+            second = time % 60
+            minute = (time // 60) % 60
+            hour = (time // 3600) % 24
+            day = time // (3600 * 24)
             time_record = time_ns()
             self.peak_hour = (9 >= hour >= 6) or (20 >= hour >= 17)
-            
-            # --- FIRESTORE LOGGING ---
-            if hour == 23 and minute == (60 - self.time_step) and last_logged_day != str(day):
-                last_logged_day = str(day)
-                actual_log_time = (day * 24 * 60) + (hour * 60) + minute 
-                current_status = generate_status(self.agents, actual_log_time, self.active_cases)
-                
-                trips_per_transpo = get_daily_ridership(self.agents)
-                average_trip_distance = get_average_trip_distance(self.agents)
-                _, non_working_avg_distance = get_average_trip_distance_by_work_status(self.agents)
-                trips_per_hour = list(self.hourly_trip_counts)
 
-                log_data_to_firestore(day, current_status.SEIR_compartments,
-                                       trips_per_transpo, average_trip_distance, non_working_avg_distance,
-                                       trips_per_hour, self.node_arrivals, self.new_infections_today)
-                LOGGER.debug(f"\nLogged Day {day} to Firestore.")
-                
-                # Reset for the next day
-                reset_daily_agent_metrics(self.agents)
-                self.hourly_trip_counts = [0] * 24
-                self.node_arrivals = {}
-                self.new_infections_today = 0
-
-            """Routine every 30 minutes"""
-            if (minute == 0 or minute == 30):
-                for household in self.graph.get_households():
-                    if (not household.susceptible_agents or household.no_infected_agents == 0):
-                        continue
-
-                    for agent in list(household.susceptible_agents):
-                        if (agent.state != 'home'):
-                            household.remove_agent(agent)
-                            continue
-
-                        agent.check_for_infection(
-                            self.disease.sample_infection_household_CPC(),
-                            self.disease.sample_incubation_period(),
-                            household.contact_rate(), 
-                            household.infected_density(),
-                            0.5, time
-                            )
-
-                for firm in self.graph.get_firms():
-                    if (not firm.susceptible_agents or firm.no_infected_agents == 0):
-                        continue
-
-                    if (firm.industry[0] in RETAIL_TYPE_INDUSTRIES):
-                        chance_per_contact = self.disease.sample_infection_firm_retail_CPC()
+            for event in pg.event.get():
+                if (event.type == pg.QUIT):
+                    running = False
+                    return
+                elif (event.type == pg.KEYDOWN):
+                    if (event.key == pg.K_UP and self.simulation_multiplier < 30):
+                        self.simulation_multiplier += 1
+                    elif (event.key == pg.K_DOWN and self.simulation_multiplier > 1):
+                        self.simulation_multiplier -= 1
+                    self.simulation_ns_per_time_unit = (10**9)//self.simulation_multiplier
+                elif (event.type == pg.MOUSEBUTTONDOWN and event.button == 3):
+                    nodes = list(filter(lambda n: n.edges, self.graph.nodes.values()))
+                    agent = Agent(self.graph, self.railway_graph, random.choice(nodes), random.choice(nodes))
+                    self.agents.append(agent)
+                    if (agent.commuting):
+                        agent.set_checkpoints(self.routing_table, self.routes, time, self)
                     else:
-                        chance_per_contact = self.disease.sample_infection_firm_work_CPC()
+                        agent.set_path(time, self)
+                    print("Generating an agent")
 
-                    for agent in list(firm.susceptible_agents):
-                        if (agent.state not in {'working', 'consuming'}):
-                            firm.remove_agent(agent)
-                            continue
+                self.graph.camera.handle_event(event)
 
-                        agent.check_for_infection(
-                            chance_per_contact,
-                            self.disease.sample_incubation_period(),
-                            firm.contact_rate(), 
-                            firm.infected_density(),
-                            0.5, time
-                            )
-
-            # --- DAILY ROUTINE ---
-            if (hour == 0 and minute == 0):
-                status = generate_status(self.agents, time, self.active_cases)
-                self.active_cases.append((day, status.SEIR_compartments['I']))
-                day_delta = round((time_ns() - simulation_day_time) / (10**9), 2)
-                
-                LOGGER.info(f"Day {day}/{self.duration} completed in {day_delta} seconds.")
-                simulation_day_time = time_ns()
-                
-                will_work:set[int] = set()
-                for firm in self.graph.get_firms():
-                    if (not firm.essential and random.random() < self.essential_only_ratio):
-                        continue
-                    
-                    in_schedule = list(firm.day_workers[day % 7])
-                    agents = random.sample(in_schedule, min(len(in_schedule), firm.max_workers))
-                    will_work.update(daily_work(agents, self.quarantine, self.curfew, time))
-
-                for household in self.graph.get_households():
-                    has_symptomatic = any([agent.symptomatic and agent.SEIR_compartment != "D"  for agent in household.resident_agents])
-                    for agent in household.resident_agents:
-                        if (has_symptomatic):
-                            masked_multiplier = random.uniform(0.5, 0.7) if (agent.masked and random.random() < self.mask_compliance) else 1
-                            asymptomatic_multiplier = 1 if agent.symptomatic else random.uniform(0.4, 0.6)
-                            agent.infection_multiplier = masked_multiplier * asymptomatic_multiplier
-                        else:
-                            agent.infection_multiplier = 1 if agent.symptomatic else random.uniform(0.4, 0.6)
-
-                        
-                
-                valid_start_hour, valid_end_hour = self.get_valid_hours()
-                if (self.designated_persons):
-                    for house in self.graph.get_households():
-                        agents = [agent for agent in house.resident_agents if (not agent.isolate and 65 >= agent.age >= 4 and agent.SEIR_compartment != 'D')]
-                        if (not agents):
-                            agents = [agent for agent in house.resident_agents if (65 >= agent.age >= 4 and agent.SEIR_compartment != 'D')]
-                        if (not agents):
-                            continue
-
-                        designated_agent = random.choice(agents)
-                        designated_group = [designated_agent]
-
-                        for agent in agents:
-                            if (agent == designated_agent):
-                                continue
-
-                            if (random.random() > self.designated_persons):
-                                designated_group.append(agent)
-
-                        chance_to_consume = 0.3 if (day % 7) < 5 else 0.6
-                        for designated in designated_group:
-                            if (random.random() < chance_to_consume):
-                                if (isinstance(designated, WorkingAgent) and designated.id in will_work):
-                                    designated.errand_run = True
-                                    continue
-
-                                hour = random.randrange(valid_start_hour, valid_end_hour)
-                                manager.emit(next_occurrence_of_hour(time, hour), manager.Event(manager.AGENT_GO_SHOPPING, designated))
-                else:
-                    chance_to_consume = 0.3 if (day % 7) < 5 else 0.6
-                    for agent in self.agents:
-                        isolate = (agent.isolate and random.random() < self.quarantine)
-                        if (random.random() < chance_to_consume and 65 >= agent.age >= 4 and agent.SEIR_compartment != 'D' and not isolate):
-                            if (isinstance(agent, WorkingAgent) and agent.id in will_work):
-                                agent.errand_run = True
-                                continue
-
-                            hour = random.randrange(valid_start_hour, valid_end_hour)
-                            manager.emit(next_occurrence_of_hour(time, hour), manager.Event(manager.AGENT_GO_SHOPPING, agent))
-            
-            seed_stagger_minutes = config.get('SEED_STAGGER_WINDOW_HOURS', 0) * 60
-
-            if (time > seed_stagger_minutes and status.SEIR_compartments['I'] == 0 and status.SEIR_compartments['E'] == 0):
-                running = False
-
-            if (not self.headless):
-                """Pygame event handling"""
-                for event in pg.event.get():
-                    if (event.type == pg.QUIT):
-                        running = False
-                        return
-                    elif (event.type == pg.KEYDOWN):
-                        if (event.key == pg.K_p and status):
-                            Process(None, status.display_report).start()
-                        elif (event.key == pg.K_UP and self.simulation_multiplier < 30):
-                            self.simulation_multiplier += 1
-                        elif (event.key == pg.K_DOWN and self.simulation_multiplier > 1):
-                            self.simulation_multiplier -= 1
-                        self.simulation_ns_per_time_unit = (10**9)//self.simulation_multiplier
-                            
-                    self.graph.map_dragging(event)
-
-                """Handle events and update agent states"""
-                if (time_ns() - simultation_time >= self.simulation_ns_per_time_unit):
-                    self.handle_events(time)
-                    states = get_agent_states(self.agents)
-
-                    travel_modes = get_travelling_mode(self.agents)
-                    simultation_time = time_ns()
-                    delta = (time_ns() - time_record) / (10**6)
-                    time += self.time_step
-                
-                """Visualization and metrics. Here the drawing is done."""
-                if (time_ns() - draw_time >= (10**9)//60):
-                    draw_time = time_ns()
-                    self.window.fill((255, 255, 255))
-                    self.graph.draw(self.window, self.font,  self.layer)
-                    
-                    routes = sorted(self.routes, key=lambda route:route.get_average_occupancy(), reverse=True)
-                    for route in routes:
-                        route.draw(self.window, self.graph)
-                    
-                    text = self.font.render(f"time: {time} (Day {day} {hour}:{minute}) {self.simulation_multiplier}x {round(delta, 2)}ms per step {len(manager._events.values())} events", False, (0, 0, 0))
-                    
-                    state_text = ''
-                    for state in ['home', 'travelling', 'waiting', 'working', 'consuming']:
-                        state_text += f'{state}: {states.get(state, 0)}, '
-                    states_text = self.font.render(f"States: {state_text}", False, (0, 0, 0))
-                    
-                    travel_text = self.font.render(f"Travel modes: {travel_modes}", False, (0, 0, 0))
-                    occupancies:dict[str, list] = {}
-                    for transpo in self.transportations:
-                        if (transpo.method in occupancies):
-                            occupancies[transpo.method].append(transpo.occupancy())
-                        else:
-                            occupancies[transpo.method] = [transpo.occupancy()]
-                    metric_text = self.font.render(f"Transportation Used: {len(self.transportations)}, avg. occupancy: {[(method, round(max(occupancy), 2))for method, occupancy in occupancies.items()]}", False, (0, 0, 0))
-                    available_transports = self.font.render(f"Live Transportation: {get_transport_count(self.transportations)}", False, (0, 0, 0))
-                    
-                    self.window.blit(states_text, states_text.get_rect(topleft=(20, 40)))
-                    self.window.blit(travel_text, travel_text.get_rect(topleft=(20, 60)))
-                    self.window.blit(available_transports, available_transports.get_rect(topleft=(20, 80)))
-                    pg.draw.circle(self.window, (0, 255, 0), pg.mouse.get_pos(), 5)
-                    self.window.blit(metric_text, metric_text.get_rect(topleft=(20, 20)))
-                    self.window.blit(text, text.get_rect(topright=(1060, 20)))
-
-                    pg.display.update()
-
-            else:
+            """Handle events and update agent states"""
+            if (time_ns() - simultation_time >= self.simulation_ns_per_time_unit):
                 self.handle_events(time)
+                states = get_agent_states(self.agents)
+
+                travel_modes = get_travelling_mode(self.agents)
+                simultation_time = time_ns()
+                delta = (time_ns() - time_record) / (10**6)
                 time += self.time_step
+            
+            """Visualization and metrics. Here the drawing is done."""
+            if (time_ns() - draw_time >= (10**9)//60):
+                draw_time = time_ns()
+                self.window.fill((255, 255, 255))
+                self.graph.draw(self.window, self.font,  self.layer)
+                
+                routes = sorted(self.routes, key=lambda route:route.get_average_occupancy(), reverse=True)
+                for route in routes:
+                    route.draw(self.window, self.graph)
+                
+                text = self.font.render(f"time: {time} (Day {day} {str(hour).zfill(2)}:{str(minute).zfill(2)}:{str(second).zfill(2)}) {self.simulation_multiplier}x {round(delta, 2)}ms per step {len(manager._events.values())} events", False, (0, 0, 0))
+                
+                state_text = ''
+                for state in ['home', 'travelling', 'waiting', 'working', 'consuming']:
+                    state_text += f'{state}: {states.get(state, 0)}, '
+                states_text = self.font.render(f"States: {state_text}", False, (0, 0, 0))
+                
+                travel_text = self.font.render(f"Travel modes: {travel_modes}", False, (0, 0, 0))
+                occupancies:dict[str, list] = {}
+                for transpo in self.transportations:
+                    if (transpo.method in occupancies):
+                        occupancies[transpo.method].append(transpo.occupancy())
+                    else:
+                        occupancies[transpo.method] = [transpo.occupancy()]
+                    if (isinstance(transpo, RoutedTransportation)):
+                        transpo.draw(self.window, self.graph.camera, time)
+                metric_text = self.font.render(f"Transportation Used: {len(self.transportations)}, avg. occupancy: {[(method, round(max(occupancy), 2))for method, occupancy in occupancies.items()]}", False, (0, 0, 0))
+                available_transports = self.font.render(f"Live Transportation: {get_transport_count(self.transportations)}", False, (0, 0, 0))
+                
+                self.window.blit(states_text, states_text.get_rect(topleft=(20, 40)))
+                self.window.blit(travel_text, travel_text.get_rect(topleft=(20, 60)))
+                self.window.blit(available_transports, available_transports.get_rect(topleft=(20, 80)))
+                pg.draw.circle(self.window, (0, 255, 0), pg.mouse.get_pos(), 5)
+                self.window.blit(metric_text, metric_text.get_rect(topleft=(20, 20)))
+                self.window.blit(text, text.get_rect(topright=(1060, 20)))
+
+                pg.display.update()
     
 
 if __name__ == '__main__':
-    cert_path = f'/firebase_cred/{os.environ['CERT_FILE_NAME']}' if (os.environ.get('CLOUD', 'False') == 'True') else os.environ['CERT_FILE_NAME']
-    cred = credentials.Certificate(cert_path)
-    firebase_admin.initialize_app(cred)
-    db = firestore.client()
-    
     LOGGER.info(f"Simulation Start: {datetime.now().isoformat()}")
-    Simulation(os.environ.get('HEADLESS', 'True') == 'True')
+    Simulation()
     LOGGER.info(f"Simulation End: {datetime.now().isoformat()}")

@@ -1,20 +1,16 @@
 import configuration as config
 from graphing.core import Node, Edge, Region
-from agents.core import Firm, Household
 import pygame as pg
+from camera import Camera
 
 
 class Graph:
     edge_counter:int = 1
     nodes:dict[tuple[str, int], 'Node']
     edges:dict[int, 'Edge']
-    start_drag:tuple[int, int] = None
-    x_temp_offset:int = None
-    y_temp_offset:int = None
-    y_offset:int = 0
-    x_offset:int = 0
 
     def __init__(self, layer:str):
+        self.camera = Camera()
         self.layer = layer
         self.nodes = {}
         self.edges = {}
@@ -53,33 +49,15 @@ class Graph:
                 
     def get_node(self, id:tuple[str, int]) -> Node:
         return self.nodes.get(id)
-
-    def map_dragging(self, event:pg.event.Event):
-        if (event.type == pg.MOUSEBUTTONDOWN):
-            self.start_drag = event.pos
-        elif (event.type == pg.MOUSEBUTTONUP and self.y_temp_offset and self.x_temp_offset):
-            self.x_offset = self.x_temp_offset
-            self.y_offset = self.y_temp_offset
-            self.start_drag = None
-            self.x_temp_offset = None
-            self.y_temp_offset = None
-        elif (event.type == pg.MOUSEMOTION and self.start_drag):
-            self.x_temp_offset = self.x_offset + (event.pos[0] - self.start_drag[0])
-            self.y_temp_offset = self.y_offset + (event.pos[1] - self.start_drag[1])
         
 
     def draw(self, window:pg.Surface, font:pg.font.Font, layer:str):
         if (self.layer != layer):
             return
-
-        x_offset = self.x_offset if self.x_temp_offset == None else self.x_temp_offset
-        y_offset = self.y_offset if self.y_temp_offset == None else self.y_temp_offset
-        
         for edge in self.edges.values():
-            edge.draw(window, x_offset, y_offset)
-
+            edge.draw(window, self.camera)
         for node in self.nodes.values():
-            node.draw(window, font, x_offset, y_offset)
+            node.draw(window, font, self.camera)
 
 
 class RegionGraph(Graph):
@@ -89,39 +67,18 @@ class RegionGraph(Graph):
         super().__init__(layer)
         self.regions = {}
     
-    def add_region(self, node_ids:list[int], no_households:int, no_firms:int):
+    def add_region(self, node_ids:list[int], outline_node_ids:list[int], name:str = None):
         region_nodes = []
+        outline_nodes = []
 
         for id in node_ids:
             region_nodes.append(self.nodes.get(id))
 
-        region = Region(region_nodes)
-        for _ in range(no_households):
-            region.add_household(config.get('CONTACT_RATES', {}).get('HOUSEHOLD', 4))
-        
-        for _ in range(no_firms):
-            region.add_firm(config.get('CONTACT_RATES', {}).get('FIRM', 3))
+        for id in outline_node_ids:
+            outline_nodes.append(self.nodes.get(id))
+
+        region = Region(region_nodes, outline_nodes, name)
 
         self.regions[region.id] = region
-    
-    def get_close_firms(self, region:Region) -> list[Firm]:
-        close_firms  = list(region.firms)
-        for _region in self.regions.values():
-            for node in region.nodes:
-                if (node in _region.nodes and _region != region):
-                    close_firms.extend(_region.firms)
-        return close_firms
-
-    def get_firms(self) -> list[Firm]:
-        firms = []
-        for region in self.regions.values():
-            firms.extend(region.firms)
-        return firms
-
-    def get_households(self) -> list[Household]:
-        households = []
-        for region in self.regions.values():
-            households.extend(region.households)
-        return households
     
 

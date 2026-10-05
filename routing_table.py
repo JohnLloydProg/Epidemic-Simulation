@@ -1,10 +1,10 @@
 import multiprocessing
 import itertools
+from graphing.core import Node
 from graphing.graph import Graph, RegionGraph
 from transport.transportation import Route
 from transport.checkpoint import generate_checkpoints, Checkpoint
 from graphing.mapping import shortest_path, load_graph
-from agents.core import Establishment
 import logging
 import pickle
 import os
@@ -75,7 +75,7 @@ def compute_single_path(pair:tuple[tuple[str, int], tuple[str, int]]):
     return (start_id, dest_id, [])
 
 
-def build_routing_cache(establishments:list[Establishment], city:RegionGraph, railway:Graph, routes:list[Route]) -> dict[tuple, list[Checkpoint]]:
+def build_routing_cache(nodes:list[Node], city:RegionGraph, railway:Graph, routes:list[Route]) -> dict[tuple, list[Checkpoint]]:
     if os.path.exists(CACHE_FILE_NAME):
         LOGGER.info(f"Found existing {CACHE_FILE_NAME}! Loading from disk...")
         with open(CACHE_FILE_NAME, 'rb') as f:
@@ -84,7 +84,7 @@ def build_routing_cache(establishments:list[Establishment], city:RegionGraph, ra
         return rehydrate_cache(pickled_cache, city, railway, routes)
 
     LOGGER.info("Gathering origin-destination pairs...")
-    est_node_ids = list(set([est.node.id for est in establishments]))
+    est_node_ids = list(set([node.id for node in nodes if node.edges]))
     
     pairs_to_compute = list(itertools.permutations(est_node_ids, 2))
     LOGGER.info(f"Total paths to compute: {len(pairs_to_compute)}")

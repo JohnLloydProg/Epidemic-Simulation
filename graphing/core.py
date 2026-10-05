@@ -1,5 +1,4 @@
 import pygame as pg
-from agents.core import Firm, Household
 import random
 
 
@@ -15,11 +14,15 @@ class Node:
         self.agents = []
         self.pos = (x, y)
     
-    def draw(self, window:pg.Surface, font:pg.font.Font, x_offset:int, y_offset:int):
-        pg.draw.circle(window, (int(255 * min(len(self.agents)/self.max_agents, 1)), 255 - int(255 * min(len(self.agents)/self.max_agents, 1)), 0), (self.pos[0] + x_offset, self.pos[1] + y_offset), self.radius)
-        pg.draw.circle(window, (0, 0, 0), (self.pos[0] + x_offset, self.pos[1] + y_offset), self.radius, 2)
-        text = font.render(str(self.id[1]), False, (0, 0, 0))
-        window.blit(text, text.get_rect(center=(self.pos[0] + x_offset, self.pos[1] + y_offset)))
+    def draw(self, window:pg.Surface, font:pg.font.Font, camera):
+        pos = camera.to_screen(self.pos)
+        radius = camera.scale(self.radius, minimum=2)
+        load = min(len(self.agents) / self.max_agents, 1)
+        pg.draw.circle(window, (int(255 * load), 255 - int(255 * load), 0), pos, radius)
+        pg.draw.circle(window, (0, 0, 0), pos, radius, camera.scale(2))
+        if camera.show_labels():
+            text = font.render(str(self.id[1]), False, (0, 0, 0))
+            window.blit(text, text.get_rect(center=pos))
 
 
 class Edge:
@@ -36,31 +39,30 @@ class Edge:
         
         return self.nodes[0] if current_node == self.nodes[1] else self.nodes[1]
     
-    def draw(self, window:pg.Surface, x_offset:int, y_offset:int):
-        node1_pos = self.nodes[0].pos
-        node2_pos = self.nodes[1].pos
-        pg.draw.line(window, (0, 0, 0), (node1_pos[0] + x_offset, node1_pos[1] + y_offset), (node2_pos[0] + x_offset, node2_pos[1] + y_offset), 2)
+    def draw(self, window:pg.Surface, camera):
+        pg.draw.line(window, (0, 0, 0), camera.to_screen(self.nodes[0].pos), camera.to_screen(self.nodes[1].pos), camera.scale(2))
 
 
 class Region:
     id:int = 0
-    firms:list[Firm]
-    households:list[Household]
+    name:str
     
-    def __init__(self, nodes:list[Node]):
+    def __init__(self, nodes:list[Node], outline_nodes:list[Node], name:str = None):
         self.nodes = nodes
-        self.firms = []
-        self.households = []
+        self.outline_nodes = outline_nodes
+        self.name = name
         self.id = Region.id
         Region.id += 1
-    
-    def add_firm(self, contact_rate:float):
-        connected_nodes = list(filter(lambda node: len(node.edges) > 0, self.nodes))
-        firm = Firm(random.choice(connected_nodes), self, random.choices(['micro', 'small', 'medium', 'large'], weights=[0.84, 0.13, 0.02, 0.01])[0], max_contact_rate=contact_rate)
-        self.firms.append(firm)
 
-    def add_household(self, contact_rate:float):
-        connected_nodes = list(filter(lambda node: len(node.edges) > 0, self.nodes))
-        household = Household(random.choice(connected_nodes), self, max_contact_rate=contact_rate)
-        self.households.append(household)
+    def draw(self, window:pg.Surface, font:pg.font.Font, x_offset:int, y_offset:int):
+        if (len(self.outline_nodes) < 3):
+            return
+        
+        points = [(node.pos[0] + x_offset, node.pos[1] + y_offset) for node in self.outline_nodes]
+        text_surface = font.render(self.name, False, (0, 0, 0))
+        text_rect = text_surface.get_rect()
+        text_rect.center = (sum(p[0] for p in points) / len(points), sum(p[1] for p in points) / len(points))
+        window.blit(text_surface, text_rect)
+        pg.draw.polygon(window, (200, 200, 200), points)
+        pg.draw.polygon(window, (0, 0, 0), points, 2)
         

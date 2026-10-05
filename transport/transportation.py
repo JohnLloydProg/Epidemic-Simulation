@@ -1,14 +1,11 @@
 import configuration as config
 from graphing.core import Edge, Node
 from graphing.graph import Graph
-from objects import Disease
 import pygame as pg
-import numpy as np
 import math
 import random
 import logging
 import manager
-import traceback
 
 LOGGER = logging.getLogger('Transportation')
 
@@ -18,7 +15,7 @@ class Route:
     spawn_time:int
     ordered_nodes:list[Node]
     transportations:list['RoutedTransportation']
-    expected_speed:int = 150
+    expected_speed:int = 12
     capacity_ratio:int = 1
     
 
@@ -60,13 +57,10 @@ class Route:
         index = self.path.index(current_edge)
         return self.path[index + 1] if index + 1 < len(self.path) else None
 
-    def draw(self, window:pg.Rect, graph:Graph):
-        x_offset = graph.x_offset if graph.x_temp_offset == None else graph.x_temp_offset
-        y_offset = graph.y_offset if graph.y_temp_offset == None else graph.y_temp_offset
+    def draw(self, window:pg.Surface, graph:Graph):
         average_occupancy = self.get_average_occupancy()
-
-        points = [(node.pos[0] + x_offset, node.pos[1] + y_offset) for node in self.ordered_nodes]
-        pg.draw.lines(window, (255, int(255*(1 - average_occupancy)), 0), False, points, 2)
+        points = [graph.camera.to_screen(node.pos) for node in self.ordered_nodes]
+        pg.draw.lines(window, (255, int(255 * (1 - average_occupancy)), 0), False, points, graph.camera.scale(2))
 
 
 class JeepRoute(Route):
@@ -172,7 +166,27 @@ class RoutedTransportation(Transportation):
             return
         self.current_edge = next_edge
         travel_time = self.current_edge.distance / self.speed
+        self.start_travel = current_time
         manager.emit(current_time + math.ceil(travel_time), manager.Event(manager.TRANSPORTATION_ARRIVED, self))
+    
+    def update_position(self, current_time:int):
+        if (not self.current_edge):
+            return self.current_node.pos
+        travel_time = self.current_edge.distance / self.speed
+        time_elapsed = current_time - self.start_travel
+        if (time_elapsed >= travel_time):
+            return self.current_edge.get_adjacent_node(self.current_node).pos
+        else:
+            start_pos = self.current_node.pos
+            end_pos = self.current_edge.get_adjacent_node(self.current_node).pos
+            progress_ratio = time_elapsed / travel_time
+            new_x = start_pos[0] + (end_pos[0] - start_pos[0]) * progress_ratio
+            new_y = start_pos[1] + (end_pos[1] - start_pos[1]) * progress_ratio
+            return (new_x, new_y)
+    
+    def draw(self, window:pg.Rect, camera, current_time:int):
+        pos = camera.to_screen(self.update_position(current_time))
+        pg.draw.circle(window, (255, 0, 0) if (not self.agents) else (0, 255, 0), pos, 5)
 
 
 def handle_route_events(event:manager.Event, time:int, simulation):
@@ -192,7 +206,7 @@ def handle_route_events(event:manager.Event, time:int, simulation):
                         current_index = transport.route.ordered_nodes.index(transport.current_node)
                         for node in transport.route.ordered_nodes[current_index:]:
                             if (not transport.is_full() and current_leg.end_node == node):
-                                agent.ride_transportation(transport, time, simulation.transpo_capacity_compliance)
+                                agent.ride_transportation(transport, time)
                                 break
                 transport.transport(time)
             simulation.transportations.extend(transports)
@@ -215,7 +229,7 @@ def handle_transportation_events(event:manager.Event, time:int, simulation):
 
                 if (transport.current_node.id == agent.checkpoints[0].end_node.id):
                     agent.alight_transportation()
-                    agent.arrival(time, simulation.company_capacity_compliance, simulation.mask_compliance, simulation=simulation)
+                    agent.arrival(time, simulation=simulation)
             
             getting_off_external = int(transport.external_passenger * random.uniform(0.2, 0.5))
             transport.external_passenger -= getting_off_external
@@ -231,7 +245,7 @@ def handle_transportation_events(event:manager.Event, time:int, simulation):
                     current_index = transport.route.ordered_nodes.index(transport.current_node)
                     for node in transport.route.ordered_nodes[current_index:]:
                         if (not transport.is_full() and current_leg.end_node == node and not agent.transportation):
-                            agent.ride_transportation(transport, time, simulation.transpo_capacity_compliance)
+                            agent.ride_transportation(transport, time)
                             break
                 
             transport.transport(time)
@@ -243,15 +257,15 @@ def handle_transportation_events(event:manager.Event, time:int, simulation):
 
             transport.current_node = transport.current_edge.get_adjacent_node(transport.current_node)
             agent = transport.agents[0]
-            if (transport.current_node.id == agent.destination.node.id):
+            if (transport.current_node.id == agent.destination_node.id):
                 agent.alight_transportation()
-                agent.arrival(time, simulation.company_capacity_compliance, simulation.mask_compliance, transport.current_node, simulation)
+                agent.arrival(time, transport.current_node, simulation)
             else:
                 if (transport.path):
                     transport.transport(time)
                 else:
                     agent.alight_transportation()
-                    agent.arrival(time, simulation.company_capacity_compliance, simulation.mask_compliance, agent.destination.node, simulation)
+                    agent.arrival(time, agent.destination_node, simulation)
     elif (event.type == manager.TRANSPORTATION_DESPAWN):
         LOGGER.debug(f"Handling transportation despawn for {len(event.get_objects())} transportations at time {time}.")
         for transport in _transportations:
