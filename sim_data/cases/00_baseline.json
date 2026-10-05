@@ -1,0 +1,11 @@
+{
+ "case_id": "00_baseline",
+ "description": "Baseline: base network and routes, no interventions",
+ "hotspots": [],
+ "closed_edges": [],
+ "capacity_multipliers": {},
+ "disabled_routes": [],
+ "transit_overrides": {},
+ "added_routes": [],
+ "od_scaling": {}
+}

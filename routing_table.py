@@ -5,6 +5,7 @@ from graphing.graph import Graph, RegionGraph
 from transport.transportation import Route
 from transport.checkpoint import generate_checkpoints, Checkpoint
 from graphing.mapping import shortest_path, load_graph
+import configuration as config
 import logging
 import pickle
 import os
@@ -16,10 +17,18 @@ LOGGER = logging.getLogger('RoutingTable')
 worker_city:RegionGraph = None
 worker_routes:list[Route] = None
 
+def get_cache_file() -> str:
+    """One cache per case when using sim_data/, otherwise the old routing_table.pkl."""
+    if (config.get('DATA_DIR')):
+        from graphing.data_loader import cache_file
+        return str(cache_file())
+    return CACHE_FILE_NAME
+
 def save_dehydrated_cache(dehydrated_cache: dict):
     """Saves the primitive dictionary to a file."""
-    LOGGER.info(f"Saving routing cache to {CACHE_FILE_NAME}...")
-    with open(CACHE_FILE_NAME, 'wb') as f:
+    cache_path = get_cache_file()
+    LOGGER.info(f"Saving routing cache to {cache_path}...")
+    with open(cache_path, 'wb') as f:
         pickle.dump(dehydrated_cache, f)
     LOGGER.info("Save complete!")
 
@@ -76,9 +85,10 @@ def compute_single_path(pair:tuple[tuple[str, int], tuple[str, int]]):
 
 
 def build_routing_cache(nodes:list[Node], city:RegionGraph, railway:Graph, routes:list[Route]) -> dict[tuple, list[Checkpoint]]:
-    if os.path.exists(CACHE_FILE_NAME):
-        LOGGER.info(f"Found existing {CACHE_FILE_NAME}! Loading from disk...")
-        with open(CACHE_FILE_NAME, 'rb') as f:
+    cache_path = get_cache_file()
+    if os.path.exists(cache_path):
+        LOGGER.info(f"Found existing {cache_path}! Loading from disk...")
+        with open(cache_path, 'rb') as f:
             pickled_cache = pickle.load(f)
         LOGGER.info(f'Done reading file.')
         return rehydrate_cache(pickled_cache, city, railway, routes)

@@ -1,10 +1,10 @@
 from dotenv import load_dotenv
 load_dotenv()
 import configuration as config
-from graphing.mapping import load_graph
 from graphing.graph import RegionGraph
 from agents.agent import Agent, handle_agent_events
 from transport.transportation import Transportation, RoutedTransportation, handle_route_events, handle_transportation_events, BusRoute, JeepRoute, TrainRoute
+from graphing.data_loader import load_graph_from_data
 from routing_table import build_routing_cache
 from time import time_ns
 from datetime import datetime
@@ -12,15 +12,8 @@ import manager
 import random
 import pygame as pg
 import logging
-import math
 import os
 import sys
-import uuid
-import json
-
-import firebase_admin
-from firebase_admin import credentials
-from firebase_admin import firestore
 
 LOGGER = logging.getLogger('Simulation')
 
@@ -76,7 +69,7 @@ class Simulation:
         self.active_cases = []
 
         """Load environment and initialize route spawning events"""
-        environment = load_graph()
+        environment = load_graph_from_data()()
         self.graph = environment[0]
         self.railway_graph = environment[1]
         self.routes = environment[2]
@@ -84,7 +77,8 @@ class Simulation:
             manager.emit(3, manager.Event(manager.TRANSPORTATION_SPAWN, route))
 
         """Build routing cache for agents"""
-        nodes = list(self.graph.nodes.values())
+        # With sim_data/, only zone anchors and gateways are trip ends, so only those pairs are cached
+        nodes = getattr(self.graph, 'anchor_nodes', None) or list(self.graph.nodes.values())
         self.routing_table = build_routing_cache(nodes, self.graph, self.railway_graph, self.routes)
 
         LOGGER.info(f'Simulation initialized with {len(self.agents)} agents.')
@@ -137,7 +131,7 @@ class Simulation:
                         self.simulation_multiplier -= 1
                     self.simulation_ns_per_time_unit = (10**9)//self.simulation_multiplier
                 elif (event.type == pg.MOUSEBUTTONDOWN and event.button == 3):
-                    nodes = list(filter(lambda n: n.edges, self.graph.nodes.values()))
+                    nodes = getattr(self.graph, 'anchor_nodes', None) or list(filter(lambda n: n.edges, self.graph.nodes.values()))
                     agent = Agent(self.graph, self.railway_graph, random.choice(nodes), random.choice(nodes))
                     self.agents.append(agent)
                     if (agent.commuting):

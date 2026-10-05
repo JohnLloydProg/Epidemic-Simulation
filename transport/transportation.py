@@ -71,7 +71,7 @@ class JeepRoute(Route):
         _transportations = []
         for i in range(random.randint(1, 2)):
             passenger = random.choice([(10, 10), (12, 12), (15, 15), (15, 20) ])
-            transportation = RoutedTransportation('jeep', self.expected_speed, passenger[1], self.capacity_ratio, passenger[0], 0, self.spawn_node, self)
+            transportation = RoutedTransportation('jeep', self.expected_speed, (0, 0, 255), passenger[1], self.capacity_ratio, passenger[0], 0, self.spawn_node, self)
             transportation.expected_contact_rate = config.get('CONTACT_RATES', {}).get('JEEP', 3.5)
             _transportations.append(transportation)
             self.transportations.append(transportation)
@@ -83,7 +83,7 @@ class BusRoute(Route):
         super().__init__(spawn_node, path, graph, spawn_time, peak_spawn)
     
     def generate_transportation(self, current_time) -> list['RoutedTransportation']:
-        transportation = RoutedTransportation('bus', self.expected_speed, 50, self.capacity_ratio, 40, 0, self.spawn_node, self)
+        transportation = RoutedTransportation('bus', self.expected_speed, (255, 0, 0), 50, self.capacity_ratio, 40, 0, self.spawn_node, self)
         transportation.expected_contact_rate = config.get('CONTACT_RATES', {}).get('BUS', 4.5)
         self.transportations.append(transportation)
         return [transportation]
@@ -105,7 +105,7 @@ class TrainRoute(Route):
             
         seats_taken = int(absolute_max * external_load_percentage)
 
-        transportation = RoutedTransportation('rail', self.expected_speed, absolute_max, self.capacity_ratio, 900, seats_taken, self.spawn_node, self)
+        transportation = RoutedTransportation('rail', self.expected_speed, (0, 255, 0), absolute_max, self.capacity_ratio, 900, seats_taken, self.spawn_node, self)
         transportation.expected_contact_rate = config.get('CONTACT_RATES', {}).get('TRAIN', 8.5)
         self.transportations.append(transportation)
         return [transportation]
@@ -117,10 +117,11 @@ class Transportation:
     no_infected_agents:float = 0
     current_edge:Edge = None
 
-    def __init__(self, method:str, speed:float, current_node:Node, path:list[Edge]=[]):
+    def __init__(self, method:str, speed:float, color:tuple, current_node:Node, path:list[Edge]=[]):
         self.method = method
         self.current_node = current_node
         self.speed = speed
+        self.color = color
         self.path = path
         self.id = Transportation.id
         self.agents = []
@@ -132,12 +133,31 @@ class Transportation:
         travel_time = self.current_edge.distance / self.speed
         manager.emit(current_time + math.ceil(travel_time), manager.Event(manager.PRIVATE_TRANSPORTATION_ARRIVED, self))
 
+    def update_position(self, current_time:int):
+        if (not self.current_edge):
+            return self.current_node.pos
+        travel_time = self.current_edge.distance / self.speed
+        time_elapsed = current_time - self.start_travel
+        if (time_elapsed >= travel_time):
+            return self.current_edge.get_adjacent_node(self.current_node).pos
+        else:
+            start_pos = self.current_node.pos
+            end_pos = self.current_edge.get_adjacent_node(self.current_node).pos
+            progress_ratio = time_elapsed / travel_time
+            new_x = start_pos[0] + (end_pos[0] - start_pos[0]) * progress_ratio
+            new_y = start_pos[1] + (end_pos[1] - start_pos[1]) * progress_ratio
+            return (new_x, new_y)
+
+    def draw(self, window:pg.Rect, camera, current_time:int):
+        pos = camera.to_screen(self.update_position(current_time))
+        pg.draw.circle(window, self.color, pos, 5)
+
 
 class RoutedTransportation(Transportation):
     expected_contact_rate:float = 5.0
 
-    def __init__(self, method:str, speed:float, max_passenger:int, capacity_ratio:float, suggested_passenger:int, external_passenger:int, current_node:Node, route:Route):
-        super().__init__(method=method, speed=speed, current_node=current_node)
+    def __init__(self, method:str, speed:float, color:tuple, max_passenger:int, capacity_ratio:float, suggested_passenger:int, external_passenger:int, current_node:Node, route:Route):
+        super().__init__(method=method, speed=speed, color=color, current_node=current_node)
         self.route = route
         self.max_passenger = max_passenger
         self.suggested_passenger = suggested_passenger
@@ -168,25 +188,6 @@ class RoutedTransportation(Transportation):
         travel_time = self.current_edge.distance / self.speed
         self.start_travel = current_time
         manager.emit(current_time + math.ceil(travel_time), manager.Event(manager.TRANSPORTATION_ARRIVED, self))
-    
-    def update_position(self, current_time:int):
-        if (not self.current_edge):
-            return self.current_node.pos
-        travel_time = self.current_edge.distance / self.speed
-        time_elapsed = current_time - self.start_travel
-        if (time_elapsed >= travel_time):
-            return self.current_edge.get_adjacent_node(self.current_node).pos
-        else:
-            start_pos = self.current_node.pos
-            end_pos = self.current_edge.get_adjacent_node(self.current_node).pos
-            progress_ratio = time_elapsed / travel_time
-            new_x = start_pos[0] + (end_pos[0] - start_pos[0]) * progress_ratio
-            new_y = start_pos[1] + (end_pos[1] - start_pos[1]) * progress_ratio
-            return (new_x, new_y)
-    
-    def draw(self, window:pg.Rect, camera, current_time:int):
-        pos = camera.to_screen(self.update_position(current_time))
-        pg.draw.circle(window, (255, 0, 0) if (not self.agents) else (0, 255, 0), pos, 5)
 
 
 def handle_route_events(event:manager.Event, time:int, simulation):

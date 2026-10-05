@@ -6,8 +6,6 @@ from transport.transportation import Route, TrainRoute, JeepRoute, BusRoute
 import pandas as pd
 import heapq
 import logging
-import math
-import json
 import os
 
 LOGGER = logging.getLogger('Mapping')
@@ -77,6 +75,21 @@ def shortest_edge_path(start_id: tuple[str, int], end_id: tuple[str, int], city:
     return path
 
 
+_route_index: dict[int, dict] = {}
+
+def routes_at_node(node:Node, routes:list[Route]) -> list[Route]:
+    """Routes that stop at a node. Built once per route list instead of scanning every route at every step."""
+    index = _route_index.get(id(routes))
+    if index is None:
+        index = {}
+        for route in routes:
+            for route_node in set(route.ordered_nodes):
+                index.setdefault(route_node.id, []).append(route)
+        _route_index.clear()
+        _route_index[id(routes)] = index
+    return index.get(node.id, [])
+
+
 def shortest_path(start_node:Node, end_node:Node, routes:list[Route]) -> list[tuple[Node, Route | None]]:
     if (start_node == end_node):
         return []
@@ -116,9 +129,8 @@ def shortest_path(start_node:Node, end_node:Node, routes:list[Route]) -> list[tu
                 heapq.heappush(open_set, State(neighbor_node, current_state.cost + walk_cost, None, current_state))
                 
             # 2. Board available routes at this node
-            for route in routes:
-                if current_node in route.ordered_nodes:
-                    heapq.heappush(open_set, State(current_node, current_state.cost + TRANSFER_PENALTY, route, current_state))
+            for route in routes_at_node(current_node, routes):
+                heapq.heappush(open_set, State(current_node, current_state.cost + TRANSFER_PENALTY, route, current_state))
 
         # Scenario B: Riding
         else:
@@ -135,131 +147,3 @@ def shortest_path(start_node:Node, end_node:Node, routes:list[Route]) -> list[tu
             heapq.heappush(open_set, State(current_node, current_state.cost, None, current_state))
 
     return []
-
-
-def load_graph() -> tuple[RegionGraph, Graph, list[Route]]:
-    if (not config.__config):
-        config.init()
-
-    map_path = './map/'
-    city_graph = RegionGraph('city')
-    railway_graph = Graph('railway')
-    graphs: list[Graph] = [city_graph, railway_graph]
-    
-    # Load nodes and edges for each graph
-    LOGGER.info('Generating nodes and edges for graphs...')
-    for graph in graphs:
-        nodes = pd.read_excel(f"{map_path}/{graph.layer}/nodes.xlsx", index_col=0)
-        for i, node_xl in nodes.iterrows():
-            if (pd.isna(i)):
-                LOGGER.debug(f"Skipping node with NaN index in {graph.layer} graph.")
-                continue
-            graph.add_node(int(node_xl['X-Coordinate']), int(node_xl['Y-Coordinate']), int(i))
-        
-        edges = pd.read_excel(f"{map_path}/{graph.layer}/edges.xlsx", index_col=0)
-        for i in range(len(edges)):
-            edge_xl = edges.iloc[i]
-            try:
-                graph.add_edge(int(edge_xl['Distance (m)']), (graph.layer, int(edge_xl['Node 1'])), (graph.layer, int(edge_xl['Node 2'])))
-            except Exception as e:
-                LOGGER.debug(f"Error adding edge {i}: {e}")
-                LOGGER.debug(f"Node 1: {(graph.layer, int(edge_xl['Node 1']))}, Node 2: {(graph.layer, int(edge_xl['Node 2']))}")
-    
-    # Load regions for the city graph
-    LOGGER.info('Generating regions for city map...')
-    regions = pd.read_excel(f'{map_path}/{city_graph.layer}/regions.xlsx', index_col=0)
-    regions[['Map edge nodes within the region', 'Street Nodes within the Region']] = regions[['Map edge nodes within the region', 'Street Nodes within the Region']].astype(str)
-
-    for i in range(len(regions)):
-        region_xl = regions.iloc[i]
-        nodes = region_xl['Map edge nodes within the region'] if region_xl['Map edge nodes within the region'] != 'nan' else ""
-        nodes +=  region_xl['Street Nodes within the Region'] if region_xl['Street Nodes within the Region'] != 'nan' else ""
-
-        nodes = nodes.strip(",")
-        node_ids = [(city_graph.layer, int(node_id)) for node_id in nodes.split(",")]
-        try:
-            city_graph.add_region(node_ids, node_ids, region_xl['Region Name'] if 'Region Name' in region_xl else None)
-        except Exception as e:
-            LOGGER.debug(f"Error adding region {i}: {e}")
-            LOGGER.debug(f"Node IDs: {node_ids}")
-    
-    LOGGER.info('Generating transfer edges between city graph and railway graph...')
-    # Load transfer edges between city and railway graph
-    transfer_edges = pd.read_excel(f"{map_path}/transfer.xlsx", index_col=0)
-    for i in range(len(transfer_edges)):
-        edge_xl = transfer_edges.iloc[i]
-        try:
-            city_node_id = (city_graph.layer, int(edge_xl['Node 1 (Layer 1)']))
-            railway_node_id = (railway_graph.layer, int(edge_xl['Node 2 (Layer 2)']))
-            city_node = city_graph.get_node(city_node_id)
-            railway_node = railway_graph.get_node(railway_node_id)
-            if not city_node or not railway_node:
-                raise ValueError(f"Invalid node IDs for transfer edge: {city_node_id}, {railway_node_id}")
-            transfer_edge = Edge(city_node, railway_node, 50, ('transfer', i))
-            city_graph.edges[transfer_edge.id] = transfer_edge
-            railway_graph.edges[transfer_edge.id] = transfer_edge
-            city_node.edges.append(transfer_edge)
-            railway_node.edges.append(transfer_edge)
-        except Exception as e:
-            LOGGER.debug(f"Error adding transfer edge {i}: {e}")
-            LOGGER.debug(f"City Node ID: {(city_graph.layer, int(edge_xl['City Node']))}, Railway Node ID: {(railway_graph.layer, int(edge_xl['Railway Node']))}")
-    
-    # Load routes for transportation
-    LOGGER.info('Generating routes for city graph...')
-    routes = []
-
-    excel_path = f'/firebase_cred/{city_graph.layer}/{config.get("ROUTE_EXCEL_NAME", "routes.xlsx")}' if (os.environ.get('CLOUD', 'False') == 'True') else f"{map_path}/{city_graph.layer}/{config.get("ROUTE_EXCEL_NAME", "routes.xlsx")}"
-    route_data = pd.read_excel(excel_path, index_col=None)
-    for i in range(len(route_data)):
-        route_xl = route_data.iloc[i]
-        node_id = (city_graph.layer, int(route_xl['Node 1']))
-        reverse_node_id = (city_graph.layer, int(route_xl['Node 2']))
-        node = city_graph.get_node(node_id)
-        reverse_node = city_graph.get_node(reverse_node_id)
-        if not node:
-            LOGGER.debug(f"Error loading route {i}: Node {node_id} not found in city graph.")
-            continue
-        try:
-            edges = shortest_edge_path((city_graph.layer, int(route_xl['Node 1'])), (city_graph.layer, int(route_xl['Node 2'])), city_graph, railway_graph)
-            reversed_edges = edges.copy()
-            reversed_edges.reverse()
-        except Exception as e:
-            LOGGER.debug(f"Error finding path for route {i}: {e}")
-            LOGGER.debug(f"Node 1: {(city_graph.layer, int(route_xl['Node 1']))}, Node 2: {(city_graph.layer, int(route_xl['Node 2']))}")
-            continue # Interval
-        jeep_route = JeepRoute(node, edges, city_graph, int(route_xl['Interval']), int(route_xl['Peak Interval']))
-        jeep_return_route = JeepRoute(reverse_node, reversed_edges, city_graph, int(route_xl['Interval']), int(route_xl['Peak Interval']))
-        bus_route = BusRoute(node, edges, city_graph, int(route_xl['Interval'])*1.5, int(route_xl['Peak Interval'])*1.5)
-        bus_return_route = BusRoute(reverse_node, reversed_edges, city_graph, int(route_xl['Interval'])*1.5, int(route_xl['Peak Interval'])*1.5)
-        routes.append(jeep_route)
-        routes.append(jeep_return_route)
-        routes.append(bus_route)
-        routes.append(bus_return_route)
-
-    excel_path = f'/firebase_cred/{railway_graph.layer}/{config.get("ROUTE_EXCEL_NAME", "routes.xlsx")}' if (os.environ.get('CLOUD', 'False') == 'True') else f"{map_path}/{railway_graph.layer}/{config.get("ROUTE_EXCEL_NAME", "routes.xlsx")}"
-    route_data = pd.read_excel(excel_path, index_col=None)
-    for i in range(len(route_data)):
-        route_xl = route_data.iloc[i]
-        node_id = (railway_graph.layer, int(route_xl['Node 1']))
-        reverse_node_id = (railway_graph.layer, int(route_xl['Node 2']))
-        node = railway_graph.get_node(node_id)
-        reverse_node = railway_graph.get_node(reverse_node_id)
-        if not node:
-            LOGGER.debug(f"Error loading route {i}: Node {node_id} not found in railway graph.")
-            continue
-        edge_ids = route_xl['Path'].split(',')
-        edge_ids = [(railway_graph.layer, int(edge_id.strip())) for edge_id in edge_ids]
-        path = [railway_graph.get_edge(edge_id) for edge_id in edge_ids]
-        reverse_path = path.copy()
-        reverse_path.reverse()
-        route = TrainRoute(node, path, railway_graph, int(route_xl['Interval']), int(route_xl['Peak Interval']))
-        return_route = TrainRoute(reverse_node, reverse_path, railway_graph, int(route_xl['Interval']), int(route_xl['Peak Interval']))
-        routes.append(route)
-        routes.append(return_route)
-    
-    LOGGER.info('Graph ready!')
-    return (city_graph, railway_graph, routes)
-
-
-if __name__ == '__main__':
-    load_graph()

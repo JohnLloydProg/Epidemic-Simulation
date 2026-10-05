@@ -1,0 +1,39 @@
+{
+ "created": "2026-10-05",
+ "crs": "EPSG:32651",
+ "transform": {
+  "x": "utm_x - origin_x",
+  "y": "origin_y - utm_y",
+  "origin_x": 279270.3711996688,
+  "origin_y": 1614997.199761794
+ },
+ "units": {
+  "distance": "m",
+  "time": "s"
+ },
+ "network_buffer_m": 300,
+ "min_route_km": 0.3,
+ "peak_hours": [
+  [
+   6,
+   9
+  ],
+  [
+   17,
+   20
+  ]
+ ],
+ "sources": {
+  "roads": "OpenStreetMap via OSMnx (drive network)",
+  "transit": "Sakay.ph GTFS (DOTC 2015)",
+  "zones": "/content/drive/MyDrive/Thesis Files (New)/Routes & Maps/manila_zones.gpkg"
+ },
+ "counts": {
+  "city_nodes": 784,
+  "city_edges": 1203,
+  "rail_nodes": 5,
+  "routes": 223,
+  "zones": 28,
+  "gateways": 38
+ }
+}

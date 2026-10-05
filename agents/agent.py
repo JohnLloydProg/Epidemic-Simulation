@@ -104,7 +104,7 @@ class Agent:
             if (self.current_node not in path[0].nodes or self.destination_node not in path[-1].nodes):
                 raise ValueError(f"Invalid path: {[(edge.nodes[0].id, edge.nodes[1].id) for edge in path]} for current node {self.current_node.id} and destination node {self.destination_node.id}.")
             
-            transport = Transportation(method='private', speed=7, current_node=self.current_node, path=list(path))
+            transport = Transportation(method='private', speed=7, color=(255, 255, 0), current_node=self.current_node, path=list(path))
             self.ride_transportation(transport, time)
             self.set_state('travelling')
             transport.transport(time)
