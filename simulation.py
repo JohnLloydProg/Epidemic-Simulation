@@ -7,6 +7,7 @@ from graphing.graph import RegionGraph
 from agents.agent import Agent, handle_agent_events
 from transport.transportation import Transportation, RoutedTransportation, handle_route_events, handle_transportation_events, BusRoute, JeepRoute, TrainRoute
 from ui.button import ButtonBehavior, TextButton
+from transport.route_editor import RouteEditor
 from graphing.data_loader import load_graph_from_data, load_case, data_dir, results_dir
 from agents.od_demand import schedule_od_agents
 from routing_table import build_routing_cache
@@ -76,6 +77,8 @@ class Simulation:
         self.od_failed = 0
         self.transportations = []
         self.active_cases = []
+        self.started = False            # True once time moves or an agent is added; routes are locked then
+        self._reset_requested = False
 
         """Load environment and initialize route spawning events"""
         environment = load_graph_from_data()
@@ -91,8 +94,7 @@ class Simulation:
         self.routing_table = build_routing_cache(nodes, self.graph, self.railway_graph, self.routes)
 
         """Schedule agents from the OD matrix (only when OD_BUNDLE_DIR is set in the config)"""
-        if (config.get('OD_BUNDLE_DIR')):
-            self.od_summary = schedule_od_agents(self.graph, self.railway_graph, load_case(), data_dir(), self.start_time, results_dir())
+        self.schedule_od_demand()
 
         LOGGER.info(f'Simulation initialized with {len(self.agents)} agents.')
         
@@ -105,12 +107,40 @@ class Simulation:
         all_nodes = list(self.graph.nodes.values()) + list(self.railway_graph.nodes.values())
         self.graph.camera.fit([node.pos for node in all_nodes], self.window.get_size())
         self.create_ui_elements()
+        self.editor = RouteEditor(self)
         
         self.run()
+
+    def schedule_od_demand(self):
+        """Schedule agents from the OD matrix (only when OD_BUNDLE_DIR is set in the config)"""
+        self.od_spawned = 0
+        self.od_failed = 0
+        if (config.get('OD_BUNDLE_DIR')):
+            self.od_summary = schedule_od_agents(self.graph, self.railway_graph, load_case(), data_dir(), self.start_time, results_dir())
+
+    def reset(self):
+        """Back to the start time, keeping the current route edits: removes all agents, vehicles and pending
+        events, then queues the route spawns and the OD agents again (same OD_SEED -> same agents)."""
+        manager._events.clear()
+        self.agents.clear()
+        self.transportations.clear()
+        for node in list(self.graph.nodes.values()) + list(self.railway_graph.nodes.values()):
+            node.agents.clear()
+        for route in self.routes:
+            route.transportations.clear()
+            manager.emit(self.start_time + 3, manager.Event(manager.TRANSPORTATION_SPAWN, route))
+        Agent.id = 0
+        Transportation.id = 0
+        self.schedule_od_demand()
+        self.play = False
+        self.started = False
+        self._reset_requested = True        # run() sets its clock back to start_time
+        LOGGER.info('Simulation reset.')
 
     def create_ui_elements(self):
         """Create UI elements such as buttons"""
         self.buttons['play'] = TextButton(20, 20, 100, 30, lambda: setattr(self, 'play', not self.play), (255, 0, 0), "Play")
+        self.buttons['reset'] = TextButton(130, 20, 100, 30, self.reset, (200, 200, 200), "Reset")
 
     def handle_events(self, time:int):
         """Event based handling"""
@@ -139,6 +169,8 @@ class Simulation:
 
             for event in pg.event.get():
                 consumed = []
+                if (self.editor.handle_event(event, time)):
+                    continue
                 if (event.type == pg.QUIT):
                     running = False
                     return
@@ -150,6 +182,7 @@ class Simulation:
                     self.simulation_ns_per_time_unit = (10**9)//self.simulation_multiplier
                 elif (event.type == pg.MOUSEBUTTONDOWN and event.button == 3):
                     nodes = getattr(self.graph, 'anchor_nodes', None) or list(filter(lambda n: n.edges, self.graph.nodes.values()))
+                    self.started = True
                     agent = Agent(self.graph, self.railway_graph, random.choice(nodes), random.choice(nodes))
                     self.agents.append(agent)
                     if (agent.commuting):
@@ -163,8 +196,15 @@ class Simulation:
 
                 self.graph.camera.handle_event(event)
 
+            if (self._reset_requested):
+                self._reset_requested = False
+                time = self.start_time
+                states = get_agent_states(self.agents)
+                travel_modes = {}
+
             """Handle events and update agent states"""
             if (time_ns() - simultation_time >= self.simulation_ns_per_time_unit and self.play):
+                self.started = True
                 self.handle_events(time)
                 states = get_agent_states(self.agents)
 
@@ -182,6 +222,7 @@ class Simulation:
                 routes = sorted(self.routes, key=lambda route:route.get_average_occupancy(), reverse=True)
                 for route in routes:
                     route.draw(self.window, self.graph)
+                self.editor.draw(self.window)
                 
                 text = self.font.render(f"time: {time} (Day {day} {str(hour).zfill(2)}:{str(minute).zfill(2)}:{str(second).zfill(2)}) {self.simulation_multiplier}x {round(delta, 2)}ms per step {len(manager._events.values())} events", False, (0, 0, 0))
                 

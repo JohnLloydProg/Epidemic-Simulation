@@ -49,6 +49,12 @@ class Route:
         occupancies = [transportation.occupancy() for transportation in self.transportations]
         return round(sum(occupancies)/len(occupancies), 2) if occupancies else 0
 
+    def set_path(self, spawn_node:Node, path:list[Edge]):
+        """Give the route a new path (only done before the simulation starts)."""
+        self.spawn_node = spawn_node
+        self.path = list(path)
+        self.ordered_nodes = self.generate_ordered_nodes()
+
     def next_edge(self, path_index:int) -> Edge | None:
         if (len(self.path) == 0):
             return None
