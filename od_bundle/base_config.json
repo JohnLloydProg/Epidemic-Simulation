@@ -1,0 +1,99 @@
+{
+  "beta": 0.07564841004800714,
+  "purpose_shares": {
+    "work": 32.9,
+    "school": 28.9,
+    "business": 10.1,
+    "shopping": 14.8,
+    "send_pickup": 5.8,
+    "social": 1.6,
+    "worship": 1.4,
+    "recreation": 0.8,
+    "medical": 0.8,
+    "eating": 0.5,
+    "others": 2.4
+  },
+  "purpose_facilities": {
+    "work": [
+      "work",
+      "gov",
+      "market",
+      "mall",
+      "health",
+      "school",
+      "shop",
+      "food"
+    ],
+    "school": [
+      "school"
+    ],
+    "business": [
+      "work",
+      "gov"
+    ],
+    "shopping": [
+      "shop",
+      "market",
+      "mall"
+    ],
+    "send_pickup": [
+      "school"
+    ],
+    "social": [
+      "leisure",
+      "food"
+    ],
+    "worship": [
+      "worship"
+    ],
+    "recreation": [
+      "leisure",
+      "mall"
+    ],
+    "medical": [
+      "health"
+    ],
+    "eating": [
+      "food",
+      "mall"
+    ],
+    "others": [
+      "work",
+      "gov",
+      "market",
+      "mall",
+      "health",
+      "school",
+      "shop",
+      "food",
+      "leisure",
+      "worship"
+    ]
+  },
+  "size_exponent": 0.5,
+  "max_floor_m2": 50000,
+  "default_levels": 1,
+  "min_share_of_avg": 0.05,
+  "manila_attraction_total": 3313290.7416367806,
+  "use_transfers": true,
+  "transfer_penalty_min": 10,
+  "pt_share": 0.488,
+  "max_transfers": 3,
+  "target_crossings": 863216.0,
+  "walk_share": 0.307,
+  "export": {
+    "mode": "top",
+    "top_share": 0.1,
+    "scope": "touch_manila",
+    "zones": [],
+    "districts": [],
+    "selection_mode": "within",
+    "include_intrazonal": false
+  },
+  "notes": {
+    "speed_scale": 0.76,
+    "coordinates": "pt_x/pt_y in EPSG:32651 (UTM 51N, metres)",
+    "osm_snapshot": "see notebook Cell 5",
+    "population": "PSA 2024"
+  }
+}

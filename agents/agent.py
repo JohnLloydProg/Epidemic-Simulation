@@ -22,7 +22,7 @@ def compute_checkpoint_distance(checkpoint:'Checkpoint', city:'RegionGraph', rai
 
     if (checkpoint.mode == 'walk'):
         try:
-            path = shortest_edge_path(checkpoint.start_node.id, checkpoint.end_node.id, city, railway)
+            path = list(shortest_edge_path(checkpoint.start_node.id, checkpoint.end_node.id, city, railway))
             return sum(edge.distance for edge in path)
         except ValueError:
             LOGGER.warning(f"Could not resolve walk distance from {checkpoint.start_node.id} to {checkpoint.end_node.id}.")
@@ -54,6 +54,9 @@ class Agent:
     current_edge:Edge = None
     full_counter:int = 0
     state:str = 'home'
+    origin_zone:str = None          # set for agents spawned from the OD matrix
+    destination_zone:str = None
+    trip_kind:str = None            # 'internal', 'inbound' or 'outbound'
 
     def __init__(self, city:RegionGraph, railway:Graph, origin:Node, destination:Node):
         self.origin_node = origin
@@ -63,8 +66,6 @@ class Agent:
             self.private = 'car'
         self.city = city
         self.railway = railway
-        self.current_node = self.origin_node
-        self.current_node.agents.append(self)
         self.path = []
         self.id = Agent.id
         Agent.id += 1
@@ -99,9 +100,11 @@ class Agent:
         self.current_node = self.origin_node
         self.current_node.agents.append(self)
         if (self.current_node.id == self.destination_node.id):
+            self.current_node.agents.remove(self)
+            self.current_node = None
             simulation.agents.remove(self)
         else:
-            path:list[Edge] = shortest_edge_path(self.current_node.id, self.destination_node.id, self.city, self.railway)
+            path:list[Edge] = list(shortest_edge_path(self.current_node.id, self.destination_node.id, self.city, self.railway))
             if (not path):
                 raise ValueError(f"No path found from node {self.current_node.id} to node {self.destination_node.id}.")
 
@@ -120,6 +123,8 @@ class Agent:
         self.current_node = self.origin_node
         self.current_node.agents.append(self)
         if (self.current_node.id == self.destination_node.id):
+            self.current_node.agents.remove(self)
+            self.current_node = None
             simulation.agents.remove(self)
         else:
             key = (self.current_node.id, self.destination_node.id)
@@ -152,6 +157,8 @@ class Agent:
             self.current_node.agents.append(self)
         
         if (self.current_node == self.destination_node):
+            self.current_node.agents.remove(self)
+            self.current_node = None
             simulation.agents.remove(self)
     
     def move(self, time:int, simulation=None):
@@ -167,7 +174,7 @@ class Agent:
                 walking_time = 40
                 manager.emit(time + walking_time, manager.Event(manager.AGENT_ARRIVAL, self))
             else:
-                self.path = shortest_edge_path(current_checkpoint.start_node.id, current_checkpoint.end_node.id, self.city, self.railway)
+                self.path = list(shortest_edge_path(current_checkpoint.start_node.id, current_checkpoint.end_node.id, self.city, self.railway))
                 if (not self.path):
                     simulation.agents.remove(self)
                     return
@@ -222,4 +229,28 @@ def handle_agent_events(event:manager.Event, time:int, simulation):
         for agent in agents:
             agent.walk(time)
     elif (event.type == manager.AGENT_SPAWN):
-        pass
+        spawn_agents(agents, time, simulation)
+
+
+def spawn_agents(specs:list, time:int, simulation):
+    """Creates agents from OD trip specs (agents/od_demand.py) and starts their trips."""
+    for spec in specs:
+        agent = Agent(simulation.graph, simulation.railway_graph, spec.origin, spec.destination)
+        agent.origin_zone = spec.origin_zone
+        agent.destination_zone = spec.destination_zone
+        agent.trip_kind = spec.kind
+        simulation.agents.append(agent)
+        try:
+            if (agent.commuting):
+                agent.set_checkpoints(simulation.routing_table, simulation.routes, time, simulation)
+            else:
+                agent.set_path(time, simulation)
+        except ValueError as error:
+            while (agent in spec.origin.agents):
+                spec.origin.agents.remove(agent)
+            if (agent in simulation.agents):
+                simulation.agents.remove(agent)
+            simulation.od_failed += 1
+            LOGGER.warning(f"Agent {agent.id} ({spec.origin_zone} -> {spec.destination_zone}) not spawned: {error}")
+            continue
+        simulation.od_spawned += 1

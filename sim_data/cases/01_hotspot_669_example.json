@@ -1,0 +1,7 @@
+{
+  "case_id": "01_hotspot_669_example",
+  "description": "Example: Barangay 669 as hotspot, half its attraction (trips redistributed by the OD model)",
+  "hotspots": ["1303901669"],
+  "od_settings": {"attraction": {"Barangay 669": 0.5}},
+  "od_scaling": {}
+}

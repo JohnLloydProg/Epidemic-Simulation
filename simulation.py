@@ -7,7 +7,8 @@ from graphing.graph import RegionGraph
 from agents.agent import Agent, handle_agent_events
 from transport.transportation import Transportation, RoutedTransportation, handle_route_events, handle_transportation_events, BusRoute, JeepRoute, TrainRoute
 from ui.button import ButtonBehavior, TextButton
-from graphing.data_loader import load_graph_from_data
+from graphing.data_loader import load_graph_from_data, load_case, data_dir, results_dir
+from agents.od_demand import schedule_od_agents
 from routing_table import build_routing_cache
 from time import time_ns
 from datetime import datetime
@@ -67,7 +68,12 @@ class Simulation:
         
         """Initialize simulation parameters"""
         self.time_step = config.get('TIME_STEP', 2)
+        start = int(float(config.get('SIM_START_HOUR', 0)) * 3600)
+        self.start_time = start - start % self.time_step      # keep the clock on the event grid
         self.agents = []
+        self.od_summary = None
+        self.od_spawned = 0
+        self.od_failed = 0
         self.transportations = []
         self.active_cases = []
 
@@ -77,12 +83,16 @@ class Simulation:
         self.railway_graph = environment[1]
         self.routes = environment[2]
         for route in self.routes:
-            manager.emit(3, manager.Event(manager.TRANSPORTATION_SPAWN, route))
+            manager.emit(self.start_time + 3, manager.Event(manager.TRANSPORTATION_SPAWN, route))
 
         """Build routing cache for agents"""
         # With sim_data/, only zone anchors and gateways are trip ends, so only those pairs are cached
         nodes = list(self.graph.nodes.values())
         self.routing_table = build_routing_cache(nodes, self.graph, self.railway_graph, self.routes)
+
+        """Schedule agents from the OD matrix (only when OD_BUNDLE_DIR is set in the config)"""
+        if (config.get('OD_BUNDLE_DIR')):
+            self.od_summary = schedule_od_agents(self.graph, self.railway_graph, load_case(), data_dir(), self.start_time, results_dir())
 
         LOGGER.info(f'Simulation initialized with {len(self.agents)} agents.')
         
@@ -110,7 +120,7 @@ class Simulation:
             handle_route_events(event, time, self)
     
     def run(self):
-        time = 0
+        time = self.start_time
         delta = 0
         draw_time = 0
         simultation_time = 0
@@ -181,6 +191,10 @@ class Simulation:
                 states_text = self.font.render(f"States: {state_text}", False, (0, 0, 0))
                 
                 travel_text = self.font.render(f"Travel modes: {travel_modes}", False, (0, 0, 0))
+                if (self.od_summary):
+                    active = sum(1 for agent in self.agents if agent.trip_kind)
+                    od_text = self.font.render(f"OD agents spawned: {self.od_spawned}/{self.od_summary['agents_scheduled']}, active: {active}, failed: {self.od_failed}", False, (0, 0, 0))
+                    self.window.blit(od_text, od_text.get_rect(topleft=(20, 100)))
                 occupancies:dict[str, list] = {}
                 for transpo in self.transportations:
                     if (isinstance(transpo, RoutedTransportation)):

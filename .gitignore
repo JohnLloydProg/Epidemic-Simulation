@@ -13,5 +13,6 @@ pyvenv.cfg
 manila_daily_confirmed.csv
 # sim_data: keep the data files, ignore generated caches and results
 !sim_data/**/*.json
+!od_bundle/*.json
 sim_data/cache/
 sim_data/results/
