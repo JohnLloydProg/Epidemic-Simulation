@@ -124,6 +124,9 @@ def apply_route_change(sim, route_id:str, spawn:Node, new_path:list[Edge], on_pr
     sim.route_originals.setdefault(route_id, (forward.spawn_node, list(forward.path)))
     set_route_group_path(sim.routes, route_id, spawn, new_path)
     sim.route_edits[route_id] = (spawn, list(new_path))
+    if getattr(sim, 'closed_edges', None):        # e.g. a restored path that runs over a closed road
+        from transport.closures import update_routes
+        update_routes(sim)
 
     sim.routing_table = rebuild_routing_cache(sim, on_progress)
     msg = (f"{route_id}: {len(new_path)} edges, {sum(e.distance for e in new_path) / 1000:.2f} km "
@@ -144,29 +147,52 @@ def restore_route(sim, route_id:str, on_progress=None) -> str:
 
 
 def save_case(sim) -> str:
-    """Write the current case plus all route edits (transit_overrides) and the current hotspots as a new case file."""
+    """Write the current case plus everything changed in this session as a new case file:
+    route paths (edits and detours around closed roads) as transit_overrides, closed roads, routes removed by
+    closures, hotspots and barangay trip limits (od_scaling). Never overwrites an existing case."""
     from graphing.data_loader import load_case, data_dir
     case = load_case()
-    hotspots = sorted(str(r.psgc) for r in getattr(sim.graph, 'zones', {}).values() if getattr(r, 'is_hotspot', False))
-    if not sim.route_edits and hotspots == sorted(map(str, case.get('hotspots', []))):
-        raise RouteChangeError("Nothing to save: no route edits and no hotspot changes.")
+    zones = list(getattr(sim.graph, 'zones', {}).values())
+    hotspots = sorted(str(r.psgc) for r in zones if getattr(r, 'is_hotspot', False))
+    limits = {str(r.psgc): float(r.od_scale) for r in zones if getattr(r, 'od_scale', 1.0) != 1.0}
+
+    if hasattr(sim, 'route_loaded'):
+        from transport.closures import route_state
+        edits, closed_ids, removed_ids = route_state(sim)
+        edits = {rid: (spawn_id[1], [e[1] for e in edge_ids]) for rid, (spawn_id, edge_ids) in edits.items()}
+    else:
+        edits = {rid: (spawn.id[1], [e.id[1] for e in path]) for rid, (spawn, path) in sim.route_edits.items()}
+        closed_ids, removed_ids = [], []
+    closed = [e[1] if e[0] == 'city' else f"{e[0]}:{e[1]}" for e in closed_ids]
+
+    unchanged = (not edits and not closed and not removed_ids
+                 and hotspots == sorted(map(str, case.get('hotspots', [])))
+                 and limits == {str(k): float(v) for k, v in case.get('od_scaling', {}).items()})
+    if unchanged:
+        raise RouteChangeError("Nothing to save: no changes to routes, roads, hotspots or trip limits.")
+
     overrides = dict(case.get('transit_overrides', {}))
-    for route_id, (spawn, path) in sim.route_edits.items():
-        overrides[route_id] = {**overrides.get(route_id, {}), 'start_node': spawn.id[1],
-                               'edges': [edge.id[1] for edge in path]}
+    for route_id, (spawn_id, edge_ids) in edits.items():
+        overrides[route_id] = {**overrides.get(route_id, {}), 'start_node': spawn_id, 'edges': edge_ids}
     stem = case['case_id'].split('_edited')[0] + '_edited'
     case_id, n = stem, 1
     while (data_dir() / 'cases' / f'{case_id}.json').exists():      # never overwrite an existing case
         n += 1
         case_id = f'{stem}_{n}'
-    names = sorted(r.name for r in sim.graph.zones.values() if getattr(r, 'is_hotspot', False)) if hotspots else []
+
     description = (case.get('description') or '').split(' | ')[0]
     if sim.route_edits:
         description += f" | route edits: {', '.join(sorted(sim.route_edits))}"
-    if names:
-        description += f" | hotspots: {', '.join(names)}"
-    new_case = {**case, 'case_id': case_id, 'transit_overrides': overrides, 'hotspots': hotspots,
-                'description': description}
+    if closed:
+        description += f" | {len(closed)} road(s) closed"
+    if hotspots:
+        description += f" | hotspots: {', '.join(sorted(r.name for r in zones if r.is_hotspot))}"
+    if limits:
+        description += f" | trip limits: " + ", ".join(f"{r.name} {r.od_scale:.0%}" for r in zones if getattr(r, 'od_scale', 1.0) != 1.0)
+    new_case = {**case, 'case_id': case_id, 'description': description,
+                'transit_overrides': overrides, 'hotspots': hotspots, 'od_scaling': limits,
+                'closed_edges': list(dict.fromkeys(list(case.get('closed_edges', [])) + closed)),
+                'disabled_routes': list(dict.fromkeys(list(case.get('disabled_routes', [])) + list(removed_ids)))}
     if hotspots:                          # keep the run reproducible even if the config default changes
         new_case['hotspot_attraction'] = float(case.get('hotspot_attraction', config.get('HOTSPOT_ATTRACTION', 0.5)))
     path = data_dir() / 'cases' / f'{case_id}.json'

@@ -112,10 +112,15 @@ def load_graph_from_data() -> tuple[RegionGraph, Graph, list]:
     capacity = {_edge_key(k): float(v) for k, v in case['capacity_multipliers'].items()}
     edges = pd.read_parquet(base / 'network_edges.parquet')
     skipped = 0
+    city.case_closed_edges = {}               # for drawing only: {edge_id: (pos_a, pos_b)}
     for row in edges.itertuples(index=False):
         edge_id = (row.layer, int(row.edge_id))
         if edge_id in closed:
             skipped += 1
+            a = graphs[row.u_layer].get_node((row.u_layer, int(row.u)))
+            b = graphs[row.v_layer].get_node((row.v_layer, int(row.v)))
+            if row.layer == 'city' and a is not None and b is not None:
+                city.case_closed_edges[edge_id] = (a.pos, b.pos)
             continue
         node_a = graphs[row.u_layer].get_node((row.u_layer, int(row.u)))
         node_b = graphs[row.v_layer].get_node((row.v_layer, int(row.v)))

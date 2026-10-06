@@ -205,7 +205,7 @@ def schedule_od_agents(city, railway, case: dict, data_dir: Path, start_time: in
             is_end[i] = True
 
     use_external = bool(config.get('OD_EXTERNAL_TRIPS', True))
-    gateways = list(getattr(city, 'gateway_nodes', []) or [])
+    gateways = [g for g in (getattr(city, 'gateway_nodes', []) or []) if g.edges]   # a closed road can cut one off
     if use_external and gateways:
         with open(data_dir / 'base' / 'meta.json', encoding='utf-8') as f:
             meta = json.load(f)

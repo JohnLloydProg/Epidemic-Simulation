@@ -5,6 +5,8 @@ Z ............ show / hide the zone overlay (hotspots are always tinted red, eve
 H ............ hotspot mode (only before the simulation starts, like route editing; press Reset to change later)
     hover a zone ..... highlight it and show its name, role, district and population
     click a zone ..... make it a hotspot / remove it
+    0-9 (hovering) ... trip limit for that barangay: 0 = no trips, 1-9 = 10%-90% of its trips (to and from it)
+    Backspace ........ remove the hovered barangay's trip limit
     C ................ clear all hotspots
     S ................ save hotspots and route edits as a case file (same as S in route edit mode)
     H / Esc .......... leave hotspot mode
@@ -14,6 +16,8 @@ Hotspots are stored on each zone (region.is_hotspot) and saved to the case file'
 which the data loader reads at start-up. With OD demand on, every change recomputes the OD matrix: a hotspot's
 attraction is multiplied by HOTSPOT_ATTRACTION (agents/od_demand.py), so fewer trips end there, and the queued
 OD agents are replaced. The tooltip shows the OD agents arriving in and leaving each zone.
+Trip limits are the case file's "od_scaling" ({psgc: factor}): every trip starting or ending in the barangay is
+multiplied by the factor and the rest are simply not made (unlike a hotspot, whose trips go elsewhere).
 While the simulation runs, the HUD shows how many people are in hotspot zones right now (people_in_hotspots).
 """
 from __future__ import annotations
@@ -135,6 +139,22 @@ class ZoneEditor:
             return True
         if self.sim.started:                      # view only after the start
             return False
+        digit = None
+        if event.type == pg.KEYDOWN:
+            if pg.K_0 <= event.key <= pg.K_9:
+                digit = event.key - pg.K_0
+            elif pg.K_KP0 <= event.key <= pg.K_KP9:
+                digit = event.key - pg.K_KP0
+        if digit is not None or (event.type == pg.KEYDOWN and event.key in (pg.K_BACKSPACE, pg.K_DELETE)):
+            region = self.hover
+            if region is None:
+                self.status = "Hover over a barangay, then press 0-9 for its trip limit (Backspace removes it)."
+                return True
+            region.od_scale = 1.0 if digit is None else digit / 10
+            note = ("no trip limit" if region.od_scale == 1.0 else
+                    "no trips to or from it" if region.od_scale == 0 else f"trips limited to {region.od_scale:.0%}")
+            self.status = f"{region.name}: {note}." + self._recompute_od()
+            return True
         if event.type == pg.KEYDOWN and event.key == pg.K_c:
             for region in self.zones:
                 region.is_hotspot = False
@@ -198,7 +218,7 @@ class ZoneEditor:
     def draw_zones(self, window:pg.Surface):
         """Zone fills and outlines; call before the road network so roads stay on top."""
         overlay = self.show or self.active
-        hot = [r for r in self.zones if getattr(r, 'is_hotspot', False)]
+        hot = [r for r in self.zones if getattr(r, 'is_hotspot', False) or getattr(r, 'od_scale', 1.0) != 1.0]
         if not overlay and not hot:
             return
         cam = self.camera
@@ -209,6 +229,8 @@ class ZoneEditor:
             pg.draw.polygon(layer, COLORS[kind], pts)
             outline = (200, 30, 30, 220) if kind == 'hotspot' else (90, 90, 90, 160)
             pg.draw.polygon(layer, outline, pts, 2 if kind == 'hotspot' else 1)
+            if getattr(region, 'od_scale', 1.0) != 1.0:      # trip limit: purple border
+                pg.draw.polygon(layer, (130, 40, 190, 230), pts, 3)
         window.blit(layer, (0, 0))
 
     def draw_labels(self, window:pg.Surface):
@@ -223,11 +245,13 @@ class ZoneEditor:
         cam = self.camera
         for region in self.zones:
             hot = getattr(region, 'is_hotspot', False)
-            if not (overlay or hot):
+            limit = getattr(region, 'od_scale', 1.0)
+            if not (overlay or hot or limit != 1.0):
                 continue
             cx = sum(p[0] for p in region.polygon) / len(region.polygon)
             cy = sum(p[1] for p in region.polygon) / len(region.polygon)
-            label = self.small.render(self.short_name(region), True, (170, 20, 20) if hot else (60, 60, 60))
+            text = self.short_name(region) + (f" · {limit:.0%}" if limit != 1.0 else "")
+            label = self.small.render(text, True, (170, 20, 20) if hot else (110, 30, 160) if limit != 1.0 else (60, 60, 60))
             window.blit(label, label.get_rect(center=cam.to_screen((cx, cy))))
 
         if not self.active:
@@ -237,7 +261,9 @@ class ZoneEditor:
             r = self.hover
             lines = [f"{r.name}" + ("  — HOTSPOT" if getattr(r, 'is_hotspot', False) else ""),
                      f"{'OD zone' if r.role == 'od' else 'connector (no OD trips)'} · {r.district or ''}",
-                     f"population 2024: {int(r.population):,}" if r.population else "population: n/a"]
+                     f"population 2024: {int(r.population):,}" if r.population else "population: n/a",
+                     ("trip limit: none (0-9 to set)" if getattr(r, 'od_scale', 1.0) == 1.0 else
+                      f"trip limit: {r.od_scale:.0%} of trips to/from here")]
             summary = getattr(self.sim, 'od_summary', None) or {}
             if 'agents_by_dest_zone' in summary:
                 lines.append(f"OD agents ending here: {summary['agents_by_dest_zone'].get(r.name, 0):,}, "
@@ -258,5 +284,5 @@ class ZoneEditor:
         pg.draw.rect(window, (30, 30, 30), pg.Rect(0, h - 48, window.get_width(), 48))
         window.blit(self.font.render(self.status, True, (255, 255, 255)), (10, h - 42))
         help_text = ("H / Esc close" if self.sim.started else
-                     "H close | click a zone: hotspot on/off | C clear all | S save case | Z overlay | " + self._hotspot_text())
+                     "H close | click: hotspot on/off | hover + 0-9: trip limit, Backspace: none | C clear hotspots | S save | " + self._hotspot_text())
         window.blit(self.font.render(help_text[:150], True, (180, 180, 180)), (10, h - 22))

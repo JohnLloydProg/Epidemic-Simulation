@@ -77,12 +77,13 @@ worker_targets:list[Node] = None
 worker_route_index:dict = None
 
 
-def init_worker(target_ids:list, route_edits:dict):
-    """Each worker loads the map itself, then applies the in-memory route edits sent by the main process."""
+def init_worker(target_ids:list, route_edits:dict, closed_ids=(), removed_ids=()):
+    """Each worker loads the map itself, then repeats the main process's road closures, removed routes and
+    route paths, so its network (and its route list order) is the same as the main process's."""
     global worker_city, worker_routes, worker_targets, worker_route_index
+    from transport.closures import apply_in_worker
     city, _, routes = load_graph_from_data()
-    for route_id, (spawn_id, edge_ids) in route_edits.items():
-        set_route_group_path(routes, route_id, city.get_node(spawn_id), [city.get_edge(e) for e in edge_ids])
+    routes = apply_in_worker(city, routes, closed_ids, removed_ids, route_edits)
     worker_city, worker_routes = city, routes
     worker_targets = [city.get_node(i) for i in target_ids]
     worker_route_index = {id(route): i for i, route in enumerate(routes)}
@@ -93,9 +94,11 @@ def compute_origin(start_id) -> dict:
 
 
 # --------------------------------------------------------------------------- compute
-def compute_cache(nodes:list[Node], routes:list[Route], route_edits:dict | None = None, on_progress=None) -> dict:
+def compute_cache(nodes:list[Node], routes:list[Route], route_edits:dict | None = None, on_progress=None,
+                  closed_ids=(), removed_ids=()) -> dict:
     """Plain-data cache for every ordered pair of `nodes`.
-    route_edits: {route_id: (spawn_node_id, [edge_ids])} already applied to `routes`; workers re-apply them.
+    route_edits: {route_id: (spawn_node_id, [edge_ids])} already applied to `routes`; workers re-apply them,
+    after closing `closed_ids` and dropping the routes in `removed_ids` (see transport/closures.py).
     on_progress(done, total) is called after each origin (e.g. to keep a window responsive)."""
     nodes = list(dict.fromkeys(node for node in nodes if node.edges))
     ids = [node.id for node in nodes]
@@ -115,7 +118,7 @@ def compute_cache(nodes:list[Node], routes:list[Route], route_edits:dict | None 
     else:
         # 'spawn' = fresh worker processes on every OS (forking a process that has pygame running can hang)
         context = multiprocessing.get_context('spawn')
-        with context.Pool(processes, initializer=init_worker, initargs=(ids, route_edits or {})) as pool:
+        with context.Pool(processes, initializer=init_worker, initargs=(ids, route_edits or {}, list(closed_ids), list(removed_ids))) as pool:
             for done, result in enumerate(pool.imap_unordered(compute_origin, ids, chunksize=2), 1):
                 dehydrated.update(result)
                 if on_progress:
@@ -148,7 +151,12 @@ def rebuild_routing_cache(sim, on_progress=None) -> dict[tuple, list[Checkpoint]
     """After a route edit: recompute the whole cache with the routes as they are now (kept in memory only)."""
     from graphing.mapping import _route_index
     _route_index.clear()                    # stop -> routes lookup, rebuilt from the edited routes
-    edits = {route_id: (spawn.id, [edge.id for edge in path])
-             for route_id, (spawn, path) in getattr(sim, 'route_edits', {}).items()}
-    dehydrated = compute_cache(sim.trip_end_nodes(), sim.routes, edits, on_progress)
+    if hasattr(sim, 'route_loaded'):         # closures.py keeps the full picture: edits, detours, removals
+        from transport.closures import route_state
+        edits, closed_ids, removed_ids = route_state(sim)
+    else:
+        edits = {route_id: (spawn.id, [edge.id for edge in path])
+                 for route_id, (spawn, path) in getattr(sim, 'route_edits', {}).items()}
+        closed_ids, removed_ids = [], []
+    dehydrated = compute_cache(sim.trip_end_nodes(), sim.routes, edits, on_progress, closed_ids, removed_ids)
     return rehydrate_cache(dehydrated, sim.graph, sim.railway_graph, sim.routes)

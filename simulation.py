@@ -9,6 +9,8 @@ from transport.transportation import Transportation, RoutedTransportation, handl
 from ui.button import ButtonBehavior, TextButton
 from transport.route_editor import RouteEditor
 from ui.zone_editor import ZoneEditor, people_in_hotspots, hotspot_zones
+from ui.road_editor import RoadEditor
+from transport.closures import init_closures
 from graphing.data_loader import load_graph_from_data, load_case, data_dir, results_dir
 from agents.od_demand import schedule_od_agents
 from routing_table import build_routing_cache
@@ -86,6 +88,7 @@ class Simulation:
         self.graph = environment[0]
         self.railway_graph = environment[1]
         self.routes = environment[2]
+        init_closures(self)
         for route in self.routes:
             manager.emit(self.start_time + 3, manager.Event(manager.TRANSPORTATION_SPAWN, route))
 
@@ -111,6 +114,7 @@ class Simulation:
         self.create_ui_elements()
         self.editor = RouteEditor(self)
         self.zone_editor = ZoneEditor(self)
+        self.road_editor = RoadEditor(self)
         
         self.run()
 
@@ -200,6 +204,8 @@ class Simulation:
                     continue
                 if (self.zone_editor.handle_event(event, time)):
                     continue
+                if (self.road_editor.handle_event(event, time)):
+                    continue
                 if (event.type == pg.QUIT):
                     running = False
                     return
@@ -233,6 +239,8 @@ class Simulation:
 
             """Handle events and update agent states"""
             if (time_ns() - simultation_time >= self.simulation_ns_per_time_unit and self.play):
+                if (not self.started and self.network_dirty):     # road changes not rebuilt yet
+                    self.road_editor._rebuild()
                 self.started = True
                 self.handle_events(time)
                 states = get_agent_states(self.agents)
@@ -252,6 +260,7 @@ class Simulation:
                 routes = sorted(self.routes, key=lambda route:route.get_average_occupancy(), reverse=True)
                 for route in routes:
                     route.draw(self.window, self.graph)
+                self.road_editor.draw(self.window)
                 self.editor.draw(self.window)
                 self.zone_editor.draw_labels(self.window)
                 
