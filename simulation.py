@@ -1,4 +1,5 @@
 from dotenv import load_dotenv
+import json
 import pygame as pg
 load_dotenv()
 pg.init()
@@ -10,6 +11,7 @@ from ui.button import ButtonBehavior, TextButton
 from transport.route_editor import RouteEditor
 from ui.zone_editor import ZoneEditor, people_in_hotspots, hotspot_zones
 from ui.road_editor import RoadEditor
+from ui.facility_editor import FacilityEditor
 from transport.closures import init_closures
 from graphing.data_loader import load_graph_from_data, load_case, data_dir, results_dir
 from agents.od_demand import schedule_od_agents
@@ -89,6 +91,8 @@ class Simulation:
         self.railway_graph = environment[1]
         self.routes = environment[2]
         init_closures(self)
+        # facility numbers per barangay (OD "zone_facilities"); edited in facility mode (F)
+        self.zone_facilities = json.loads(json.dumps((load_case().get('od_settings') or {}).get('zone_facilities', {})))
         for route in self.routes:
             manager.emit(self.start_time + 3, manager.Event(manager.TRANSPORTATION_SPAWN, route))
 
@@ -115,6 +119,7 @@ class Simulation:
         self.editor = RouteEditor(self)
         self.zone_editor = ZoneEditor(self)
         self.road_editor = RoadEditor(self)
+        self.facility_editor = FacilityEditor(self)
         
         self.run()
 
@@ -137,7 +142,8 @@ class Simulation:
         self.od_failed = 0
         if (config.get('OD_BUNDLE_DIR')):
             self.od_summary = schedule_od_agents(self.graph, self.railway_graph, load_case(), data_dir(), self.start_time,
-                                                 results_dir(), routes=self.routes)
+                                                 results_dir(), routes=self.routes,
+                                                 zone_facilities=getattr(self, 'zone_facilities', None))
 
     def reschedule_od_demand(self):
         """Recompute the OD matrix for the current routes and replace the queued OD agents (before the start only)."""
@@ -206,6 +212,8 @@ class Simulation:
                     continue
                 if (self.road_editor.handle_event(event, time)):
                     continue
+                if (self.facility_editor.handle_event(event, time)):
+                    continue
                 if (event.type == pg.QUIT):
                     running = False
                     return
@@ -263,6 +271,7 @@ class Simulation:
                 self.road_editor.draw(self.window)
                 self.editor.draw(self.window)
                 self.zone_editor.draw_labels(self.window)
+                self.facility_editor.draw(self.window)
                 
                 text = self.font.render(f"time: {time} (Day {day} {str(hour).zfill(2)}:{str(minute).zfill(2)}:{str(second).zfill(2)}) {self.simulation_multiplier}x {round(delta, 2)}ms per step {len(manager._events.values())} events", False, (0, 0, 0))
                 

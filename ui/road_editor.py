@@ -50,7 +50,8 @@ class RoadEditor:
         return self.sim.graph.camera
 
     def _other_editors(self):
-        return [e for e in (getattr(self.sim, 'editor', None), getattr(self.sim, 'zone_editor', None)) if e is not None]
+        return [e for e in (getattr(self.sim, 'editor', None), getattr(self.sim, 'zone_editor', None),
+                            getattr(self.sim, 'facility_editor', None)) if e is not None]
 
     def _over_button(self, pos) -> bool:
         return any(b.rect.collidepoint(pos) for b in self.sim.buttons.values())

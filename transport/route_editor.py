@@ -165,7 +165,9 @@ def save_case(sim) -> str:
         closed_ids, removed_ids = [], []
     closed = [e[1] if e[0] == 'city' else f"{e[0]}:{e[1]}" for e in closed_ids]
 
+    facilities = {z: dict(c) for z, c in getattr(sim, 'zone_facilities', {}).items() if c}
     unchanged = (not edits and not closed and not removed_ids
+                 and facilities == (case.get('od_settings') or {}).get('zone_facilities', {})
                  and hotspots == sorted(map(str, case.get('hotspots', [])))
                  and limits == {str(k): float(v) for k, v in case.get('od_scaling', {}).items()})
     if unchanged:
@@ -187,12 +189,19 @@ def save_case(sim) -> str:
         description += f" | {len(closed)} road(s) closed"
     if hotspots:
         description += f" | hotspots: {', '.join(sorted(r.name for r in zones if r.is_hotspot))}"
+    if facilities:
+        description += f" | facilities changed: {', '.join(sorted(facilities))}"
     if limits:
         description += f" | trip limits: " + ", ".join(f"{r.name} {r.od_scale:.0%}" for r in zones if getattr(r, 'od_scale', 1.0) != 1.0)
     new_case = {**case, 'case_id': case_id, 'description': description,
                 'transit_overrides': overrides, 'hotspots': hotspots, 'od_scaling': limits,
                 'closed_edges': list(dict.fromkeys(list(case.get('closed_edges', [])) + closed)),
                 'disabled_routes': list(dict.fromkeys(list(case.get('disabled_routes', [])) + list(removed_ids)))}
+    od_settings = dict(case.get('od_settings') or {})
+    od_settings.pop('zone_facilities', None)
+    if facilities:
+        od_settings['zone_facilities'] = facilities
+    new_case['od_settings'] = od_settings
     if hotspots:                          # keep the run reproducible even if the config default changes
         new_case['hotspot_attraction'] = float(case.get('hotspot_attraction', config.get('HOTSPOT_ATTRACTION', 0.5)))
     path = data_dir() / 'cases' / f'{case_id}.json'

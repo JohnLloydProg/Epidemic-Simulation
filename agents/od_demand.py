@@ -146,11 +146,16 @@ def hotspot_attraction(city, case: dict) -> tuple[dict, float]:
 
 
 def schedule_od_agents(city, railway, case: dict, data_dir: Path, start_time: int,
-                       results_dir: Path | None = None, routes: list | None = None) -> dict:
+                       results_dir: Path | None = None, routes: list | None = None,
+                       zone_facilities: dict | None = None) -> dict:
     """Builds the trip list, emits one AGENT_SPAWN event per agent and returns a summary dict.
     routes: the simulation's routes; when given, the OD matrix follows their changes from the base data."""
     bundle = Path(config.get('OD_BUNDLE_DIR', 'od_bundle'))
     od_settings = json.loads(json.dumps(case.get('od_settings') or {}))     # copy: the case stays untouched
+    if zone_facilities is not None:         # the simulation's facility settings replace the case's
+        od_settings.pop('zone_facilities', None)
+        if zone_facilities:
+            od_settings['zone_facilities'] = json.loads(json.dumps(zone_facilities))
     hot, hot_factor = hotspot_attraction(city, case)
     if hot:
         attraction = dict(od_settings.get('attraction', {}))
@@ -298,6 +303,7 @@ def schedule_od_agents(city, railway, case: dict, data_dir: Path, start_time: in
         'route_changes': route_changes,
         'hotspots': sorted(r.name for r in regions if getattr(r, 'is_hotspot', False)),
         'hotspot_attraction': hot_factor,
+        'zone_facilities': od_settings.get('zone_facilities', {}),
         'agents_by_dest_zone': schedule['dz'].value_counts().to_dict(),
         'agents_by_origin_zone': schedule['oz'].value_counts().to_dict(),
     }

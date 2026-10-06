@@ -42,12 +42,13 @@ Model weights (change the baseline -> beta is recalibrated to the Pasig screen l
 Scenario (interventions -> beta stays at the base value by default):
   "attraction":     {"Barangay 669": 0.5}     multiplier on a zone's attraction (0 = closed)
   "extra_minutes":  {"Barangay 306": 10}      extra minutes to reach a zone
-  "routes":         {"remove": ["<route_id>", ...],
-                     "add": {"<route_id>": ["<zone>", "<zone>", ...],
-                             "<route_id>": {"zones": [...], "mode": "bus"}}}
-                    remove routes and/or add routes (adding an existing route_id replaces its zones).
-                    The number of vehicles between zones is recomputed and the transfer penalty follows.
-                    If route_exponent > 0, attraction also follows the new number of routes per barangay.
+  "zone_facilities": {"Barangay 669": {"shop": 50, "mall": 0}}
+                    number of facilities of a category counted in one barangay (only that barangay changes).
+                    Fewer than it has: the category's size there shrinks in proportion (n / current count,
+                    i.e. removing facilities of average size). 0 removes the category from the barangay.
+                    More than it has: extra facilities of the category's citywide median size are added.
+                    See m.facility_counts() for the current numbers. Manila's total attraction stays fixed,
+                    so trips are redistributed, not removed. A barangay never drops below min_share_of_avg.
 Calibration:
   "recalibrate":    true / false               override the automatic choice above
 Export (what .save() writes as the pairs CSV):
@@ -91,7 +92,7 @@ SETTINGS    = {                   # changes from the base model; {} = base matri
 WEIGHT_KEYS = {"purpose_shares", "purpose_facilities", "size_exponent", "max_floor_m2", "default_levels",
                "min_share_of_avg", "use_transfers", "transfer_penalty_min", "pt_share", "max_transfers",
                "route_exponent", "route_mode_weights", "category_weights"}
-SCENARIO_KEYS = {"attraction", "extra_minutes", "routes"}
+SCENARIO_KEYS = {"attraction", "extra_minutes", "routes", "zone_facilities"}
 OTHER_KEYS = {"recalibrate", "export", "name"}
 EXPORT_DEFAULT = {"mode": "top", "top_share": 0.8, "scope": "touch_manila", "zones": [], "districts": [],
                   "selection_mode": "within", "include_intrazonal": False}
@@ -312,6 +313,17 @@ class ODModel:
                                  f"available: {sorted(cats)}")
         if any(v < 0 for v in settings.get("purpose_shares", {}).values()):
             raise ValueError("purpose_shares must be >= 0")
+        zf = settings.get("zone_facilities", {})
+        bad = set(zf) - set(self.names[self.INT])
+        if bad:
+            raise ValueError(f"'zone_facilities': Manila barangay(s) not found (check spelling in zones.csv): {sorted(bad)}")
+        for zone, w in zf.items():
+            if not isinstance(w, dict):
+                raise ValueError(f"'zone_facilities' '{zone}': use {{category: number}}, e.g. {{'shop': 50}}")
+            if set(w) - cats:
+                raise ValueError(f"'zone_facilities' '{zone}': unknown categories {sorted(set(w) - cats)}; available: {sorted(cats)}")
+            if any((not isinstance(v, (int, float))) or v < 0 for v in w.values()):
+                raise ValueError(f"'zone_facilities' '{zone}': numbers of facilities must be >= 0")
         cw = settings.get("category_weights", {})
         if set(cw) - cats:
             raise ValueError(f"category_weights: unknown categories {sorted(set(cw) - cats)}; available: {sorted(cats)}")
@@ -325,7 +337,8 @@ class ODModel:
         if set(ex) - set(EXPORT_DEFAULT):
             raise ValueError(f"Unknown export option(s): {sorted(set(ex) - set(EXPORT_DEFAULT))}")
 
-    def attraction(self, cfg: dict, route_change: dict | None = None) -> np.ndarray:
+    def attraction(self, cfg: dict, route_change: dict | None = None,
+                   zone_facilities: dict | None = None) -> np.ndarray:
         """Manila attraction (Klinkhardt-style purpose shares x weighted facility size) x route factor + externals.
         Route factor = (1 + weighted routes through the barangay) ** route_exponent; Manila total unchanged."""
         f = self.fac
@@ -334,8 +347,25 @@ class ODModel:
         cw = cfg.get("category_weights", {}) or {}
         if cw:
             size = size * f["category"].map(cw).fillna(1.0).to_numpy(float)
+        rows, cats_, sizes = f["zone_row"].to_numpy(), f["category"].to_numpy(), np.asarray(size, float)
+        if zone_facilities:                                             # per-barangay scenario: set counts
+            sizes = sizes.copy()
+            extra_r, extra_c, extra_s = [], [], []
+            for zone, counts in zone_facilities.items():
+                row = int(np.flatnonzero(self.names == zone)[0])
+                for cat, n in counts.items():
+                    here = (rows == row) & (cats_ == cat)
+                    have = int(here.sum())
+                    if have > 0:
+                        sizes[here] *= n / have
+                    elif n > 0:                                         # add facilities of median size
+                        extra_r.append(row); extra_c.append(cat)
+                        extra_s.append(n * float(np.median(np.asarray(size, float)[cats_ == cat])))
+            if extra_r:
+                rows = np.concatenate([rows, extra_r]); cats_ = np.concatenate([cats_, extra_c])
+                sizes = np.concatenate([sizes, extra_s])
         n_int = int(self.INT.sum())
-        S = (pd.DataFrame({"row": f["zone_row"], "cat": f["category"], "size": size})
+        S = (pd.DataFrame({"row": rows, "cat": cats_, "size": sizes})
              .pivot_table(index="row", columns="cat", values="size", aggfunc="sum")
              .reindex(index=np.flatnonzero(self.INT), fill_value=0).fillna(0))
         shares = {p: v for p, v in cfg["purpose_shares"].items() if v > 0}
@@ -356,6 +386,13 @@ class ODModel:
             a = A[self.INT] * (1.0 + self.route_counts(cfg, route_change)[self.INT]) ** g
             A[self.INT] = cfg["manila_attraction_total"] * a / a.sum()
         return A
+
+    def facility_counts(self, zones=None) -> pd.DataFrame:
+        """Number of facilities per Manila barangay and category (from facilities.csv)."""
+        t = pd.crosstab(self.fac["zone_row"], self.fac["category"]).reindex(np.flatnonzero(self.INT), fill_value=0)
+        t.index = self.names[t.index]
+        t.index.name = "zone"
+        return t.loc[list(zones)] if zones is not None else t
 
     def cost(self, cfg: dict, hops: np.ndarray | None = None) -> np.ndarray:
         if not cfg["use_transfers"]:
@@ -404,10 +441,12 @@ class ODModel:
         A = self.attraction(cfg) if weights_changed else base.A.copy()
         C = self.cost(cfg) if weights_changed else self._base_C.copy()
         beta = self.calibrate(A, C, cfg) if recalibrate else cfg["beta"]
+        route_attr = "routes" in settings and float(cfg.get("route_exponent", 0) or 0) > 0
         if "routes" in settings:                                       # route scenario on top
             C = self.cost(cfg, hops=self.hops_for(settings["routes"], cfg))
-            if float(cfg.get("route_exponent", 0) or 0) > 0:
-                A = self.attraction(cfg, route_change=settings["routes"])
+        if route_attr or settings.get("zone_facilities"):              # attraction scenarios on top
+            A = self.attraction(cfg, route_change=settings["routes"] if route_attr else None,
+                                zone_facilities=settings.get("zone_facilities"))
         for name, mult in cfg.get("attraction", {}).items():          # scenario on top
             A[self.names == name] *= mult
         for name, extra in cfg.get("extra_minutes", {}).items():

@@ -217,7 +217,7 @@ class ZoneEditor:
     # ------------------------------------------------------------------ drawing
     def draw_zones(self, window:pg.Surface):
         """Zone fills and outlines; call before the road network so roads stay on top."""
-        overlay = self.show or self.active
+        overlay = self.show or self.active or getattr(getattr(self.sim, 'facility_editor', None), 'active', False)
         hot = [r for r in self.zones if getattr(r, 'is_hotspot', False) or getattr(r, 'od_scale', 1.0) != 1.0]
         if not overlay and not hot:
             return
@@ -241,7 +241,7 @@ class ZoneEditor:
             self.status = self.LOCKED_MSG
         elif self.active and self.status == self.LOCKED_MSG:
             self.status = "HOTSPOT MODE — click a barangay to make it a hotspot (click again to remove)."
-        overlay = self.show or self.active
+        overlay = self.show or self.active or getattr(getattr(self.sim, 'facility_editor', None), 'active', False)
         cam = self.camera
         for region in self.zones:
             hot = getattr(region, 'is_hotspot', False)
@@ -250,7 +250,8 @@ class ZoneEditor:
                 continue
             cx = sum(p[0] for p in region.polygon) / len(region.polygon)
             cy = sum(p[1] for p in region.polygon) / len(region.polygon)
-            text = self.short_name(region) + (f" · {limit:.0%}" if limit != 1.0 else "")
+            text = (self.short_name(region) + (f" · {limit:.0%}" if limit != 1.0 else "")
+                    + (" · F" if region.name in getattr(self.sim, 'zone_facilities', {}) else ""))
             label = self.small.render(text, True, (170, 20, 20) if hot else (110, 30, 160) if limit != 1.0 else (60, 60, 60))
             window.blit(label, label.get_rect(center=cam.to_screen((cx, cy))))
 
