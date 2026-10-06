@@ -102,28 +102,44 @@ def spawn_nodes(region, city, railway) -> list:
     return nodes or [anchor]
 
 
-def load_od(bundle: Path, od_settings: dict) -> tuple[np.ndarray, pd.DataFrame]:
-    """OD matrix (trips/day) and the bundle's zone table. Uses manila_od; if base_config.json is missing,
-    falls back to the stored base matrix (base case only, scenarios need the full bundle)."""
+def load_od(bundle: Path, od_settings: dict, city=None, routes=None,
+            data_dir: Path | None = None) -> tuple[np.ndarray, pd.DataFrame, list]:
+    """OD matrix (trips/day), the bundle's zone table and the simulation route changes applied to it.
+    With `routes`, the matrix follows the simulation's routes (agents/od_routes.py). Uses manila_od; if
+    base_config.json is missing, falls back to the stored base matrix (base case only)."""
     if (bundle / 'base_config.json').exists():
-        from manila_od import ODModel
-        model = ODModel.load(str(bundle))
-        result = model.run(od_settings) if od_settings else model.base()
-        return np.array(result.od, dtype=float), model.zones
+        from agents.od_routes import SimRouteODModel, sim_route_changes
+        model = SimRouteODModel.load(str(bundle))
+        settings = dict(od_settings)
+        changes = []
+        if routes is not None:
+            if model.has_routes:
+                changes = sim_route_changes(model, city, routes, data_dir)
+                model.sim_changes = changes
+                if changes:
+                    settings.setdefault('routes', {})
+            else:
+                LOGGER.warning("The OD bundle has no routes.csv: the OD matrix ignores route changes.")
+        result = model.run(settings) if settings else model.base()
+        return np.array(result.od, dtype=float), model.zones, [c.describe(model.names) for c in changes]
     if od_settings:
         raise FileNotFoundError(f"'{bundle / 'base_config.json'}' is missing; it is needed for 'od_settings' scenarios.")
     LOGGER.warning(f"'{bundle / 'base_config.json'}' missing: using od_matrix_base_reference.npy (base matrix only).")
     return (np.load(bundle / 'od_matrix_base_reference.npy').astype(float),
-            pd.read_csv(bundle / 'zones.csv'))
+            pd.read_csv(bundle / 'zones.csv'), [])
 
 
 # --------------------------------------------------------------------------- main entry
 def schedule_od_agents(city, railway, case: dict, data_dir: Path, start_time: int,
-                       results_dir: Path | None = None) -> dict:
-    """Builds the trip list, emits one AGENT_SPAWN event per agent and returns a summary dict."""
+                       results_dir: Path | None = None, routes: list | None = None) -> dict:
+    """Builds the trip list, emits one AGENT_SPAWN event per agent and returns a summary dict.
+    routes: the simulation's routes; when given, the OD matrix follows their changes from the base data."""
     bundle = Path(config.get('OD_BUNDLE_DIR', 'od_bundle'))
     od_settings = case.get('od_settings') or {}
-    od, zones = load_od(bundle, od_settings)
+    od, zones, route_changes = load_od(bundle, od_settings, city, routes, data_dir)
+    if route_changes:
+        LOGGER.info(f"OD matrix follows {len(route_changes)} changed route(s): "
+                    + "; ".join(f"{c['route_id']} -{len(c['zones_removed'])}/+{len(c['zones_added'])} zones" for c in route_changes))
     names = zones['zone'].astype(str).to_numpy()
     index_of = {name: i for i, name in enumerate(names)}
 
@@ -257,6 +273,7 @@ def schedule_od_agents(city, railway, case: dict, data_dir: Path, start_time: in
         'by_kind': schedule['kind'].value_counts().to_dict(),
         'spawn_at': spawn_at,
         'od_settings': od_settings,
+        'route_changes': route_changes,
     }
     LOGGER.info(f"OD demand: {summary['daily_trips_in_scope']:,} trips/day in scope, "
                 f"{window_share:.1%} in window -> {rows.size:,} agents scheduled {summary['by_kind']}")

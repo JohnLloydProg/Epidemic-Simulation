@@ -6,7 +6,10 @@ started, press the Reset button: it goes back to the start time (SIM_START_HOUR)
 keeps the edits made so far, so you can change more.
 
 Press E to open edit mode, then:
-    left-click a route ........ select it (its start is marked with a square)
+    left-click a route ........ select it (its start is marked with a square). Where several routes overlap,
+                                a dropdown lists them: hover a row to see that route on the map, click it
+                                (or Up/Down + Enter) to choose, type to filter by id or name, mouse
+                                wheel to scroll, Esc to cancel
     left-click nodes .......... waypoints of the new path, in order:
                                   1st  = a stop ON the route where the detour leaves it
                                   last = another stop on the route  -> only that section is replaced
@@ -15,12 +18,14 @@ Press E to open edit mode, then:
     right-click / Backspace ... undo the last waypoint
     Enter ..................... apply the change
     R ......................... restore the selected route to its original path
-    S ......................... save all edits as a new case file in sim_data/cases/
+    S ......................... save all edits (and the hotspots, see ui/zone_editor.py) as a new case file
     Esc ....................... deselect, or close edit mode
 Dragging still pans the map; only a click without dragging counts as a pick.
 
 Applying (or restoring) a change updates both directions of the route and rebuilds the whole routing cache
 with the routes as they now are, so every trip is planned on the current network before the run starts.
+When OD demand is on (OD_BUNDLE_DIR), the OD matrix is also recomputed for the new routes
+(agents/od_routes.py) and the queued OD agents are replaced.
 The rebuild stays in memory; press S and run the saved case to get a cache file for the edited routes.
 """
 from __future__ import annotations
@@ -33,6 +38,7 @@ import pygame as pg
 from graphing.core import Edge, Node
 from graphing.mapping import shortest_edge_path
 from transport.transportation import set_route_group_path
+import configuration as config
 
 LOGGER = logging.getLogger('RouteEditor')
 
@@ -121,7 +127,11 @@ def apply_route_change(sim, route_id:str, spawn:Node, new_path:list[Edge], on_pr
 
     sim.routing_table = rebuild_routing_cache(sim, on_progress)
     msg = (f"{route_id}: {len(new_path)} edges, {sum(e.distance for e in new_path) / 1000:.2f} km "
-           f"(routing cache rebuilt: {len(sim.routing_table):,} trips)")
+           f"(routing cache rebuilt: {len(sim.routing_table):,} trips")
+    if hasattr(sim, 'reschedule_od_demand') and config.get('OD_BUNDLE_DIR'):
+        sim.reschedule_od_demand()               # OD matrix follows the new route; agents re-queued
+        msg += f"; OD recomputed: {sim.od_summary['agents_scheduled']:,} agents"
+    msg += ")"
     LOGGER.info(f"Route changed — {msg}")
     return msg
 
@@ -134,18 +144,29 @@ def restore_route(sim, route_id:str, on_progress=None) -> str:
 
 
 def save_case(sim) -> str:
-    """Write the current case plus all route edits as a new case file (transit_overrides)."""
+    """Write the current case plus all route edits (transit_overrides) and the current hotspots as a new case file."""
     from graphing.data_loader import load_case, data_dir
-    if not sim.route_edits:
-        raise RouteChangeError("No route changes to save.")
     case = load_case()
+    hotspots = sorted(str(r.psgc) for r in getattr(sim.graph, 'zones', {}).values() if getattr(r, 'is_hotspot', False))
+    if not sim.route_edits and hotspots == sorted(map(str, case.get('hotspots', []))):
+        raise RouteChangeError("Nothing to save: no route edits and no hotspot changes.")
     overrides = dict(case.get('transit_overrides', {}))
     for route_id, (spawn, path) in sim.route_edits.items():
         overrides[route_id] = {**overrides.get(route_id, {}), 'start_node': spawn.id[1],
                                'edges': [edge.id[1] for edge in path]}
-    case_id = case['case_id'] if case['case_id'].endswith('_edited') else case['case_id'] + '_edited'
-    new_case = {**case, 'case_id': case_id, 'transit_overrides': overrides,
-                'description': (case.get('description') or '') + f" | route edits: {', '.join(sorted(sim.route_edits))}"}
+    stem = case['case_id'].split('_edited')[0] + '_edited'
+    case_id, n = stem, 1
+    while (data_dir() / 'cases' / f'{case_id}.json').exists():      # never overwrite an existing case
+        n += 1
+        case_id = f'{stem}_{n}'
+    names = sorted(r.name for r in sim.graph.zones.values() if getattr(r, 'is_hotspot', False)) if hotspots else []
+    description = (case.get('description') or '').split(' | ')[0]
+    if sim.route_edits:
+        description += f" | route edits: {', '.join(sorted(sim.route_edits))}"
+    if names:
+        description += f" | hotspots: {', '.join(names)}"
+    new_case = {**case, 'case_id': case_id, 'transit_overrides': overrides, 'hotspots': hotspots,
+                'description': description}
     path = data_dir() / 'cases' / f'{case_id}.json'
     path.parent.mkdir(parents=True, exist_ok=True)
     with open(path, 'w', encoding='utf-8') as f:
@@ -163,6 +184,121 @@ def _dist_to_segment(p, a, b) -> float:
     return math.hypot(px - (ax + t * dx), py - (ay + t * dy))
 
 
+MODE_COLORS = {'jeepney': (40, 110, 230), 'jeep': (40, 110, 230), 'bus': (220, 50, 50)}
+
+
+class RoutePicker:
+    """Dropdown listing the routes under a click, so overlapping routes can be told apart.
+    Hover a row to highlight that route on the map; click a row (or Up/Down + Enter) to choose it;
+    type to filter by route id or name (Backspace deletes); the mouse wheel scrolls long lists;
+    Esc or a click outside closes it."""
+    ROW_H = 22
+    MAX_ROWS = 12
+    PAD = 6
+
+    def __init__(self, routes:list, pos:tuple, window_size:tuple, font):
+        self.all_routes = routes
+        self.all_labels = [f"{getattr(r, 'route_id', '?')}  ·  {getattr(r, 'name', '')}"[:70] for r in routes]
+        self.query = ''
+        self.routes, self.labels = list(routes), list(self.all_labels)
+        self.font = font
+        self.hover = 0
+        self.scroll = 0
+        width = max(font.size(label)[0] for label in self.all_labels) + 2 * self.PAD + 18
+        width = max(width, font.size(f"{len(routes)} routes here — type to filter, Esc to cancel")[0] + 2 * self.PAD)
+        height = (min(len(routes), self.MAX_ROWS) + 1) * self.ROW_H + self.PAD   # fixed size while filtering
+        x = min(pos[0] + 8, window_size[0] - width - 4)       # keep the box on screen
+        y = min(pos[1] + 8, window_size[1] - 52 - height)     # stay above the status bar
+        self.rect = pg.Rect(max(4, x), max(4, y), width, height)
+
+    @property
+    def header(self) -> str:
+        if self.query:
+            return f"Filter: {self.query}_   ({len(self.routes)} of {len(self.all_routes)})"
+        return f"{len(self.all_routes)} routes here — type to filter, Esc to cancel"
+
+    @property
+    def visible(self) -> int:
+        return min(len(self.routes), self.MAX_ROWS)
+
+    def _apply_filter(self):
+        words = self.query.lower().split()
+        keep = [i for i, label in enumerate(self.all_labels) if all(w in label.lower() for w in words)]
+        self.routes = [self.all_routes[i] for i in keep]
+        self.labels = [self.all_labels[i] for i in keep]
+        self.hover, self.scroll = 0, 0
+
+    def hovered_route(self):
+        return self.routes[self.hover] if 0 <= self.hover < len(self.routes) else None
+
+    def _row_at(self, pos):
+        if not self.rect.collidepoint(pos):
+            return None
+        i = (pos[1] - self.rect.top - self.ROW_H) // self.ROW_H
+        return self.scroll + i if 0 <= i < self.visible and self.scroll + i < len(self.routes) else None
+
+    def _scroll_to_hover(self):
+        if self.hover < self.scroll:
+            self.scroll = self.hover
+        elif self.hover >= self.scroll + self.visible:
+            self.scroll = self.hover - self.visible + 1
+
+    def handle_event(self, event):
+        """Returns ('choose', route), ('close', None) or (None, None) while the picker stays open."""
+        if event.type == pg.MOUSEMOTION:
+            row = self._row_at(event.pos)
+            if row is not None:
+                self.hover = row
+        elif event.type == pg.MOUSEWHEEL:
+            self.scroll = max(0, min(len(self.routes) - self.visible, self.scroll - event.y))
+        elif event.type == pg.MOUSEBUTTONDOWN and event.button == 1:
+            row = self._row_at(event.pos)
+            if row is not None:
+                return 'choose', self.routes[row]
+            if not self.rect.collidepoint(event.pos):
+                return 'close', None
+        elif event.type == pg.MOUSEBUTTONDOWN and event.button == 3:
+            return 'close', None
+        elif event.type == pg.KEYDOWN:
+            if event.key == pg.K_ESCAPE:
+                return 'close', None
+            if event.key in (pg.K_RETURN, pg.K_KP_ENTER):
+                return 'choose', self.hovered_route()
+            if event.key in (pg.K_DOWN, pg.K_UP):
+                if self.routes:
+                    self.hover = (self.hover + (1 if event.key == pg.K_DOWN else -1)) % len(self.routes)
+                    self._scroll_to_hover()
+            elif event.key == pg.K_BACKSPACE:
+                self.query = self.query[:-1]
+                self._apply_filter()
+            elif getattr(event, 'unicode', '') and event.unicode.isprintable():
+                self.query += event.unicode
+                self._apply_filter()
+        return None, None
+
+    def draw(self, window:pg.Surface):
+        pg.draw.rect(window, (250, 250, 250), self.rect)
+        pg.draw.rect(window, (60, 60, 60), self.rect, 1)
+        window.blit(self.font.render(self.header, True, (90, 90, 90)), (self.rect.left + self.PAD, self.rect.top + 4))
+        if not self.routes:
+            window.blit(self.font.render("No route matches — Backspace to edit the filter", True, (150, 60, 60)),
+                        (self.rect.left + self.PAD, self.rect.top + self.ROW_H + 4))
+        for i in range(self.visible):
+            index = self.scroll + i
+            route = self.routes[index]
+            row = pg.Rect(self.rect.left + 1, self.rect.top + (i + 1) * self.ROW_H, self.rect.width - 2, self.ROW_H)
+            if index == self.hover:
+                pg.draw.rect(window, (255, 225, 120), row)
+            color = MODE_COLORS.get(getattr(route, 'mode', ''), (120, 120, 120))
+            pg.draw.rect(window, color, pg.Rect(row.left + self.PAD, row.centery - 5, 10, 10))
+            window.blit(self.font.render(self.labels[index], True, (20, 20, 20)), (row.left + self.PAD + 16, row.top + 4))
+        if len(self.routes) > self.visible:                    # scroll bar
+            track = pg.Rect(self.rect.right - 5, self.rect.top + self.ROW_H, 3, self.visible * self.ROW_H)
+            size = max(10, track.height * self.visible // len(self.routes))
+            top = track.top + (track.height - size) * self.scroll // max(1, len(self.routes) - self.visible)
+            pg.draw.rect(window, (170, 170, 170), pg.Rect(track.left, top, 3, size))
+
+
 class RouteEditor:
     LOCKED_MSG = "The simulation has started. Press Reset to go back to the start and change routes."
 
@@ -176,6 +312,7 @@ class RouteEditor:
         self.segments:list[list[Edge]] = []   # preview: road path between consecutive waypoints
         self.status = ''
         self._down = None
+        self.picker:RoutePicker | None = None
         self.font = pg.font.Font(None, 20)
 
     # ------------------------------------------------------------------ helpers
@@ -191,15 +328,33 @@ class RouteEditor:
                 seen.add(rid)
                 yield r
 
-    def _nearest_route(self, pos):
-        best, best_d = None, PICK_RADIUS_PX
+    def _routes_near(self, pos) -> list:
+        """Every editable route passing within PICK_RADIUS_PX of pos, nearest first."""
+        found = []
         for route in self._editable_routes():
             pts = [self.camera.to_screen(n.pos) for n in route.ordered_nodes]
-            for a, b in zip(pts, pts[1:]):
-                d = _dist_to_segment(pos, a, b)
-                if d < best_d:
-                    best, best_d = route, d
-        return best
+            d = min((_dist_to_segment(pos, a, b) for a, b in zip(pts, pts[1:])), default=math.inf)
+            if d < PICK_RADIUS_PX:
+                found.append((round(d), getattr(route, 'mode', ''), getattr(route, 'route_id', ''), route))
+        return [entry[-1] for entry in sorted(found, key=lambda e: e[:3])]
+
+    def _pick_route(self, pos, exclude=None) -> bool:
+        """Select the route at pos; open the dropdown when several overlap. False if there is none."""
+        routes = [r for r in self._routes_near(pos) if r is not exclude]
+        if not routes:
+            return False
+        if len(routes) == 1:
+            self._select(routes[0])
+        else:
+            surface = pg.display.get_surface()
+            self.picker = RoutePicker(routes, pos, surface.get_size() if surface else (1080, 720), self.font)
+            self.status = f"{len(routes)} routes overlap here — choose one from the list."
+        return True
+
+    def _select(self, route):
+        self.route, self.waypoints, self.segments = route, [], []
+        self.status = (f"Selected {route.route_id} ({getattr(route, 'name', '')[:50]}). "
+                       "Click the stop where the detour starts.")
 
     def _nearest_node(self, pos, candidates):
         best, best_d = None, PICK_RADIUS_PX
@@ -215,6 +370,7 @@ class RouteEditor:
 
     def _clear_selection(self):
         self.route, self.waypoints, self.segments = None, [], []
+        self.picker = None
 
     # ------------------------------------------------------------------ input
     def handle_event(self, event, time:int) -> bool:
@@ -231,6 +387,19 @@ class RouteEditor:
             if event.type == pg.KEYDOWN and event.key == pg.K_ESCAPE:
                 self.active = False
                 return True
+            return False
+
+        if self.picker is not None:               # dropdown open: it takes clicks, the wheel and keys
+            if event.type in (pg.MOUSEMOTION, pg.MOUSEWHEEL, pg.MOUSEBUTTONDOWN, pg.KEYDOWN):
+                action, route = self.picker.handle_event(event)
+                if action == 'choose' and route is not None:
+                    self.picker = None
+                    self._select(route)
+                elif action == 'close':
+                    self.picker = None
+                    self.status = ("Click the stop where the detour starts." if self.route is not None
+                                   else "Click a jeepney/bus route to select it.")
+                return event.type != pg.MOUSEMOTION   # motion still reaches the camera
             return False
 
         if event.type == pg.KEYDOWN:
@@ -275,19 +444,12 @@ class RouteEditor:
 
     def _click(self, pos):
         if self.route is None:
-            self.route = self._nearest_route(pos)
-            if self.route is not None:
-                self.status = (f"Selected {self.route.route_id} ({getattr(self.route, 'name', '')[:50]}). "
-                               "Click the stop where the detour starts.")
+            self._pick_route(pos)
             return
         if not self.waypoints:
             node = self._nearest_node(pos, self.route.ordered_nodes)
             if node is None:
-                other = self._nearest_route(pos)
-                if other is not None and other is not self.route:
-                    self.route = other
-                    self.status = f"Selected {other.route_id}. Click the stop where the detour starts."
-                else:
+                if not self._pick_route(pos, exclude=self.route):
                     self.status = "Click a node ON the selected route (zoom in if they are hard to hit)."
                 return
             self.waypoints.append(node)
@@ -373,6 +535,16 @@ class RouteEditor:
             pg.draw.circle(window, (230, 0, 200), pos, 9)
             label = self.font.render(str(i), True, (255, 255, 255))
             window.blit(label, label.get_rect(center=pos))
+
+        if self.picker is not None:
+            hovered = self.picker.hovered_route()
+            if hovered is not None:                # show on the map which route the hovered row is
+                pts = [cam.to_screen(n.pos) for n in hovered.ordered_nodes]
+                if len(pts) > 1:
+                    pg.draw.lines(window, (255, 190, 0), False, pts, max(6, cam.scale(7)))
+                sx, sy = cam.to_screen(hovered.spawn_node.pos)
+                pg.draw.rect(window, (200, 140, 0), pg.Rect(sx - 7, sy - 7, 14, 14))
+            self.picker.draw(window)
 
         h = window.get_height()
         pg.draw.rect(window, (30, 30, 30), pg.Rect(0, h - 48, window.get_width(), 48))

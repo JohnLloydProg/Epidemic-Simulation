@@ -8,6 +8,7 @@ from agents.agent import Agent, handle_agent_events
 from transport.transportation import Transportation, RoutedTransportation, handle_route_events, handle_transportation_events, BusRoute, JeepRoute, TrainRoute
 from ui.button import ButtonBehavior, TextButton
 from transport.route_editor import RouteEditor
+from ui.zone_editor import ZoneEditor, people_in_hotspots, hotspot_zones
 from graphing.data_loader import load_graph_from_data, load_case, data_dir, results_dir
 from agents.od_demand import schedule_od_agents
 from routing_table import build_routing_cache
@@ -109,6 +110,7 @@ class Simulation:
         self.graph.camera.fit([node.pos for node in all_nodes], self.window.get_size())
         self.create_ui_elements()
         self.editor = RouteEditor(self)
+        self.zone_editor = ZoneEditor(self)
         
         self.run()
 
@@ -130,7 +132,18 @@ class Simulation:
         self.od_spawned = 0
         self.od_failed = 0
         if (config.get('OD_BUNDLE_DIR')):
-            self.od_summary = schedule_od_agents(self.graph, self.railway_graph, load_case(), data_dir(), self.start_time, results_dir())
+            self.od_summary = schedule_od_agents(self.graph, self.railway_graph, load_case(), data_dir(), self.start_time,
+                                                 results_dir(), routes=self.routes)
+
+    def reschedule_od_demand(self):
+        """Recompute the OD matrix for the current routes and replace the queued OD agents (before the start only)."""
+        for target in list(manager._events):
+            kept = [event for event in manager._events[target] if event.type != manager.AGENT_SPAWN]
+            if kept:
+                manager._events[target] = kept
+            else:
+                del manager._events[target]
+        self.schedule_od_demand()
 
     def reset(self):
         """Back to the start time, keeping the current route edits: removes all agents, vehicles and pending
@@ -185,6 +198,8 @@ class Simulation:
                 consumed = []
                 if (self.editor.handle_event(event, time)):
                     continue
+                if (self.zone_editor.handle_event(event, time)):
+                    continue
                 if (event.type == pg.QUIT):
                     running = False
                     return
@@ -231,12 +246,14 @@ class Simulation:
             if (time_ns() - draw_time >= (10**9)//60):
                 draw_time = time_ns()
                 self.window.fill((255, 255, 255))
+                self.zone_editor.draw_zones(self.window)
                 self.graph.draw(self.window, self.font,  self.layer)
                 
                 routes = sorted(self.routes, key=lambda route:route.get_average_occupancy(), reverse=True)
                 for route in routes:
                     route.draw(self.window, self.graph)
                 self.editor.draw(self.window)
+                self.zone_editor.draw_labels(self.window)
                 
                 text = self.font.render(f"time: {time} (Day {day} {str(hour).zfill(2)}:{str(minute).zfill(2)}:{str(second).zfill(2)}) {self.simulation_multiplier}x {round(delta, 2)}ms per step {len(manager._events.values())} events", False, (0, 0, 0))
                 
@@ -250,6 +267,10 @@ class Simulation:
                     active = sum(1 for agent in self.agents if agent.trip_kind)
                     od_text = self.font.render(f"OD agents spawned: {self.od_spawned}/{self.od_summary['agents_scheduled']}, active: {active}, failed: {self.od_failed}", False, (0, 0, 0))
                     self.window.blit(od_text, od_text.get_rect(topleft=(20, 100)))
+                hot = hotspot_zones(self.graph)
+                if (hot):
+                    hot_text = self.font.render(f"People in hotspots ({len(hot)} zones): {people_in_hotspots(self)}", False, (180, 0, 0))
+                    self.window.blit(hot_text, hot_text.get_rect(topleft=(20, 120)))
                 occupancies:dict[str, list] = {}
                 for transpo in self.transportations:
                     if (isinstance(transpo, RoutedTransportation)):
