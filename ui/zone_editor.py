@@ -11,8 +11,10 @@ H ............ hotspot mode (only before the simulation starts, like route editi
 Dragging still pans the map; only a click without dragging toggles a zone.
 
 Hotspots are stored on each zone (region.is_hotspot) and saved to the case file's "hotspots" list (PSGC codes),
-which the data loader reads at start-up. While the simulation runs, the HUD shows how many people are in
-hotspot zones right now (people_in_hotspots).
+which the data loader reads at start-up. With OD demand on, every change recomputes the OD matrix: a hotspot's
+attraction is multiplied by HOTSPOT_ATTRACTION (agents/od_demand.py), so fewer trips end there, and the queued
+OD agents are replaced. The tooltip shows the OD agents arriving in and leaving each zone.
+While the simulation runs, the HUD shows how many people are in hotspot zones right now (people_in_hotspots).
 """
 from __future__ import annotations
 import math
@@ -136,7 +138,7 @@ class ZoneEditor:
         if event.type == pg.KEYDOWN and event.key == pg.K_c:
             for region in self.zones:
                 region.is_hotspot = False
-            self.status = "All hotspots cleared."
+            self.status = "All hotspots cleared." + self._recompute_od()
             return True
         if event.type == pg.KEYDOWN and event.key == pg.K_s:
             from transport.route_editor import save_case, RouteChangeError
@@ -164,8 +166,33 @@ class ZoneEditor:
             self.status = "Click inside a barangay of the study area."
             return
         region.is_hotspot = not getattr(region, 'is_hotspot', False)
-        self.status = (f"{region.name} is {'now a HOTSPOT' if region.is_hotspot else 'no longer a hotspot'}. "
-                       + self._hotspot_text())
+        self.status = (f"{region.name} is {'now a HOTSPOT' if region.is_hotspot else 'no longer a hotspot'}."
+                       + self._recompute_od())
+
+    def _od_on(self) -> bool:
+        import configuration as config
+        return bool(config.get('OD_BUNDLE_DIR')) and hasattr(self.sim, 'reschedule_od_demand')
+
+    def _recompute_od(self) -> str:
+        """Recompute the OD matrix for the current hotspots and replace the queued agents. Returns a status note."""
+        if not self._od_on():
+            return " " + self._hotspot_text()
+        self._show("Recomputing the OD matrix for the hotspots...")
+        self.sim.reschedule_od_demand()
+        summary = self.sim.od_summary or {}
+        to_hot = sum(summary.get('agents_by_dest_zone', {}).get(name, 0) for name in summary.get('hotspots', []))
+        factor = summary.get('hotspot_attraction', 1.0)
+        return (f" OD recomputed (hotspot attraction x{factor:g}): {summary.get('agents_scheduled', 0):,} agents, "
+                f"{to_hot:,} ending in hotspots. " + self._hotspot_text())
+
+    def _show(self, text:str):
+        window = pg.display.get_surface()
+        if window is None:
+            return
+        h = window.get_height()
+        pg.draw.rect(window, (30, 30, 30), pg.Rect(0, h - 48, window.get_width(), 48))
+        window.blit(self.font.render(text, True, (255, 255, 255)), (10, h - 42))
+        pg.display.update()
 
     # ------------------------------------------------------------------ drawing
     def draw_zones(self, window:pg.Surface):
@@ -211,6 +238,10 @@ class ZoneEditor:
             lines = [f"{r.name}" + ("  — HOTSPOT" if getattr(r, 'is_hotspot', False) else ""),
                      f"{'OD zone' if r.role == 'od' else 'connector (no OD trips)'} · {r.district or ''}",
                      f"population 2024: {int(r.population):,}" if r.population else "population: n/a"]
+            summary = getattr(self.sim, 'od_summary', None) or {}
+            if 'agents_by_dest_zone' in summary:
+                lines.append(f"OD agents ending here: {summary['agents_by_dest_zone'].get(r.name, 0):,}, "
+                             f"starting here: {summary['agents_by_origin_zone'].get(r.name, 0):,}")
             surfaces = [self.small.render(t, True, (20, 20, 20)) for t in lines]
             w = max(s.get_width() for s in surfaces) + 12
             h = sum(s.get_height() + 3 for s in surfaces) + 8

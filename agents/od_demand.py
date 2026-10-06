@@ -31,6 +31,12 @@ Config keys (JSON file named by CONFIG_FILE_NAME)
   "OD_TRIP_END_ROLES":   ["od"]
   "OD_SPAWN_AT":         "zone_nodes"  or "anchor" (every agent at the zone's anchor node)
   "OD_INTRAZONAL":       false         also spawn trips within one barangay (needs "zone_nodes")
+  "HOTSPOT_ATTRACTION":  0.5           OD attraction multiplier for hotspot barangays (1 = no effect, 0 = no trips
+                                       end there); a case file's "hotspot_attraction" overrides it
+
+Hotspots (case "hotspots", or chosen with H in the simulation) lower their barangay's attraction in the OD model,
+so fewer trips end there and the model sends them to other destinations instead (total trips unchanged).
+This is a scenario setting: beta is not recalibrated. It multiplies with any "attraction" in "od_settings".
 """
 from __future__ import annotations
 import logging
@@ -130,12 +136,28 @@ def load_od(bundle: Path, od_settings: dict, city=None, routes=None,
 
 
 # --------------------------------------------------------------------------- main entry
+def hotspot_attraction(city, case: dict) -> tuple[dict, float]:
+    """({barangay name: multiplier} for the hotspot zones, the multiplier used)."""
+    factor = float(case.get('hotspot_attraction', config.get('HOTSPOT_ATTRACTION', 0.5)))
+    if factor < 0:
+        raise ValueError('HOTSPOT_ATTRACTION / hotspot_attraction must be >= 0')
+    names = sorted(r.name for r in getattr(city, 'zones', {}).values() if getattr(r, 'is_hotspot', False))
+    return ({name: factor for name in names} if factor != 1.0 else {}), factor
+
+
 def schedule_od_agents(city, railway, case: dict, data_dir: Path, start_time: int,
                        results_dir: Path | None = None, routes: list | None = None) -> dict:
     """Builds the trip list, emits one AGENT_SPAWN event per agent and returns a summary dict.
     routes: the simulation's routes; when given, the OD matrix follows their changes from the base data."""
     bundle = Path(config.get('OD_BUNDLE_DIR', 'od_bundle'))
-    od_settings = case.get('od_settings') or {}
+    od_settings = json.loads(json.dumps(case.get('od_settings') or {}))     # copy: the case stays untouched
+    hot, hot_factor = hotspot_attraction(city, case)
+    if hot:
+        attraction = dict(od_settings.get('attraction', {}))
+        for name, factor in hot.items():
+            attraction[name] = attraction.get(name, 1.0) * factor
+        od_settings['attraction'] = attraction
+        LOGGER.info(f"Hotspots lower OD attraction x{hot_factor}: {', '.join(hot)}")
     od, zones, route_changes = load_od(bundle, od_settings, city, routes, data_dir)
     if route_changes:
         LOGGER.info(f"OD matrix follows {len(route_changes)} changed route(s): "
@@ -274,6 +296,10 @@ def schedule_od_agents(city, railway, case: dict, data_dir: Path, start_time: in
         'spawn_at': spawn_at,
         'od_settings': od_settings,
         'route_changes': route_changes,
+        'hotspots': sorted(r.name for r in regions if getattr(r, 'is_hotspot', False)),
+        'hotspot_attraction': hot_factor,
+        'agents_by_dest_zone': schedule['dz'].value_counts().to_dict(),
+        'agents_by_origin_zone': schedule['oz'].value_counts().to_dict(),
     }
     LOGGER.info(f"OD demand: {summary['daily_trips_in_scope']:,} trips/day in scope, "
                 f"{window_share:.1%} in window -> {rows.size:,} agents scheduled {summary['by_kind']}")

@@ -167,6 +167,8 @@ def save_case(sim) -> str:
         description += f" | hotspots: {', '.join(names)}"
     new_case = {**case, 'case_id': case_id, 'transit_overrides': overrides, 'hotspots': hotspots,
                 'description': description}
+    if hotspots:                          # keep the run reproducible even if the config default changes
+        new_case['hotspot_attraction'] = float(case.get('hotspot_attraction', config.get('HOTSPOT_ATTRACTION', 0.5)))
     path = data_dir() / 'cases' / f'{case_id}.json'
     path.parent.mkdir(parents=True, exist_ok=True)
     with open(path, 'w', encoding='utf-8') as f:
