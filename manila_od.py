@@ -18,6 +18,11 @@ Or from Python (e.g. inside a Pygame app):
     run.save("runs", name="ermita_half")
     pairs = run.top_pairs(share=0.8, districts=["Port Area", "Ermita", "Malate"], selection_mode="within")
 
+    # Route changes (needs routes.csv and neighbors.csv in the bundle, see ROUTES below)
+    print(m.route_table())                                        # routes and the zones they serve
+    run = m.run({"routes": {"remove": ["Route A"],
+                            "add": {"New Ermita loop": ["Barangay 669", "Barangay 670", "Barangay 676"]}}})
+
 ------------------------------------------------------------------------------------------------
 SETTINGS YOU CAN CHANGE (dict or .json file; anything not given keeps the base value)
 ------------------------------------------------------------------------------------------------
@@ -29,15 +34,39 @@ Model weights (change the baseline -> beta is recalibrated to the Pasig screen l
   "default_levels":      1          floors assumed when OSM has none
   "min_share_of_avg":    0.05       minimum attraction share of a barangay (fraction of the average)
   "use_transfers", "transfer_penalty_min", "pt_share", "max_transfers"   transfer penalty settings
+  "category_weights":    {"mall": 2}  multiplier on one facility category's size (default 1 for all)
+                                    note: a weight shifts attraction between categories that serve the SAME
+                                    purpose (e.g. malls vs shops in "shopping"); a purpose's total stays its share
+  "route_exponent":      0.3        Manila attraction x (1 + routes through the barangay) ** exponent (0 = off)
+  "route_mode_weights":  {"train": 3}   how much one route of a mode counts (modes not listed count 1)
 Scenario (interventions -> beta stays at the base value by default):
   "attraction":     {"Barangay 669": 0.5}     multiplier on a zone's attraction (0 = closed)
   "extra_minutes":  {"Barangay 306": 10}      extra minutes to reach a zone
+  "routes":         {"remove": ["<route_id>", ...],
+                     "add": {"<route_id>": ["<zone>", "<zone>", ...],
+                             "<route_id>": {"zones": [...], "mode": "bus"}}}
+                    remove routes and/or add routes (adding an existing route_id replaces its zones).
+                    The number of vehicles between zones is recomputed and the transfer penalty follows.
+                    If route_exponent > 0, attraction also follows the new number of routes per barangay.
 Calibration:
   "recalibrate":    true / false               override the automatic choice above
 Export (what .save() writes as the pairs CSV):
   "export": {"mode": "top" | "full", "top_share": 0.8, "scope": "touch_manila" | "within_manila" | "all",
              "zones": [...], "districts": [...], "selection_mode": "within" | "touch",
              "include_intrazonal": false}
+
+------------------------------------------------------------------------------------------------
+ROUTES (optional bundle files, needed only for the "routes" setting)
+------------------------------------------------------------------------------------------------
+  routes.csv     columns: route_id, relation, mode, zone    one row per (OSM route relation, zone it serves)
+                 route_id = the line you remove/add (both directions of a line share one route_id);
+                 relation = one OSM relation (one direction). Routes per barangay count route_ids.
+  neighbors.csv  columns: zone_a, zone_b        tricycle: one ride links zone_a with each touching zone_b
+                                                (and those zones with each other), as in the notebook
+Route changes are applied as a difference in transfers: transfers = bundle transfers + (transfers with your
+routes - transfers with the bundle routes). The base matrix stays exactly the notebook's and only pairs your
+change affects move.
+Run m.check_routes() once to see how closely routes.csv reproduces transit_hops.npy.
 """
 from __future__ import annotations
 import argparse, copy, json, os
@@ -53,16 +82,20 @@ OUTPUT_NAME = "base"              # <- name used for the output files, e.g. "erm
 SETTINGS    = {                   # changes from the base model; {} = base matrix
     # "attraction": {"Barangay 669": 0.5},
     # "purpose_shares": {"shopping": 20},
+    # "routes": {"remove": ["bus 12"], "add": {"New loop": ["Barangay 669", "Barangay 670"]}},
+    # "category_weights": {"mall": 2},
     # "export": {"mode": "top", "top_share": 0.8, "districts": ["Port Area", "Ermita", "Malate"]},
 }
 # =============================================================================================
 
 WEIGHT_KEYS = {"purpose_shares", "purpose_facilities", "size_exponent", "max_floor_m2", "default_levels",
-               "min_share_of_avg", "use_transfers", "transfer_penalty_min", "pt_share", "max_transfers"}
-SCENARIO_KEYS = {"attraction", "extra_minutes"}
+               "min_share_of_avg", "use_transfers", "transfer_penalty_min", "pt_share", "max_transfers",
+               "route_exponent", "route_mode_weights", "category_weights"}
+SCENARIO_KEYS = {"attraction", "extra_minutes", "routes"}
 OTHER_KEYS = {"recalibrate", "export", "name"}
 EXPORT_DEFAULT = {"mode": "top", "top_share": 0.8, "scope": "touch_manila", "zones": [], "districts": [],
                   "selection_mode": "within", "include_intrazonal": False}
+ROUTE_OPS = {"remove", "add"}
 
 
 # --------------------------------------------------------------------------------------------- helpers
@@ -82,10 +115,32 @@ def prod_constrained(P, A, C, beta):
     return P[:, None] * F / F.sum(axis=1, keepdims=True)
 
 
+def fewest_vehicles(n: int, groups: list, max_vehicles: int) -> np.ndarray:
+    """Fewest vehicles needed between every pair of zones (same result as the notebook's Cell 10b).
+    groups: lists of zone rows; one vehicle (a route relation or a tricycle ride) links all zones in a group.
+    Pairs needing more than max_vehicles get max_vehicles + 1 (the cost caps transfers anyway)."""
+    groups = [np.asarray(g, int) for g in groups if len(g) > 0]
+    S = np.zeros((n, len(groups)), np.float32)                     # zone x vehicle incidence
+    for r, z in enumerate(groups):
+        S[z, r] = 1.0
+    one = (S @ S.T) > 0                                            # reachable with one vehicle
+    np.fill_diagonal(one, True)
+    one_f = one.astype(np.float32)
+    hops = np.full((n, n), max_vehicles + 1, np.int64)
+    hops[one] = 1
+    reach = one_f
+    for k in range(2, max_vehicles + 1):
+        reach = ((reach @ one_f) > 0).astype(np.float32)
+        hops[(reach > 0) & (hops > k)] = k
+    np.fill_diagonal(hops, 0)
+    return hops
+
+
 def _merge(base: dict, changes: dict) -> dict:
     out = copy.deepcopy(base)
     for k, v in changes.items():
-        if k in ("purpose_shares", "purpose_facilities", "export") and isinstance(v, dict):
+        if k in ("purpose_shares", "purpose_facilities", "export", "route_mode_weights",
+                 "category_weights") and isinstance(v, dict):
             out[k] = {**out.get(k, {}), **v}
         else:
             out[k] = copy.deepcopy(v)
@@ -113,11 +168,114 @@ class ODModel:
         self.P = self.zones["P"].to_numpy(float)
         self.A_ext = np.where(self.INT, 0.0, self.zones["A"].to_numpy(float))
         self.names = self.zones["zone"].astype(str).to_numpy()
+        self.row_of = {z: i for i, z in enumerate(self.names)}
         self._base_result = None
+        self._load_routes()
 
     @classmethod
     def load(cls, bundle_dir: str = BUNDLE_DIR) -> "ODModel":
         return cls(bundle_dir)
+
+    # ---- routes
+    def _load_routes(self):
+        rp, np_ = os.path.join(self.bundle_dir, "routes.csv"), os.path.join(self.bundle_dir, "neighbors.csv")
+        self.has_routes = os.path.exists(rp)
+        self.lines, self.tricycle_groups = {}, []
+        self._hops_bundle_routes = None
+        if not self.has_routes:
+            return
+        r = pd.read_csv(rp, dtype=str, keep_default_na=False)
+        if "relation" not in r:
+            r["relation"] = r["route_id"]
+        if "mode" not in r:
+            r["mode"] = ""
+        bad = set(r["zone"]) - set(self.names)
+        if bad:
+            raise ValueError(f"routes.csv: zone(s) not in zones.csv: {sorted(bad)[:10]}")
+        for rid, g in r.groupby("route_id", sort=False):
+            groups = [[self.row_of[z] for z in dict.fromkeys(gg["zone"])] for _, gg in g.groupby("relation", sort=False)]
+            self.lines[rid] = {"mode": g["mode"].iloc[0], "groups": groups}
+        if os.path.exists(np_):
+            nb = pd.read_csv(np_, dtype=str, keep_default_na=False)
+            for a, g in nb.groupby("zone_a", sort=False):              # tricycle: zone_a + its neighbours
+                self.tricycle_groups.append([self.row_of[a]] + [self.row_of[b] for b in g["zone_b"]])
+
+    @staticmethod
+    def _add_entry(v):
+        """An "add" value is a zone list or {"zones": [...], "mode": "..."}."""
+        return (list(v["zones"]), v.get("mode", "")) if isinstance(v, dict) else (list(v), "")
+
+    def routes_after(self, change: dict | None = None) -> dict:
+        """{route_id: {"mode", "groups"}} after applying {"remove": [...], "add": {...}}."""
+        change = change or {}
+        out = {k: {"mode": v["mode"], "groups": [list(g) for g in v["groups"]]} for k, v in self.lines.items()}
+        for rid in change.get("remove", []):
+            out.pop(rid)
+        for rid, v in change.get("add", {}).items():
+            zl, mode = self._add_entry(v)
+            old_mode = self.lines.get(rid, {}).get("mode", "")
+            out[rid] = {"mode": mode or old_mode, "groups": [[self.row_of[z] for z in dict.fromkeys(zl)]]}
+        return out
+
+    @staticmethod
+    def _zones_of(line):
+        return sorted(set().union(*map(set, line["groups"])))
+
+    def route_table(self) -> pd.DataFrame:
+        """Routes in the bundle: route_id, mode, OSM relations (directions), zones served."""
+        self._need_routes()
+        return pd.DataFrame([{"route_id": rid, "mode": v["mode"], "relations": len(v["groups"]),
+                              "n_zones": len(self._zones_of(v)), "zones": ", ".join(self.names[self._zones_of(v)])}
+                             for rid, v in self.lines.items()])
+
+    def route_counts(self, cfg: dict, change: dict | None = None) -> np.ndarray:
+        """Weighted number of routes (route_ids) serving each zone; tricycle links are not counted."""
+        w = cfg.get("route_mode_weights", {}) or {}
+        cnt = np.zeros(len(self.names))
+        for v in self.routes_after(change).values():
+            cnt[self._zones_of(v)] += float(w.get(v["mode"], 1.0))
+        return cnt
+
+    def routes_per_zone(self, change: dict | None = None) -> pd.DataFrame:
+        """Routes serving each Manila barangay (raw count and the weighted count used in attraction)."""
+        self._need_routes()
+        return pd.DataFrame({"zone": self.names, "district": self.zones["district"],
+                             "routes": self.route_counts({}, change).astype(int),
+                             "weighted": self.route_counts(self.base_config, change)})[self.INT].reset_index(drop=True)
+
+    def _groups(self, lines):
+        return [g for v in lines.values() for g in v["groups"]] + self.tricycle_groups
+
+    def _bundle_route_hops(self, max_v):
+        if self._hops_bundle_routes is None or self._hops_bundle_routes[0] != max_v:
+            self._hops_bundle_routes = (max_v, fewest_vehicles(len(self.names), self._groups(self.lines), max_v))
+        return self._hops_bundle_routes[1]
+
+    def hops_for(self, change: dict, cfg: dict) -> np.ndarray:
+        """Vehicles between zones after a route change (difference in transfers applied to the bundle)."""
+        mx = int(cfg["max_transfers"])
+        new = fewest_vehicles(len(self.names), self._groups(self.routes_after(change)), mx + 1)
+        old = self._bundle_route_hops(mx + 1)
+        tr = lambda h: np.clip(h - 1, 0, mx)
+        t = np.clip(tr(self.hops) + tr(new) - tr(old), 0, mx)
+        h = (t + 1).astype(float)
+        np.fill_diagonal(h, np.diag(self.hops))
+        return h
+
+    def check_routes(self) -> dict:
+        """How well routes.csv + neighbors.csv reproduce transit_hops.npy (on the transfers the cost uses)."""
+        self._need_routes()
+        mx = int(self.base_config["max_transfers"])
+        h = self._bundle_route_hops(mx + 1)
+        a, b = np.clip(self.hops - 1, 0, mx), np.clip(h - 1, 0, mx)
+        off = ~np.eye(len(self.names), dtype=bool)
+        ii = np.ix_(self.INT, self.INT)
+        return {"pairs_matching": float((a == b)[off].mean()),
+                "manila_pairs_matching": float((a[ii] == b[ii])[~np.eye(self.INT.sum(), dtype=bool)].mean())}
+
+    def _need_routes(self):
+        if not self.has_routes:
+            raise ValueError("This bundle has no routes.csv — re-export it with the updated notebook (Cell 15).")
 
     # ---- inputs
     def _check(self, settings: dict):
@@ -130,6 +288,23 @@ class ODModel:
                 raise ValueError(f"'{key}': zone(s) not found (check spelling in zones.csv): {sorted(bad)}")
             if any(v < 0 for v in settings.get(key, {}).values()):
                 raise ValueError(f"'{key}': values must be >= 0")
+        if "routes" in settings:
+            self._need_routes()
+            rc = settings["routes"]
+            if set(rc) - ROUTE_OPS:
+                raise ValueError(f"'routes': unknown option(s) {sorted(set(rc) - ROUTE_OPS)}; use 'remove' and/or 'add'")
+            bad = set(rc.get("remove", [])) - set(self.lines)
+            if bad:
+                raise ValueError(f"'routes' remove: route_id(s) not found: {sorted(bad)} (see route_table())")
+            for rid, v in rc.get("add", {}).items():
+                if isinstance(v, dict) and set(v) - {"zones", "mode"}:
+                    raise ValueError(f"'routes' add '{rid}': use a zone list or {{'zones': [...], 'mode': '...'}}")
+                zl = self._add_entry(v)[0]
+                badz = set(zl) - set(self.names)
+                if badz:
+                    raise ValueError(f"'routes' add '{rid}': zone(s) not found: {sorted(badz)}")
+                if len(set(zl)) < 2:
+                    raise ValueError(f"'routes' add '{rid}': a route needs at least 2 zones")
         cats = set(self.fac["category"])
         for p, cl in settings.get("purpose_facilities", {}).items():
             if set(cl) - cats:
@@ -137,15 +312,28 @@ class ODModel:
                                  f"available: {sorted(cats)}")
         if any(v < 0 for v in settings.get("purpose_shares", {}).values()):
             raise ValueError("purpose_shares must be >= 0")
+        cw = settings.get("category_weights", {})
+        if set(cw) - cats:
+            raise ValueError(f"category_weights: unknown categories {sorted(set(cw) - cats)}; available: {sorted(cats)}")
+        if any(v < 0 for v in cw.values()):
+            raise ValueError("category_weights must be >= 0")
+        if settings.get("route_exponent", 0) < 0 or any(v < 0 for v in settings.get("route_mode_weights", {}).values()):
+            raise ValueError("route_exponent and route_mode_weights must be >= 0")
+        if settings.get("route_exponent", 0) > 0 or settings.get("route_mode_weights"):
+            self._need_routes()
         ex = settings.get("export", {})
         if set(ex) - set(EXPORT_DEFAULT):
             raise ValueError(f"Unknown export option(s): {sorted(set(ex) - set(EXPORT_DEFAULT))}")
 
-    def attraction(self, cfg: dict) -> np.ndarray:
-        """Manila attraction (Klinkhardt-style purpose shares x facility size) + external zones."""
+    def attraction(self, cfg: dict, route_change: dict | None = None) -> np.ndarray:
+        """Manila attraction (Klinkhardt-style purpose shares x weighted facility size) x route factor + externals.
+        Route factor = (1 + weighted routes through the barangay) ** route_exponent; Manila total unchanged."""
         f = self.fac
         floor = (f["area_m2"] * f["levels"].fillna(cfg["default_levels"]).clip(lower=1)).clip(upper=cfg["max_floor_m2"])
         size = floor ** cfg["size_exponent"] if cfg["size_exponent"] > 0 else pd.Series(1.0, index=f.index)
+        cw = cfg.get("category_weights", {}) or {}
+        if cw:
+            size = size * f["category"].map(cw).fillna(1.0).to_numpy(float)
         n_int = int(self.INT.sum())
         S = (pd.DataFrame({"row": f["zone_row"], "cat": f["category"], "size": size})
              .pivot_table(index="row", columns="cat", values="size", aggfunc="sum")
@@ -162,12 +350,18 @@ class ODModel:
         idx = np.maximum(idx, cfg["min_share_of_avg"] / n_int)
         A = self.A_ext.copy()
         A[self.INT] = cfg["manila_attraction_total"] * idx / idx.sum()
+        g = float(cfg.get("route_exponent", 0) or 0)
+        if g > 0:
+            self._need_routes()
+            a = A[self.INT] * (1.0 + self.route_counts(cfg, route_change)[self.INT]) ** g
+            A[self.INT] = cfg["manila_attraction_total"] * a / a.sum()
         return A
 
-    def cost(self, cfg: dict) -> np.ndarray:
+    def cost(self, cfg: dict, hops: np.ndarray | None = None) -> np.ndarray:
         if not cfg["use_transfers"]:
             return self.T.copy()
-        transfers = np.clip(self.hops - 1, 0, cfg["max_transfers"])
+        hops = self.hops if hops is None else hops
+        transfers = np.clip(hops - 1, 0, cfg["max_transfers"])
         return self.T + cfg["pt_share"] * cfg["transfer_penalty_min"] * transfers
 
     def crossings(self, od: np.ndarray, cfg: dict) -> float:
@@ -191,6 +385,7 @@ class ODModel:
             A, C = self.attraction(cfg), self.cost(cfg)
             od = prod_constrained(self.P, A, C, cfg["beta"])
             self._base_result = ODResult(self, od, cfg, {}, A, cfg["beta"], recalibrated=False, base_od=None)
+            self._base_C = C
         return self._base_result
 
     def run(self, settings: dict | str | None = None, recalibrate: bool | None = None) -> "ODResult":
@@ -204,8 +399,15 @@ class ODModel:
         weights_changed = bool(WEIGHT_KEYS & set(settings))
         if recalibrate is None:
             recalibrate = settings.get("recalibrate", weights_changed)
-        A, C = self.attraction(cfg), self.cost(cfg)
+        base = self.base()
+        # baseline for these weights (bundle routes); reused from the base when nothing changed (fast)
+        A = self.attraction(cfg) if weights_changed else base.A.copy()
+        C = self.cost(cfg) if weights_changed else self._base_C.copy()
         beta = self.calibrate(A, C, cfg) if recalibrate else cfg["beta"]
+        if "routes" in settings:                                       # route scenario on top
+            C = self.cost(cfg, hops=self.hops_for(settings["routes"], cfg))
+            if float(cfg.get("route_exponent", 0) or 0) > 0:
+                A = self.attraction(cfg, route_change=settings["routes"])
         for name, mult in cfg.get("attraction", {}).items():          # scenario on top
             A[self.names == name] *= mult
         for name, extra in cfg.get("extra_minutes", {}).items():
@@ -213,7 +415,7 @@ class ODModel:
             C[:, j] += extra
             C[j, j] -= extra
         od = prod_constrained(self.P, A, C, beta)
-        return ODResult(self, od, cfg, settings, A, beta, recalibrated=recalibrate, base_od=self.base().od)
+        return ODResult(self, od, cfg, settings, A, beta, recalibrated=recalibrate, base_od=base.od)
 
 
 # --------------------------------------------------------------------------------------------- results

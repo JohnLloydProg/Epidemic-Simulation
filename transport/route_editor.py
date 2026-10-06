@@ -15,13 +15,13 @@ Press E to open edit mode, then:
     right-click / Backspace ... undo the last waypoint
     Enter ..................... apply the change
     R ......................... restore the selected route to its original path
-    F ......................... clear the whole routing cache (every trip is planned fresh; slower)
     S ......................... save all edits as a new case file in sim_data/cases/
     Esc ....................... deselect, or close edit mode
 Dragging still pans the map; only a click without dragging counts as a pick.
 
-Applying a change updates both directions of the route and drops the cached trip plans that used it
-(they are recomputed when an agent first needs them).
+Applying (or restoring) a change updates both directions of the route and rebuilds the whole routing cache
+with the routes as they now are, so every trip is planned on the current network before the run starts.
+The rebuild stays in memory; press S and run the saved case to get a cache file for the edited routes.
 """
 from __future__ import annotations
 import json
@@ -31,7 +31,8 @@ import math
 import pygame as pg
 
 from graphing.core import Edge, Node
-from graphing.mapping import shortest_edge_path, _route_index
+from graphing.mapping import shortest_edge_path
+from transport.transportation import set_route_group_path
 
 LOGGER = logging.getLogger('RouteEditor')
 
@@ -100,22 +101,10 @@ def detour_path(route, waypoints:list[Node], city, railway) -> tuple[Node, list[
     return route.spawn_node, new_path
 
 
-def drop_cached_trips(sim, changed_routes:set, everything:bool = False) -> int:
-    """Remove cached trip plans that use the changed routes (or all of them). Returns how many were dropped."""
-    _route_index.clear()                      # stop -> routes index used by shortest_path
-    table = sim.routing_table
-    if everything:
-        dropped = len(table)
-        table.clear()
-        return dropped
-    stale = [key for key, cps in table.items() if any(cp.route in changed_routes for cp in cps)]
-    for key in stale:
-        del table[key]
-    return len(stale)
-
-
-def apply_route_change(sim, route_id:str, spawn:Node, new_path:list[Edge]) -> str:
-    """Give route `route_id` a new path (both directions). Only allowed before the simulation starts."""
+def apply_route_change(sim, route_id:str, spawn:Node, new_path:list[Edge], on_progress=None) -> str:
+    """Give route `route_id` a new path (both directions) and rebuild the routing cache.
+    Only allowed before the simulation starts. on_progress(done, total) is passed to the rebuild."""
+    from routing_table import rebuild_routing_cache
     if sim.started:
         raise RouteChangeError("The simulation has started — press Reset first.")
     group = route_group(sim.routes, route_id)
@@ -124,26 +113,24 @@ def apply_route_change(sim, route_id:str, spawn:Node, new_path:list[Edge]) -> st
     forward = group[0]
     if forward.graph.layer != 'city':
         raise RouteChangeError("Only road routes (jeepney/bus) can be edited.")
-    end = chain_end(spawn, new_path)
+    chain_end(spawn, new_path)
 
     sim.route_originals.setdefault(route_id, (forward.spawn_node, list(forward.path)))
-    forward.set_path(spawn, new_path)
-    for reverse in group[1:]:
-        reverse.set_path(end, list(reversed(new_path)))
+    set_route_group_path(sim.routes, route_id, spawn, new_path)
     sim.route_edits[route_id] = (spawn, list(new_path))
 
-    dropped = drop_cached_trips(sim, set(group))
+    sim.routing_table = rebuild_routing_cache(sim, on_progress)
     msg = (f"{route_id}: {len(new_path)} edges, {sum(e.distance for e in new_path) / 1000:.2f} km "
-           f"({dropped} cached trips will be re-planned)")
+           f"(routing cache rebuilt: {len(sim.routing_table):,} trips)")
     LOGGER.info(f"Route changed — {msg}")
     return msg
 
 
-def restore_route(sim, route_id:str) -> str:
+def restore_route(sim, route_id:str, on_progress=None) -> str:
     if route_id not in sim.route_originals:
         return f"{route_id} has not been changed."
     spawn, path = sim.route_originals[route_id]
-    return "Restored — " + apply_route_change(sim, route_id, spawn, path)
+    return "Restored — " + apply_route_change(sim, route_id, spawn, path, on_progress)
 
 
 def save_case(sim) -> str:
@@ -265,7 +252,6 @@ class RouteEditor:
     def _key(self, key) -> bool:
         if key in (pg.K_RETURN, pg.K_KP_ENTER):
             self._apply()
-            drop_cached_trips(self.sim, set(), everything=True)
         elif key == pg.K_BACKSPACE:
             self._undo()
         elif key == pg.K_ESCAPE:
@@ -276,7 +262,8 @@ class RouteEditor:
                 self.active = False
         elif key == pg.K_r and self.route is not None:
             self.waypoints, self.segments = [], []
-            self.status = restore_route(self.sim, self.route.route_id)
+            self._show("Restoring route and rebuilding the routing cache...")
+            self.status = restore_route(self.sim, self.route.route_id, self._progress)
         elif key == pg.K_s:
             try:
                 self.status = f"Saved case: {save_case(self.sim)}"
@@ -336,10 +323,27 @@ class RouteEditor:
             return
         try:
             spawn, path = detour_path(self.route, self.waypoints, self.sim.graph, self.sim.railway_graph)
-            self.status = apply_route_change(self.sim, self.route.route_id, spawn, path)
+            self._show("Applying route change and rebuilding the routing cache...")
+            self.status = apply_route_change(self.sim, self.route.route_id, spawn, path, self._progress)
             self.waypoints, self.segments = [], []
         except RouteChangeError as e:
             self.status = str(e)
+
+    # ------------------------------------------------------------------ rebuild progress
+    def _show(self, text:str):
+        """Draw a message in the status bar right away (the main loop is blocked during a rebuild)."""
+        window = pg.display.get_surface()
+        if window is None:
+            return
+        h = window.get_height()
+        pg.draw.rect(window, (30, 30, 30), pg.Rect(0, h - 48, window.get_width(), 48))
+        window.blit(self.font.render(text, True, (255, 255, 255)), (10, h - 42))
+        pg.display.update()
+
+    def _progress(self, done:int, total:int):
+        pg.event.pump()                       # keep the window responsive while the cache is rebuilt
+        if done == total or done % 10 == 0:
+            self._show(f"Rebuilding routing cache: {done}/{total} origins...")
 
     # ------------------------------------------------------------------ drawing
     def draw(self, window:pg.Surface):
@@ -374,5 +378,5 @@ class RouteEditor:
         pg.draw.rect(window, (30, 30, 30), pg.Rect(0, h - 48, window.get_width(), 48))
         window.blit(self.font.render(self.status, True, (255, 255, 255)), (10, h - 42))
         help_text = ("E / Esc close" if self.sim.started else
-                     "E close | click: select / waypoint | Enter apply | Backspace undo | R restore | F clear cache | S save case | Esc deselect")
+                     "E close | click: select / waypoint | Enter apply | Backspace undo | R restore | S save case | Esc deselect")
         window.blit(self.font.render(help_text, True, (180, 180, 180)), (10, h - 22))

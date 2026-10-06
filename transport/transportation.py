@@ -68,6 +68,21 @@ class Route:
         pg.draw.lines(window, (255, int(255 * (1 - average_occupancy)), 0), False, points, graph.camera.scale(2))
 
 
+def set_route_group_path(routes:list[Route], route_id:str, spawn_node:Node, path:list[Edge]) -> list[Route]:
+    """Give every direction of a route a new path: the first (forward) direction gets `path` from
+    `spawn_node`, the reverse direction runs it backwards. Returns the routes that were changed."""
+    group = [route for route in routes if getattr(route, 'route_id', None) == route_id]
+    if not group:
+        raise ValueError(f"Route '{route_id}' not found.")
+    end = spawn_node
+    for edge in path:
+        end = edge.get_adjacent_node(end)       # raises if the edges do not form a chain
+    group[0].set_path(spawn_node, path)
+    for reverse in group[1:]:
+        reverse.set_path(end, list(reversed(path)))
+    return group
+
+
 class JeepRoute(Route):
     def __init__(self, spawn_node:Node, path:list[Edge], graph:Graph, spawn_time:int, peak_spawn:int):
         super().__init__(spawn_node, path, graph, spawn_time, peak_spawn)

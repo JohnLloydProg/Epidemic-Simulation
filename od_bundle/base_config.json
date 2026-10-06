@@ -1,5 +1,5 @@
 {
-  "beta": 0.07564841004800714,
+  "beta": 0.07754736586336029,
   "purpose_shares": {
     "work": 32.9,
     "school": 28.9,
@@ -74,6 +74,9 @@
   "max_floor_m2": 50000,
   "default_levels": 1,
   "min_share_of_avg": 0.05,
+  "category_weights": {},
+  "route_exponent": 0.3,
+  "route_mode_weights": {},
   "manila_attraction_total": 3313290.7416367806,
   "use_transfers": true,
   "transfer_penalty_min": 10,

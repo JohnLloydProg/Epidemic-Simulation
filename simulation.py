@@ -89,8 +89,9 @@ class Simulation:
             manager.emit(self.start_time + 3, manager.Event(manager.TRANSPORTATION_SPAWN, route))
 
         """Build routing cache for agents"""
-        # With sim_data/, only zone anchors and gateways are trip ends, so only those pairs are cached
-        nodes = list(self.graph.nodes.values())
+        # Only nodes where trips can start or end are cached (other pairs are computed on demand if ever needed)
+        nodes = self.trip_end_nodes()
+        LOGGER.info(f'Routing cache covers {len(nodes)} trip-end nodes of {len(self.graph.nodes)}.')
         self.routing_table = build_routing_cache(nodes, self.graph, self.railway_graph, self.routes)
 
         """Schedule agents from the OD matrix (only when OD_BUNDLE_DIR is set in the config)"""
@@ -110,6 +111,19 @@ class Simulation:
         self.editor = RouteEditor(self)
         
         self.run()
+
+    def trip_end_nodes(self) -> list:
+        """Nodes where agents can start or end a trip: every node of the OD barangays (OD_TRIP_END_ROLES),
+        the gateways, and the zone anchors (used by right-click test agents)."""
+        roles = set(config.get('OD_TRIP_END_ROLES', ['od']))
+        nodes = []
+        for region in getattr(self.graph, 'zones', {}).values():
+            if region.role in roles:
+                nodes += [node for node in region.nodes if node is not None and node.edges]
+        nodes += getattr(self.graph, 'gateway_nodes', []) + getattr(self.graph, 'anchor_nodes', [])
+        if not nodes:                                   # old map data without zones: keep every node
+            return [node for node in self.graph.nodes.values() if node.edges]
+        return list(dict.fromkeys(nodes))
 
     def schedule_od_demand(self):
         """Schedule agents from the OD matrix (only when OD_BUNDLE_DIR is set in the config)"""

@@ -1,22 +1,35 @@
-import multiprocessing
+"""
+Routing cache: the walk/ride plan (list of Checkpoints) for every pair of trip-end nodes.
+
+Paths are computed with one search per ORIGIN (graphing.mapping.shortest_paths_from), which gives exactly the
+same paths as one search per pair but is roughly 100x faster. Origins are spread over a process pool.
+
+    build_routing_cache(...)    at start-up: load the cache file for this case, or compute and save it
+    rebuild_routing_cache(sim)  after a route edit: recompute everything in memory with the edited routes
+                                (not saved; save the edits as a case file to get a cache file for them)
+
+Config keys:
+    "ROUTING_PROCESSES": null    number of worker processes (null = all CPU cores, 1 = no pool)
+"""
 import itertools
+import logging
+import multiprocessing
+import os
+import pickle
+import time
+
+import configuration as config
 from graphing.core import Node
 from graphing.graph import Graph, RegionGraph
-from transport.transportation import Route
-from transport.checkpoint import generate_checkpoints, Checkpoint
 from graphing.data_loader import load_graph_from_data
-from graphing.mapping import shortest_path
-import configuration as config
-import logging
-import pickle
-import os
+from graphing.mapping import shortest_paths_from
+from transport.transportation import Route, set_route_group_path
+from transport.checkpoint import generate_checkpoints, Checkpoint
 
 CACHE_FILE_NAME = 'routing_table.pkl'
+CACHE_FORMAT = 2            # 2 = routes stored by their position in the route list
 LOGGER = logging.getLogger('RoutingTable')
 
-
-worker_city:RegionGraph = None
-worker_routes:list[Route] = None
 
 def get_cache_file() -> str:
     """One cache per case when using sim_data/, otherwise the old routing_table.pkl."""
@@ -25,93 +38,117 @@ def get_cache_file() -> str:
         return str(cache_file())
     return CACHE_FILE_NAME
 
-def save_dehydrated_cache(dehydrated_cache: dict):
-    """Saves the primitive dictionary to a file."""
-    cache_path = get_cache_file()
-    LOGGER.info(f"Saving routing cache to {cache_path}...")
-    with open(cache_path, 'wb') as f:
-        pickle.dump(dehydrated_cache, f)
-    LOGGER.info("Save complete!")
+
+# --------------------------------------------------------------------------- dehydrate / rehydrate
+def dehydrate(raw_path:list, route_index:dict) -> list[dict]:
+    """Checkpoints as plain data. Routes are stored by their position in the route list, which is the
+    same in every process that loads the same data (Route.id counters are not)."""
+    return [{'mode': cp.mode,
+             'start_node': cp.start_node.id if cp.start_node else None,
+             'end_node': cp.end_node.id if cp.end_node else None,
+             'route': route_index[id(cp.route)] if cp.route else None}
+            for cp in generate_checkpoints(raw_path)]
+
 
 def rehydrate_cache(dehydrated_cache:dict, city:RegionGraph, railway:Graph, routes:list[Route]) -> dict[tuple, list[Checkpoint]]:
-    route_lookup = {route.id:route for route in routes}
-    routing_cache = {}
+    def node(node_id):
+        if node_id is None:
+            return None
+        return city.get_node(node_id) if node_id[0] == 'city' else railway.get_node(node_id)
 
-    for (start_id, dest_id), pickled_checkpoints in dehydrated_cache.items():
-        checkpoints = []
-        for pickled_checkpoint in pickled_checkpoints:
-            start_node_id = pickled_checkpoint['start_node']
-            start_node = city.get_node(start_node_id) if start_node_id[0] == 'city' else railway.get_node(start_node_id)
-            end_node_id = pickled_checkpoint['end_node']
-            end_node =  city.get_node(end_node_id) if end_node_id[0] == 'city' else railway.get_node(end_node_id)
-            route = route_lookup.get(pickled_checkpoint['route'])
-            checkpoint = Checkpoint(
-                mode=pickled_checkpoint['mode'], start_node=start_node, end_node=end_node, route=route
-                )
-            checkpoints.append(checkpoint)
-        routing_cache[(start_id, dest_id)] = checkpoints
-    
+    routing_cache = {}
+    for key, pickled_checkpoints in dehydrated_cache.items():
+        routing_cache[key] = [Checkpoint(mode=cp['mode'], start_node=node(cp['start_node']), end_node=node(cp['end_node']),
+                                         route=routes[cp['route']] if cp['route'] is not None else None)
+                              for cp in pickled_checkpoints]
     return routing_cache
 
-def init_worker():
-    global worker_city, worker_routes
-    
-    city_data, _, routes_data = load_graph_from_data()
-    worker_city = city_data
-    worker_routes = routes_data
+
+def paths_from_origin(start:Node, targets:list[Node], routes:list[Route], route_index:dict) -> dict:
+    found = shortest_paths_from(start, targets, routes)
+    return {(start.id, target.id): dehydrate(found.get(target, []), route_index)
+            for target in targets if target is not start}
 
 
-def compute_single_path(pair:tuple[tuple[str, int], tuple[str, int]]):
-    start_id, dest_id = pair
-    
-    start_node = worker_city.get_node(start_id)
-    dest_node = worker_city.get_node(dest_id)
-    
-    raw_path = shortest_path(start_node, dest_node, worker_routes)
-    
-    if raw_path:
-        checkpoints = generate_checkpoints(raw_path)
-        pickable_checkpoints = []
-        for cp in checkpoints:
-            pickable = {
-                'mode':cp.mode,
-                'start_node': cp.start_node.id if cp.start_node else None,
-                'end_node': cp.end_node.id if cp.end_node else None,
-                'route': cp.route.id if cp.route else None
-            }
-            pickable_checkpoints.append(pickable)
-        
-        return (start_id, dest_id, pickable_checkpoints)
-    return (start_id, dest_id, [])
+# --------------------------------------------------------------------------- worker processes
+worker_city:RegionGraph = None
+worker_routes:list[Route] = None
+worker_targets:list[Node] = None
+worker_route_index:dict = None
+
+
+def init_worker(target_ids:list, route_edits:dict):
+    """Each worker loads the map itself, then applies the in-memory route edits sent by the main process."""
+    global worker_city, worker_routes, worker_targets, worker_route_index
+    city, _, routes = load_graph_from_data()
+    for route_id, (spawn_id, edge_ids) in route_edits.items():
+        set_route_group_path(routes, route_id, city.get_node(spawn_id), [city.get_edge(e) for e in edge_ids])
+    worker_city, worker_routes = city, routes
+    worker_targets = [city.get_node(i) for i in target_ids]
+    worker_route_index = {id(route): i for i, route in enumerate(routes)}
+
+
+def compute_origin(start_id) -> dict:
+    return paths_from_origin(worker_city.get_node(start_id), worker_targets, worker_routes, worker_route_index)
+
+
+# --------------------------------------------------------------------------- compute
+def compute_cache(nodes:list[Node], routes:list[Route], route_edits:dict | None = None, on_progress=None) -> dict:
+    """Plain-data cache for every ordered pair of `nodes`.
+    route_edits: {route_id: (spawn_node_id, [edge_ids])} already applied to `routes`; workers re-apply them.
+    on_progress(done, total) is called after each origin (e.g. to keep a window responsive)."""
+    nodes = list(dict.fromkeys(node for node in nodes if node.edges))
+    ids = [node.id for node in nodes]
+    total = len(ids)
+    processes = config.get('ROUTING_PROCESSES') or os.cpu_count() or 1
+    LOGGER.info(f"Computing routes from {total} origins to {total} destinations "
+                f"({total * (total - 1):,} pairs, {processes} process(es))...")
+    started = time.time()
+    dehydrated = {}
+
+    if processes <= 1:
+        route_index = {id(route): i for i, route in enumerate(routes)}
+        for done, start in enumerate(nodes, 1):
+            dehydrated.update(paths_from_origin(start, nodes, routes, route_index))
+            if on_progress:
+                on_progress(done, total)
+    else:
+        # 'spawn' = fresh worker processes on every OS (forking a process that has pygame running can hang)
+        context = multiprocessing.get_context('spawn')
+        with context.Pool(processes, initializer=init_worker, initargs=(ids, route_edits or {})) as pool:
+            for done, result in enumerate(pool.imap_unordered(compute_origin, ids, chunksize=2), 1):
+                dehydrated.update(result)
+                if on_progress:
+                    on_progress(done, total)
+
+    missing = sum(1 for cps in dehydrated.values() if not cps)
+    LOGGER.info(f"Routes computed in {time.time() - started:.1f} s" + (f" ({missing} pairs have no path)" if missing else ''))
+    return dehydrated
 
 
 def build_routing_cache(nodes:list[Node], city:RegionGraph, railway:Graph, routes:list[Route]) -> dict[tuple, list[Checkpoint]]:
+    """At start-up: load this case's cache file if it is current, otherwise compute it and save it."""
     cache_path = get_cache_file()
     if os.path.exists(cache_path):
         LOGGER.info(f"Found existing {cache_path}! Loading from disk...")
         with open(cache_path, 'rb') as f:
-            pickled_cache = pickle.load(f)
-        LOGGER.info(f'Done reading file.')
-        return rehydrate_cache(pickled_cache, city, railway, routes)
+            stored = pickle.load(f)
+        if isinstance(stored, dict) and stored.get('format') == CACHE_FORMAT:
+            return rehydrate_cache(stored['pairs'], city, railway, routes)
+        LOGGER.info("Cache file is in an older format; rebuilding it.")
 
-    LOGGER.info("Gathering origin-destination pairs...")
-    est_node_ids = list(set([node.id for node in nodes if node.edges]))
-    
-    pairs_to_compute = list(itertools.permutations(est_node_ids, 2))
-    LOGGER.info(f"Total paths to compute: {len(pairs_to_compute)}")
+    dehydrated = compute_cache(nodes, routes)
+    LOGGER.info(f"Saving routing cache to {cache_path}...")
+    with open(cache_path, 'wb') as f:
+        pickle.dump({'format': CACHE_FORMAT, 'pairs': dehydrated}, f)
+    return rehydrate_cache(dehydrated, city, railway, routes)
 
-    pickled_cache = {}
-    
 
-    LOGGER.info("Igniting multiprocessing pool...")
-    with multiprocessing.Pool(initializer=init_worker) as pool:
-        
-        results = pool.imap_unordered(compute_single_path, pairs_to_compute, chunksize=100)
-        
-        for start_id, dest_id, pickled_checkpoints in results:
-            pickled_cache[(start_id, dest_id)] = pickled_checkpoints
-    
-    save_dehydrated_cache(pickled_cache)
-
-    LOGGER.info("Routing cache built successfully!")
-    return rehydrate_cache(pickled_cache, city, railway, routes)
+def rebuild_routing_cache(sim, on_progress=None) -> dict[tuple, list[Checkpoint]]:
+    """After a route edit: recompute the whole cache with the routes as they are now (kept in memory only)."""
+    from graphing.mapping import _route_index
+    _route_index.clear()                    # stop -> routes lookup, rebuilt from the edited routes
+    edits = {route_id: (spawn.id, [edge.id for edge in path])
+             for route_id, (spawn, path) in getattr(sim, 'route_edits', {}).items()}
+    dehydrated = compute_cache(sim.trip_end_nodes(), sim.routes, edits, on_progress)
+    return rehydrate_cache(dehydrated, sim.graph, sim.railway_graph, sim.routes)

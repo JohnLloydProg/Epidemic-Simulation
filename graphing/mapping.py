@@ -91,8 +91,22 @@ def routes_at_node(node:Node, routes:list[Route]) -> list[Route]:
 
 
 def shortest_path(start_node:Node, end_node:Node, routes:list[Route]) -> list[tuple[Node, Route | None]]:
+    """Fastest walk/ride path between two nodes (same as shortest_paths_from with one target)."""
     if (start_node == end_node):
         return []
+    return shortest_paths_from(start_node, [end_node], routes).get(end_node, [])
+
+
+def shortest_paths_from(start_node:Node, targets:list[Node], routes:list[Route]) -> dict[Node, list[tuple[Node, Route | None]]]:
+    """Fastest walk/ride paths from one node to many targets in a single search.
+
+    The search runs exactly like a one-pair search, but instead of stopping at the first target it records
+    the path the first time each target is reached and keeps going until every target is found. So each path
+    is identical to what a separate one-pair search would return (ties included), at a fraction of the cost.
+    Targets that cannot be reached are missing from the result."""
+    remaining = set(targets)
+    remaining.discard(start_node)
+    found = {}
 
     open_set = []
     heapq.heappush(open_set, State(start_node, 0, None, None))
@@ -101,20 +115,22 @@ def shortest_path(start_node:Node, end_node:Node, routes:list[Route]) -> list[tu
 
     visited = {}
 
-    while open_set:
+    while open_set and remaining:
         current_state:State = heapq.heappop(open_set)
         current_node:Node = current_state.node
         current_route:Route | None = current_state.route
-        
-        if current_node == end_node:
-            # Reconstruct and return the raw path
+
+        if current_node in remaining:
+            # First time this target is reached: reconstruct and keep the raw path
             path = []
             curr = current_state
             while curr is not None:
                 path.append((curr.node, curr.route))
                 curr = curr.previous_state
-            return path[::-1]
-            
+            found[current_node] = path[::-1]
+            remaining.discard(current_node)
+            # no 'continue': searches to other targets pass through this node
+
         state_key = (current_node.id, current_route.id if current_route else None)
         if state_key in visited and visited[state_key] <= current_state.cost:
             continue
@@ -127,7 +143,7 @@ def shortest_path(start_node:Node, end_node:Node, routes:list[Route]) -> list[tu
                 neighbor_node = edge.get_adjacent_node(current_node)
                 walk_cost = edge.distance / 2
                 heapq.heappush(open_set, State(neighbor_node, current_state.cost + walk_cost, None, current_state))
-                
+
             # 2. Board available routes at this node
             for route in routes_at_node(current_node, routes):
                 heapq.heappush(open_set, State(current_node, current_state.cost + TRANSFER_PENALTY, route, current_state))
@@ -142,8 +158,8 @@ def shortest_path(start_node:Node, end_node:Node, routes:list[Route]) -> list[tu
 
                     ride_cost = edge_to_take.distance / current_route.expected_speed
                     heapq.heappush(open_set, State(neighbor_node, current_state.cost + ride_cost, current_route, current_state))
-                
+
             # 2. Alight (Switch to walking)
             heapq.heappush(open_set, State(current_node, current_state.cost, None, current_state))
 
-    return []
+    return found
