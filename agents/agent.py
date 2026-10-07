@@ -31,6 +31,9 @@ def compute_checkpoint_distance(checkpoint:'Checkpoint', city:'RegionGraph', rai
         route = checkpoint.route
         if (not route):
             return 0
+        if (getattr(route, 'mode', None) == 'tricycle'):
+            from transport.tricycle import ride_distance
+            return ride_distance(checkpoint)
         try:
             start_index = route.ordered_nodes.index(checkpoint.start_node)
             end_index = route.ordered_nodes.index(checkpoint.end_node)
@@ -183,6 +186,8 @@ class Agent:
             
         elif (current_checkpoint.mode == 'ride'):
             self.set_state('waiting')
+            if (getattr(current_checkpoint.route, 'mode', None) == 'tricycle'):     # hail a tricycle
+                manager.emit(time + int(config.get('TRICYCLE_WAIT_S', 120)), manager.Event(manager.TRICYCLE_PICKUP, self))
 
     def update_position(self, time:int):
         if (not self.current_edge):
@@ -230,6 +235,10 @@ def handle_agent_events(event:manager.Event, time:int, simulation):
             agent.walk(time)
     elif (event.type == manager.AGENT_SPAWN):
         spawn_agents(agents, time, simulation)
+    elif (event.type == manager.TRICYCLE_PICKUP):
+        from transport.tricycle import start_ride
+        for agent in agents:
+            start_ride(agent, time, simulation)
 
 
 def spawn_agents(specs:list, time:int, simulation):

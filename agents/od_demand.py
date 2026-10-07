@@ -109,7 +109,7 @@ def spawn_nodes(region, city, railway) -> list:
 
 
 def load_od(bundle: Path, od_settings: dict, city=None, routes=None,
-            data_dir: Path | None = None) -> tuple[np.ndarray, pd.DataFrame, list]:
+            data_dir: Path | None = None, tricycle_off=()) -> tuple[np.ndarray, pd.DataFrame, list]:
     """OD matrix (trips/day), the bundle's zone table and the simulation route changes applied to it.
     With `routes`, the matrix follows the simulation's routes (agents/od_routes.py). Uses manila_od; if
     base_config.json is missing, falls back to the stored base matrix (base case only)."""
@@ -123,6 +123,9 @@ def load_od(bundle: Path, od_settings: dict, city=None, routes=None,
                 changes = sim_route_changes(model, city, routes, data_dir)
                 model.sim_changes = changes
                 if changes:
+                    settings.setdefault('routes', {})
+                model.tricycle_off = {model.row_of[z] for z in tricycle_off if z in model.row_of}
+                if model.tricycle_off:                # tricycles switched off: OD transfers follow
                     settings.setdefault('routes', {})
             else:
                 LOGGER.warning("The OD bundle has no routes.csv: the OD matrix ignores route changes.")
@@ -163,7 +166,9 @@ def schedule_od_agents(city, railway, case: dict, data_dir: Path, start_time: in
             attraction[name] = attraction.get(name, 1.0) * factor
         od_settings['attraction'] = attraction
         LOGGER.info(f"Hotspots lower OD attraction x{hot_factor}: {', '.join(hot)}")
-    od, zones, route_changes = load_od(bundle, od_settings, city, routes, data_dir)
+    from transport.tricycle import services as tricycle_services
+    tricycle_off = sorted(s.zone for s in tricycle_services() if not s.enabled)
+    od, zones, route_changes = load_od(bundle, od_settings, city, routes, data_dir, tricycle_off)
     if route_changes:
         LOGGER.info(f"OD matrix follows {len(route_changes)} changed route(s): "
                     + "; ".join(f"{c['route_id']} -{len(c['zones_removed'])}/+{len(c['zones_added'])} zones" for c in route_changes))
@@ -304,6 +309,7 @@ def schedule_od_agents(city, railway, case: dict, data_dir: Path, start_time: in
         'hotspots': sorted(r.name for r in regions if getattr(r, 'is_hotspot', False)),
         'hotspot_attraction': hot_factor,
         'zone_facilities': od_settings.get('zone_facilities', {}),
+        'tricycles_off': tricycle_off,
         'agents_by_dest_zone': schedule['dz'].value_counts().to_dict(),
         'agents_by_origin_zone': schedule['oz'].value_counts().to_dict(),
     }

@@ -7,6 +7,8 @@ H ............ hotspot mode (only before the simulation starts, like route editi
     click a zone ..... make it a hotspot / remove it
     0-9 (hovering) ... trip limit for that barangay: 0 = no trips, 1-9 = 10%-90% of its trips (to and from it)
     Backspace ........ remove the hovered barangay's trip limit
+    T (hovering) ..... switch the barangay's tricycles off / on (routing and OD are rebuilt when you leave
+                       this mode or press Play, since that takes about a minute)
     C ................ clear all hotspots
     S ................ save hotspots and route edits as a case file (same as S in route edit mode)
     H / Esc .......... leave hotspot mode
@@ -115,6 +117,9 @@ class ZoneEditor:
             self.show = not self.show
             return True
         if event.type == pg.KEYDOWN and event.key == pg.K_h:
+            if self.active and not self.sim.started and getattr(self.sim, 'network_dirty', False) \
+                    and hasattr(self.sim, 'road_editor'):
+                self.sim.road_editor._rebuild()          # tricycles were switched: rebuild once on leaving
             self.active = not self.active
             self.hover = None
             if self.active:
@@ -135,6 +140,8 @@ class ZoneEditor:
             self.hover = self.zone_at(event.pos)
             return False
         if event.type == pg.KEYDOWN and event.key == pg.K_ESCAPE:
+            if not self.sim.started and getattr(self.sim, 'network_dirty', False) and hasattr(self.sim, 'road_editor'):
+                self.sim.road_editor._rebuild()
             self.active = False
             return True
         if self.sim.started:                      # view only after the start
@@ -154,6 +161,18 @@ class ZoneEditor:
             note = ("no trip limit" if region.od_scale == 1.0 else
                     "no trips to or from it" if region.od_scale == 0 else f"trips limited to {region.od_scale:.0%}")
             self.status = f"{region.name}: {note}." + self._recompute_od()
+            return True
+        if event.type == pg.KEYDOWN and event.key == pg.K_t:
+            from transport.tricycle import service_for
+            region = self.hover
+            service = service_for(region.name) if region is not None else None
+            if service is None:
+                self.status = "Hover over a barangay with tricycles, then press T to switch them off or on."
+                return True
+            service.enabled = not service.enabled
+            self.sim.network_dirty = True
+            self.status = (f"{region.name}: tricycles {'ON' if service.enabled else 'OFF'}. "
+                           "Routing and OD are rebuilt when you leave H mode or press Play.")
             return True
         if event.type == pg.KEYDOWN and event.key == pg.K_c:
             for region in self.zones:
@@ -250,7 +269,10 @@ class ZoneEditor:
                 continue
             cx = sum(p[0] for p in region.polygon) / len(region.polygon)
             cy = sum(p[1] for p in region.polygon) / len(region.polygon)
+            from transport.tricycle import service_for
+            service = service_for(region.name)
             text = (self.short_name(region) + (f" · {limit:.0%}" if limit != 1.0 else "")
+                    + (" · no trike" if service is not None and not service.enabled else "")
                     + (" · F" if region.name in getattr(self.sim, 'zone_facilities', {}) else ""))
             label = self.small.render(text, True, (170, 20, 20) if hot else (110, 30, 160) if limit != 1.0 else (60, 60, 60))
             window.blit(label, label.get_rect(center=cam.to_screen((cx, cy))))
@@ -265,6 +287,10 @@ class ZoneEditor:
                      f"population 2024: {int(r.population):,}" if r.population else "population: n/a",
                      ("trip limit: none (0-9 to set)" if getattr(r, 'od_scale', 1.0) == 1.0 else
                       f"trip limit: {r.od_scale:.0%} of trips to/from here")]
+            from transport.tricycle import service_for
+            service = service_for(r.name)
+            if service is not None:
+                lines.append(f"tricycles: {'on' if service.enabled else 'OFF'} (T) · territory {len(service.node_ids)} nodes")
             summary = getattr(self.sim, 'od_summary', None) or {}
             if 'agents_by_dest_zone' in summary:
                 lines.append(f"OD agents ending here: {summary['agents_by_dest_zone'].get(r.name, 0):,}, "

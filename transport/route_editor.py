@@ -166,8 +166,11 @@ def save_case(sim) -> str:
     closed = [e[1] if e[0] == 'city' else f"{e[0]}:{e[1]}" for e in closed_ids]
 
     facilities = {z: dict(c) for z, c in getattr(sim, 'zone_facilities', {}).items() if c}
+    from transport.tricycle import disabled_psgc
+    tricycle_off = disabled_psgc()
     unchanged = (not edits and not closed and not removed_ids
                  and facilities == (case.get('od_settings') or {}).get('zone_facilities', {})
+                 and tricycle_off == sorted(map(str, case.get('tricycle_disabled', [])))
                  and hotspots == sorted(map(str, case.get('hotspots', [])))
                  and limits == {str(k): float(v) for k, v in case.get('od_scaling', {}).items()})
     if unchanged:
@@ -191,6 +194,8 @@ def save_case(sim) -> str:
         description += f" | hotspots: {', '.join(sorted(r.name for r in zones if r.is_hotspot))}"
     if facilities:
         description += f" | facilities changed: {', '.join(sorted(facilities))}"
+    if tricycle_off:
+        description += f" | tricycles off in {len(tricycle_off)} barangay(s)"
     if limits:
         description += f" | trip limits: " + ", ".join(f"{r.name} {r.od_scale:.0%}" for r in zones if getattr(r, 'od_scale', 1.0) != 1.0)
     new_case = {**case, 'case_id': case_id, 'description': description,
@@ -202,6 +207,7 @@ def save_case(sim) -> str:
     if facilities:
         od_settings['zone_facilities'] = facilities
     new_case['od_settings'] = od_settings
+    new_case['tricycle_disabled'] = tricycle_off
     if hotspots:                          # keep the run reproducible even if the config default changes
         new_case['hotspot_attraction'] = float(case.get('hotspot_attraction', config.get('HOTSPOT_ATTRACTION', 0.5)))
     path = data_dir() / 'cases' / f'{case_id}.json'

@@ -112,6 +112,9 @@ def shortest_paths_from(start_node:Node, targets:list[Node], routes:list[Route])
     heapq.heappush(open_set, State(start_node, 0, None, None))
 
     TRANSFER_PENALTY = 120
+    # tricycle boarding cost in the search = expected wait + the fare expressed in seconds (transport/tricycle.py)
+    TRICYCLE_WAIT = float(config.get('TRICYCLE_WAIT_S', 120)) + float(config.get('TRICYCLE_FARE_S', 300))
+    from transport.tricycle import services_at_node as tricycle_services_at_node
 
     visited = {}
 
@@ -147,6 +150,18 @@ def shortest_paths_from(start_node:Node, targets:list[Node], routes:list[Route])
             # 2. Board available routes at this node
             for route in routes_at_node(current_node, routes):
                 heapq.heappush(open_set, State(current_node, current_state.cost + TRANSFER_PENALTY, route, current_state))
+
+            # 3. Hail a tricycle of any barangay whose territory includes this node (transport/tricycle.py)
+            for service in tricycle_services_at_node(current_node):
+                heapq.heappush(open_set, State(current_node, current_state.cost + TRICYCLE_WAIT, service, current_state))
+
+        # Scenario C: Riding a tricycle (any allowed road inside its territory)
+        elif getattr(current_route, 'mode', None) == 'tricycle':
+            for edge in current_node.edges:
+                if current_route.allows(edge):
+                    neighbor_node = edge.get_adjacent_node(current_node)
+                    heapq.heappush(open_set, State(neighbor_node, current_state.cost + edge.distance / current_route.expected_speed, current_route, current_state))
+            heapq.heappush(open_set, State(current_node, current_state.cost, None, current_state))     # alight
 
         # Scenario B: Riding
         else:

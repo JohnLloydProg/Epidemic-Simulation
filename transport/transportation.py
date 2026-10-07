@@ -268,6 +268,8 @@ def handle_transportation_events(event:manager.Event, time:int, simulation):
                     continue
 
                 current_leg = agent.checkpoints[0]
+                if (getattr(current_leg.route, 'mode', None) == 'tricycle'):
+                    continue                                   # waiting for a tricycle, not this vehicle
                 if (current_leg.mode == 'ride' and current_leg.end_node in transport.route.ordered_nodes):
                     current_index = transport.path_index + 1
                     for node in transport.route.ordered_nodes[current_index:]:
@@ -285,6 +287,14 @@ def handle_transportation_events(event:manager.Event, time:int, simulation):
 
             transport.current_node = transport.current_edge.get_adjacent_node(transport.current_node)
             agent = transport.agents[0]
+            if (transport.method == 'tricycle'):              # transport/tricycle.py: drop off at the leg's end
+                if (transport.path):
+                    transport.transport(time)
+                else:
+                    agent.alight_transportation()
+                    agent.arrival(time, simulation=simulation)
+                    manager.emit(time + 1, manager.Event(manager.TRANSPORTATION_DESPAWN, transport))
+                continue
             if (transport.current_node.id == agent.destination_node.id):
                 agent.alight_transportation()
                 agent.arrival(time, transport.current_node, simulation)

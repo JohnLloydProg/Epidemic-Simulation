@@ -10,6 +10,7 @@ TRANSPORTATION_DESPAWN = 5
 PRIVATE_TRANSPORTATION_MOVE = 6
 PRIVATE_TRANSPORTATION_ARRIVED = 7
 AGENT_WALK = 8
+TRICYCLE_PICKUP = 9          # transport/tricycle.py: the wait for a tricycle is over
 
 _events:dict[int, list['Event']] = {}
 _time_step = 0

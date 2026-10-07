@@ -13,6 +13,7 @@ from ui.zone_editor import ZoneEditor, people_in_hotspots, hotspot_zones
 from ui.road_editor import RoadEditor
 from ui.facility_editor import FacilityEditor
 from transport.closures import init_closures
+from transport.tricycle import build_services as build_tricycle_services
 from graphing.data_loader import load_graph_from_data, load_case, data_dir, results_dir
 from agents.od_demand import schedule_od_agents
 from routing_table import build_routing_cache
@@ -91,6 +92,8 @@ class Simulation:
         self.railway_graph = environment[1]
         self.routes = environment[2]
         init_closures(self)
+        # tricycles: one on-demand service per barangay, territory = it + the barangays touching it
+        build_tricycle_services(self.graph, data_dir(), load_case().get('tricycle_disabled', []))
         # facility numbers per barangay (OD "zone_facilities"); edited in facility mode (F)
         self.zone_facilities = json.loads(json.dumps((load_case().get('od_settings') or {}).get('zone_facilities', {})))
         for route in self.routes:

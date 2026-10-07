@@ -57,6 +57,7 @@ class SimRouteODModel(ODModel):
     def __init__(self, bundle_dir: str):
         super().__init__(bundle_dir)
         self.sim_changes: list[RouteChange] = []
+        self.tricycle_off: set[int] = set()      # zone rows whose tricycles are switched off in the simulation
 
     def _sim_counts(self, cfg: dict, which: str) -> np.ndarray:
         weights = cfg.get('route_mode_weights', {}) or {}
@@ -74,11 +75,13 @@ class SimRouteODModel(ODModel):
         return counts + self._sim_counts(cfg, 'new') - self._sim_counts(cfg, 'old')
 
     def hops_for(self, change: dict, cfg: dict) -> np.ndarray:
-        if not self.sim_changes:
+        if not self.sim_changes and not self.tricycle_off:
             return super().hops_for(change, cfg)
         mx = int(cfg['max_transfers'])
         n = len(self.names)
-        now = fewest_vehicles(n, self._groups(self.routes_after(change)) + [c.new for c in self.sim_changes if c.new], mx + 1)
+        off = {id(g) for g in self.tricycle_groups if g and g[0] in self.tricycle_off}
+        groups_now = [g for g in self._groups(self.routes_after(change)) if id(g) not in off]
+        now = fewest_vehicles(n, groups_now + [c.new for c in self.sim_changes if c.new], mx + 1)
         ref = fewest_vehicles(n, self._groups(self.lines) + [c.old for c in self.sim_changes if c.old], mx + 1)
         tr = lambda h: np.clip(h - 1, 0, mx)
         t = np.clip(tr(self.hops) + tr(now) - tr(ref), 0, mx)
