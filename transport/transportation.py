@@ -95,7 +95,6 @@ class JeepRoute(Route):
         for i in range(random.randint(1, 2)):
             passenger = random.choice([(10, 10), (12, 12), (15, 15), (15, 20) ])
             transportation = RoutedTransportation('jeep', self.expected_speed, (0, 0, 255), passenger[1], self.capacity_ratio, passenger[0], 0, self.spawn_node, self)
-            transportation.expected_contact_rate = config.get('CONTACT_RATES', {}).get('JEEP', 3.5)
             _transportations.append(transportation)
             self.transportations.append(transportation)
         return _transportations
@@ -107,7 +106,6 @@ class BusRoute(Route):
     
     def generate_transportation(self, current_time) -> list['RoutedTransportation']:
         transportation = RoutedTransportation('bus', self.expected_speed, (255, 0, 0), 50, self.capacity_ratio, 40, 0, self.spawn_node, self)
-        transportation.expected_contact_rate = config.get('CONTACT_RATES', {}).get('BUS', 4.5)
         self.transportations.append(transportation)
         return [transportation]
 
@@ -129,7 +127,6 @@ class TrainRoute(Route):
         seats_taken = int(absolute_max * external_load_percentage)
 
         transportation = RoutedTransportation('rail', self.expected_speed, (0, 255, 0), absolute_max, self.capacity_ratio, 900, seats_taken, self.spawn_node, self)
-        transportation.expected_contact_rate = config.get('CONTACT_RATES', {}).get('TRAIN', 8.5)
         self.transportations.append(transportation)
         return [transportation]
 
@@ -137,7 +134,6 @@ class TrainRoute(Route):
 class Transportation:
     id:int = 0
     agents:list
-    no_infected_agents:float = 0
     current_edge:Edge = None
 
     def __init__(self, method:str, speed:float, color:tuple, current_node:Node, path:list[Edge]=[]):
@@ -181,8 +177,6 @@ class Transportation:
 
 
 class RoutedTransportation(Transportation):
-    expected_contact_rate:float = 5.0
-
     def __init__(self, method:str, speed:float, color:tuple, max_passenger:int, capacity_ratio:float, suggested_passenger:int, external_passenger:int, current_node:Node, route:Route):
         super().__init__(method=method, speed=speed, color=color, current_node=current_node)
         self.route = route
@@ -197,15 +191,6 @@ class RoutedTransportation(Transportation):
 
     def occupancy(self) -> float:
         return (len(self.agents) + self.external_passenger) / self.max_passenger
-    
-    def get_contact_rate(self) -> float:
-        return self.expected_contact_rate * ((len(self.agents) + self.external_passenger)/self.suggested_passenger)
-    
-    def get_infected_density(self) -> float:
-        if (self.agents):
-            return self.no_infected_agents / len(self.agents)
-        else:
-            return 0
     
     def transport(self, current_time:int):
         next_edge = self.route.next_edge(self.path_index)

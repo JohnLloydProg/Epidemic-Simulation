@@ -20,7 +20,7 @@ attraction is multiplied by HOTSPOT_ATTRACTION (agents/od_demand.py), so fewer t
 OD agents are replaced. The tooltip shows the OD agents arriving in and leaving each zone.
 Trip limits are the case file's "od_scaling" ({psgc: factor}): every trip starting or ending in the barangay is
 multiplied by the factor and the rest are simply not made (unlike a hotspot, whose trips go elsewhere).
-While the simulation runs, the HUD shows how many people are in hotspot zones right now (people_in_hotspots).
+While the simulation runs, the HUD and the occupancy graph (G) show the hotspot metrics (metrics.py).
 """
 from __future__ import annotations
 import math
@@ -52,22 +52,6 @@ def point_in_polygon(x:float, y:float, polygon:list) -> bool:
 
 def hotspot_zones(city) -> list:
     return [region for region in getattr(city, 'zones', {}).values() if getattr(region, 'is_hotspot', False)]
-
-
-def people_in_hotspots(sim) -> int:
-    """Agents currently inside hotspot zones: standing or walking from a node there, or riding a vehicle
-    that is at (or just left) a node there."""
-    hot = {node.id for region in hotspot_zones(sim.graph) for node in region.nodes if node is not None}
-    if not hot:
-        return 0
-    count = 0
-    for agent in sim.agents:
-        node = agent.current_node
-        if node is None and agent.transportation is not None:
-            node = agent.transportation.current_node
-        if node is not None and node.id in hot:
-            count += 1
-    return count
 
 
 class ZoneEditor:

@@ -14,36 +14,6 @@ import pygame as pg
 
 LOGGER = logging.getLogger("Agent")
 
-def compute_checkpoint_distance(checkpoint:'Checkpoint', city:'RegionGraph', railway:'Graph') -> float:
-    """Computes the real distance traveled for a single checkpoint leg, using the same
-    edges the agent actually moves along (never a separate/approximate estimate)."""
-    if (checkpoint.start_node == checkpoint.end_node):
-        return 0
-
-    if (checkpoint.mode == 'walk'):
-        try:
-            path = list(shortest_edge_path(checkpoint.start_node.id, checkpoint.end_node.id, city, railway))
-            return sum(edge.distance for edge in path)
-        except ValueError:
-            LOGGER.warning(f"Could not resolve walk distance from {checkpoint.start_node.id} to {checkpoint.end_node.id}.")
-            return 0
-    else:  # 'ride'
-        route = checkpoint.route
-        if (not route):
-            return 0
-        if (getattr(route, 'mode', None) == 'tricycle'):
-            from transport.tricycle import ride_distance
-            return ride_distance(checkpoint)
-        try:
-            start_index = route.ordered_nodes.index(checkpoint.start_node)
-            end_index = route.ordered_nodes.index(checkpoint.end_node)
-        except ValueError:
-            LOGGER.warning(f"Could not locate ride leg {checkpoint.start_node.id} -> {checkpoint.end_node.id} on route {route.id}.")
-            return 0
-        low, high = min(start_index, end_index), max(start_index, end_index)
-        return sum(edge.distance for edge in route.path[low:high])
-
-
 class Agent:
     id:int = 0
     commuting:bool
@@ -73,17 +43,15 @@ class Agent:
         self.id = Agent.id
         Agent.id += 1
 
-        """Daily tracking metrics (reset each simulation day)"""
-        self.daily_trips = 0
-        self.daily_distance = 0
-        self.daily_rides = {}
+        self.modes_used = set()         # modes this trip used (metrics.py: main mode of the trip)
+        self.spawn_time = None          # set by metrics.trip_started for OD agents
 
     
     def ride_transportation(self, transportation:Transportation, time:int):
         if (isinstance(transportation, RoutedTransportation) and transportation.is_full()):
             return
 
-        self.daily_rides[transportation.method] = self.daily_rides.get(transportation.method, 0) + 1
+        self.modes_used.add(transportation.method)
         self.transportation = transportation
         self.boarding_time = time
         transportation.agents.append(self)
@@ -106,6 +74,7 @@ class Agent:
             self.current_node.agents.remove(self)
             self.current_node = None
             simulation.agents.remove(self)
+            simulation.metrics.trip_completed(self, time)
         else:
             # private cars follow one-way roads; if no legal drive exists, the agent takes public transport instead
             path:list[Edge] = list(shortest_drive_path(self.current_node.id, self.destination_node.id, self.city))
@@ -114,8 +83,6 @@ class Agent:
                 self.commuting = True
                 self.set_checkpoints(simulation.routing_table, simulation.routes, time, simulation)
                 return
-
-            self.daily_distance += sum(edge.distance for edge in path)
 
             if (self.current_node not in path[0].nodes or self.destination_node not in path[-1].nodes):
                 raise ValueError(f"Invalid path: {[(edge.nodes[0].id, edge.nodes[1].id) for edge in path]} for current node {self.current_node.id} and destination node {self.destination_node.id}.")
@@ -133,6 +100,7 @@ class Agent:
             self.current_node.agents.remove(self)
             self.current_node = None
             simulation.agents.remove(self)
+            simulation.metrics.trip_completed(self, time)
         else:
             key = (self.current_node.id, self.destination_node.id)
             cached_checkpoint = routing_cache.get(key, [])
@@ -145,7 +113,6 @@ class Agent:
                 routing_cache[key] = generate_checkpoints(raw_path)
                 self.checkpoints = list(routing_cache[key])
 
-            self.daily_distance += sum(compute_checkpoint_distance(checkpoint, self.city, self.railway) for checkpoint in self.checkpoints)
             self.set_state('travelling')
             self.move(time, simulation)
 
@@ -167,6 +134,7 @@ class Agent:
             self.current_node.agents.remove(self)
             self.current_node = None
             simulation.agents.remove(self)
+            simulation.metrics.trip_completed(self, time)
     
     def move(self, time:int, simulation=None):
         if (not self.checkpoints):
@@ -175,7 +143,7 @@ class Agent:
         current_checkpoint = self.checkpoints[0]
 
         if (current_checkpoint.mode == 'walk'):
-            self.daily_rides['walking'] = self.daily_rides.get('walking', 0) + 1
+            self.modes_used.add('walking')
             
             if (current_checkpoint.start_node == current_checkpoint.end_node or current_checkpoint.start_node.id[0] != current_checkpoint.end_node.id[0]):
                 walking_time = 40
@@ -184,6 +152,7 @@ class Agent:
                 self.path = list(shortest_edge_path(current_checkpoint.start_node.id, current_checkpoint.end_node.id, self.city, self.railway))
                 if (not self.path):
                     simulation.agents.remove(self)
+                    simulation.metrics.trip_failed(self)
                     return
                 self.walk(time)
             self.set_state('travelling')
@@ -253,6 +222,7 @@ def spawn_agents(specs:list, time:int, simulation):
         agent.destination_zone = spec.destination_zone
         agent.trip_kind = spec.kind
         simulation.agents.append(agent)
+        simulation.metrics.trip_started(agent, time)
         try:
             if (agent.commuting):
                 agent.set_checkpoints(simulation.routing_table, simulation.routes, time, simulation)
@@ -264,6 +234,7 @@ def spawn_agents(specs:list, time:int, simulation):
             if (agent in simulation.agents):
                 simulation.agents.remove(agent)
             simulation.od_failed += 1
+            simulation.metrics.spawn_failed(agent)
             LOGGER.warning(f"Agent {agent.id} ({spec.origin_zone} -> {spec.destination_zone}) not spawned: {error}")
             continue
         simulation.od_spawned += 1

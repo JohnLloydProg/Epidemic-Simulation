@@ -9,7 +9,9 @@ from agents.agent import Agent, handle_agent_events
 from transport.transportation import Transportation, RoutedTransportation, handle_route_events, handle_transportation_events, BusRoute, JeepRoute, TrainRoute
 from ui.button import ButtonBehavior, TextButton
 from transport.route_editor import RouteEditor
-from ui.zone_editor import ZoneEditor, people_in_hotspots, hotspot_zones
+from ui.zone_editor import ZoneEditor
+from ui.metrics_panel import MetricsPanel
+from metrics import MetricsTracker
 from ui.road_editor import RoadEditor
 from ui.facility_editor import FacilityEditor
 from ui.case_manager import CaseManager
@@ -30,31 +32,6 @@ import case_files
 LOGGER = logging.getLogger('Simulation')
 
 
-def get_agent_states(agents:list[Agent]) -> dict[str, int]:
-    states = {}
-    for agent in agents:
-        states[agent.state] = states.get(agent.state, 0) + 1
-    return states
-
-def get_travelling_mode(agents:list[Agent]) -> dict[str, int]:
-    travel_modes = {}
-    for agent in agents:
-        if (agent.state != 'travelling'):
-            continue
-        
-        if (agent.transportation):
-            travel_modes[agent.transportation.method] = travel_modes.get(agent.transportation.method, 0) + 1
-        else:
-            travel_modes['walking'] = travel_modes.get('walking', 0) + 1
-    return travel_modes
-
-def get_transport_count(transportations:list[RoutedTransportation]):
-    transport_types = {}
-    for transport in transportations:
-        transport_types[transport.method] = transport_types.get(transport.method, 0) + 1
-    return transport_types
-
-
 class Simulation:
     layer = 'city'
     agents:list[Agent]
@@ -69,7 +46,8 @@ class Simulation:
     buttons:dict[str, ButtonBehavior] = {}
     step_counter = 0
 
-    def __init__(self):
+    def __init__(self, headless:bool = False):
+        """headless=True: load everything but do not open the interactive loop (tools/run_headless.py)."""
         logging.basicConfig(handlers=[logging.FileHandler("logfile.txt", 'w'), logging.StreamHandler(sys.stdout)], 
                             level=logging.DEBUG if os.environ.get('DEBUG', 'False') == 'True' else logging.INFO)
         config.init()
@@ -87,6 +65,7 @@ class Simulation:
         self.active_cases = []
         self.started = False            # True once time moves or an agent is added; routes are locked then
         self._reset_requested = False
+        self.metrics = MetricsTracker(self)     # thesis metrics (metrics.py); graph and saving in ui/metrics_panel.py
 
         """Load the case (network, routes, routing cache, OD agents)"""
         set_case_file(case_file_name())          # worker processes follow the case opened in the program
@@ -105,8 +84,10 @@ class Simulation:
         self.create_ui_elements()
         self.case_manager = CaseManager(self)    # O: open a case, Ctrl+S: save one (ui/case_manager.py)
         self.create_editors()
-        
-        self.run()
+        self.metrics_panel = MetricsPanel(self)  # G: occupancy graph, M: save metrics
+
+        if (not headless):
+            self.run()
 
     def load_case_data(self, on_progress=None):
         """Load the open case: network, routes, tricycles, routing cache (from its cache file when there is a
@@ -156,6 +137,7 @@ class Simulation:
     def open_case(self, file_name:str, on_progress=None):
         """Replace the running case with sim_data/cases/<file_name>, back at the start time (the view is kept).
         If it cannot be loaded, the previous case is loaded again and the error is raised."""
+        self.end_metrics_run('case closed')         # finish the logs of the case being closed
         previous = case_file_name()
         camera = self.graph.camera
         view = (camera.zoom, camera.x_offset, camera.y_offset, camera._home)
@@ -178,6 +160,7 @@ class Simulation:
         camera.zoom, camera.x_offset, camera.y_offset, camera._home = view
         self.railway_graph.camera = camera
         self.create_editors()
+        self.metrics.reset()
         self.play = False
         self.started = False
         self._reset_requested = True             # run() sets its clock back to start_time
@@ -216,7 +199,10 @@ class Simulation:
 
     def reset(self):
         """Back to the start time, keeping the current route edits: removes all agents, vehicles and pending
-        events, then queues the route spawns and the OD agents again (same OD_SEED -> same agents)."""
+        events, then queues the route spawns and the OD agents again (same OD_SEED -> same agents).
+        The metrics run so far is ended first (its logs are kept)."""
+        self.end_metrics_run('reset')
+        self.metrics.reset()
         manager._events.clear()
         self.agents.clear()
         self.transportations.clear()
@@ -232,6 +218,40 @@ class Simulation:
         self.started = False
         self._reset_requested = True        # run() sets its clock back to start_time
         LOGGER.info('Simulation reset.')
+
+    def end_metrics_run(self, reason:str):
+        """End the metrics run (writes its summary files and closes its logs) if one is going."""
+        if (self.metrics.ready and not self.metrics.finished):
+            self.metrics.end_run(self.metrics.last_time, reason)
+
+    def advance(self, time:int) -> bool:
+        """One simulation step at `time`. Returns True when the metrics run has just reached METRICS_RUN_HOURS."""
+        hour = (time // 3600) % 24
+        self.peak_hour = (9 >= hour >= 6) or (20 >= hour >= 17)
+        self.started = True
+        self.handle_events(time)
+        return self.metrics.step(time)
+
+    def metrics_lines(self, time:int) -> list[str]:
+        """HUD lines for the thesis metrics (metrics.py)."""
+        m = self.metrics
+        if (not m.ready):
+            return [f"Metrics: a {m.run_hours:g}-hour logged run starts when you press Play."]
+        if (m.finished):
+            return [f"Logged run finished - logs in {m.folder}. Press Reset to start a new run."]
+        elapsed = (m.last_time - m.start_time) / 3600
+        live = ', '.join(f"{mode} {n}" for mode, n in m.live_modes.most_common()) or '-'
+        means = ', '.join(f"{mode} {v:.0f}" for mode, v in m.mean_travel_by_mode().items()) or '-'
+        hour = (time // 3600) % 24
+        lines = [f"Logging: {elapsed:.1f} of {m.run_hours:g} simulated hours -> {m.folder}",
+                 f"Moving now: {live} | waiting for a ride: {m.waiting}",
+                 f"Trips completed: {m.n_completed:,} ({m.per_hour.get(hour, 0):,} this hour) | avg travel min by mode: {means}"]
+        if (m.hotspots):
+            now = sum(m.now.get(z, 0) for z in m.hotspots)
+            lines.append(f"Hotspots ({len(m.hotspots)}): {now} people now | {m.person_minutes(m.hotspots):,.0f} person-min | "
+                         f"trips to hotspots: {m.trips_to_hotspot_arrived:,} arrived of {m.trips_to_hotspot_scheduled:,} started | "
+                         f"people who entered: {len(m.hot_visitors):,}")
+        return lines
 
     def create_ui_elements(self):
         """Create UI elements such as buttons"""
@@ -252,8 +272,6 @@ class Simulation:
         draw_time = 0
         simultation_time = 0
         running = True
-        states = get_agent_states(self.agents)
-        travel_modes = {}
 
         LOGGER.info('Starting simulation...')
         while (running):
@@ -262,11 +280,11 @@ class Simulation:
             hour = (time // 3600) % 24
             day = time // (3600 * 24)
             time_record = time_ns()
-            self.peak_hour = (9 >= hour >= 6) or (20 >= hour >= 17)
 
             for event in pg.event.get():
                 consumed = []
                 if (event.type == pg.QUIT):
+                    self.end_metrics_run('program closed')
                     return
                 if (self.case_manager.handle_event(event)):    # case list / save box (modal while open)
                     continue
@@ -279,6 +297,8 @@ class Simulation:
                 if (self.road_editor.handle_event(event, time)):
                     continue
                 if (self.facility_editor.handle_event(event, time)):
+                    continue
+                if (self.metrics_panel.handle_event(event, time)):
                     continue
                 if (event.type == pg.QUIT):
                     running = False
@@ -308,18 +328,14 @@ class Simulation:
             if (self._reset_requested):
                 self._reset_requested = False
                 time = self.start_time
-                states = get_agent_states(self.agents)
-                travel_modes = {}
 
             """Handle events and update agent states"""
             if (time_ns() - simultation_time >= self.simulation_ns_per_time_unit and self.play):
                 if (not self.started and self.network_dirty):     # road changes not rebuilt yet
                     self.road_editor._rebuild()
-                self.started = True
-                self.handle_events(time)
-                states = get_agent_states(self.agents)
-
-                travel_modes = get_travelling_mode(self.agents)
+                if (self.advance(time)):                          # METRICS_RUN_HOURS reached: logs complete
+                    self.play = False
+                    self.metrics_panel.flash(f"{self.metrics.run_hours:g}-hour run complete - logs saved to {self.metrics.folder}", 15000)
                 simultation_time = time_ns()
                 delta = (time_ns() - time_record) / (10**6)
                 time += self.time_step
@@ -341,39 +357,19 @@ class Simulation:
                 
                 text = self.font.render(f"time: {time} (Day {day} {str(hour).zfill(2)}:{str(minute).zfill(2)}:{str(second).zfill(2)}) {self.simulation_multiplier}x {round(delta, 2)}ms per step {len(manager._events.values())} events", False, (0, 0, 0))
                 
-                state_text = ''
-                for state in ['home', 'travelling', 'waiting', 'working', 'consuming']:
-                    state_text += f'{state}: {states.get(state, 0)}, '
-                states_text = self.font.render(f"States: {state_text}", False, (0, 0, 0))
-                
-                travel_text = self.font.render(f"Travel modes: {travel_modes}", False, (0, 0, 0))
                 if (self.od_summary):
-                    active = sum(1 for agent in self.agents if agent.trip_kind)
-                    od_text = self.font.render(f"OD agents spawned: {self.od_spawned}/{self.od_summary['agents_scheduled']}, active: {active}, failed: {self.od_failed}", False, (0, 0, 0))
-                    self.window.blit(od_text, od_text.get_rect(topleft=(20, 100)))
-                hot = hotspot_zones(self.graph)
-                if (hot):
-                    hot_text = self.font.render(f"People in hotspots ({len(hot)} zones): {people_in_hotspots(self)}", False, (180, 0, 0))
-                    self.window.blit(hot_text, hot_text.get_rect(topleft=(20, 120)))
-                occupancies:dict[str, list] = {}
-                for transpo in self.transportations:
-                    if (isinstance(transpo, RoutedTransportation)):
-                        if (transpo.method in occupancies):
-                            occupancies[transpo.method].append(transpo.occupancy())
-                        else:
-                            occupancies[transpo.method] = [transpo.occupancy()]
-                    transpo.draw(self.window, self.graph.camera, time)
+                    od_text = self.font.render(f"OD agents spawned: {self.od_spawned:,}/{self.od_summary['agents_scheduled']:,}, active: {len(self.agents):,}, failed: {self.od_failed}", False, (0, 0, 0))
+                    self.window.blit(od_text, od_text.get_rect(topleft=(20, 60)))
+                for i, line in enumerate(self.metrics_lines(time)):
+                    surf = self.font.render(line, False, (180, 0, 0) if line.startswith('Hotspots') else (0, 0, 0))
+                    self.window.blit(surf, surf.get_rect(topleft=(20, 80 + 18 * i)))
 
+                for transpo in self.transportations:
+                    transpo.draw(self.window, self.graph.camera, time)
                 for agent in self.agents:
                     agent.draw(self.window, self.graph.camera, time)
-                metric_text = self.font.render(f"Transportation Used: {len(self.transportations)}, avg. occupancy: {[(method, round(max(occupancy), 2))for method, occupancy in occupancies.items()]}", False, (0, 0, 0))
-                available_transports = self.font.render(f"Live Transportation: {get_transport_count(self.transportations)}", False, (0, 0, 0))
-                
-                self.window.blit(states_text, states_text.get_rect(topleft=(20, 40)))
-                self.window.blit(travel_text, travel_text.get_rect(topleft=(20, 60)))
-                self.window.blit(available_transports, available_transports.get_rect(topleft=(20, 80)))
+                self.metrics_panel.draw(self.window, time)
                 pg.draw.circle(self.window, (0, 255, 0), pg.mouse.get_pos(), 5)
-                self.window.blit(metric_text, metric_text.get_rect(topleft=(20, 20)))
                 self.window.blit(text, text.get_rect(topright=(1060, 20)))
 
                 for button in self.buttons.values():
