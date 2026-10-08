@@ -1,4 +1,5 @@
 import configuration as config
+from transport import congestion
 from graphing.core import Edge, Node
 from graphing.graph import Graph
 import pygame as pg
@@ -135,6 +136,8 @@ class Transportation:
     id:int = 0
     agents:list
     current_edge:Edge = None
+    travel_time:float = None      # seconds the current edge takes (set by transport/congestion.py)
+    waiting:bool = False          # True while waiting at a node for a full road (spillback)
 
     def __init__(self, method:str, speed:float, color:tuple, current_node:Node, path:list[Edge]=[]):
         self.method = method
@@ -148,15 +151,22 @@ class Transportation:
         Transportation.id += 1
     
     def transport(self, current_time:int):
+        # transport/congestion.py decides how long the road takes, or that it is full (then wait at the node)
+        travel_time = congestion.try_enter(self, self.path[0], self.current_node, current_time)
+        if (travel_time is None):
+            self.waiting = True
+            congestion.retry_later(self, current_time)
+            return
+        self.waiting = False
         self.current_edge = self.path.pop(0)
-        travel_time = self.current_edge.distance / self.speed
+        self.travel_time = travel_time
         self.start_travel = current_time
         manager.emit(current_time + math.ceil(travel_time), manager.Event(manager.PRIVATE_TRANSPORTATION_ARRIVED, self))
 
     def update_position(self, current_time:int):
-        if (not self.current_edge):
+        if (not self.current_edge or self.waiting):
             return self.current_node.pos
-        travel_time = self.current_edge.distance / self.speed
+        travel_time = self.travel_time or self.current_edge.distance / self.speed
         time_elapsed = current_time - self.start_travel
         if (time_elapsed >= travel_time):
             return self.current_edge.get_adjacent_node(self.current_node).pos
@@ -194,12 +204,19 @@ class RoutedTransportation(Transportation):
     
     def transport(self, current_time:int):
         next_edge = self.route.next_edge(self.path_index)
-        self.path_index += 1
         if (not next_edge):
+            self.path_index += 1
             manager.emit(current_time + 1, manager.Event(manager.TRANSPORTATION_DESPAWN, self))
             return
+        travel_time = congestion.try_enter(self, next_edge, self.current_node, current_time)
+        if (travel_time is None):                   # next road is full: wait at this stop and try again
+            self.waiting = True
+            congestion.retry_later(self, current_time)
+            return
+        self.waiting = False
+        self.path_index += 1
         self.current_edge = next_edge
-        travel_time = self.current_edge.distance / self.speed
+        self.travel_time = travel_time
         self.start_travel = current_time
         manager.emit(current_time + math.ceil(travel_time), manager.Event(manager.TRANSPORTATION_ARRIVED, self))
 
@@ -297,4 +314,10 @@ def handle_transportation_events(event:manager.Event, time:int, simulation):
     elif (event.type == manager.TRANSPORTATION_DESPAWN):
         LOGGER.debug(f"Handling transportation despawn for {len(event.get_objects())} transportations at time {time}.")
         for transport in _transportations:
-            simulation.transportations.remove(transport)
+            congestion.leave(transport)
+            if (transport in simulation.transportations):
+                simulation.transportations.remove(transport)
+    elif (event.type == manager.VEHICLE_ENTER_RETRY):
+        for transport in _transportations:
+            if (transport in simulation.transportations and transport.waiting):
+                transport.transport(time)

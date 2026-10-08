@@ -30,6 +30,10 @@ and these files are written WHILE the run goes (so nothing is lost if the progra
                            new visitors, arrivals (displacement by hour)
   run.log ................ the settings of the run, an hourly summary line, and every info/warning message the
                            simulation logged during the run
+  congestion_timeseries.csv  road congestion every CONGESTION_LOG_INTERVAL_S s: road speed by mode, delay,
+                           roads past critical density (transport/congestion.py; only when CONGESTION is on)
+  congestion_links.csv ... one row per road direction used: traffic, speed, delay, worst occupancy (every
+                           simulated hour and on save)
 When the run ends (METRICS_RUN_HOURS reached -> the simulation pauses), or is cut short by Reset, opening a case
 or closing the program, these are added:
   summary.json, zones.csv, occupancy.png
@@ -52,6 +56,7 @@ from datetime import datetime
 from pathlib import Path
 
 import configuration as config
+from transport import congestion
 
 LOGGER = logging.getLogger('Metrics')
 
@@ -266,11 +271,13 @@ class MetricsTracker:
                     'OD_SAMPLING': config.get('OD_SAMPLING', 'sample'),
                     'HOTSPOT_ATTRACTION': config.get('HOTSPOT_ATTRACTION', 0.5),
                     'METRICS_RUN_HOURS': self.run_hours, 'METRICS_OCCUPANCY_THRESHOLD': self.threshold,
-                    'METRICS_SAMPLE_S': self.sample_s, 'METRICS_COUNT_S': self.count_s}
+                    'METRICS_SAMPLE_S': self.sample_s, 'METRICS_COUNT_S': self.count_s,
+                    **congestion.run_settings()}
         LOGGER.info(f"Run started: case {self._case_id()}, sim time {clock(time)}, "
                     f"{self.run_hours:g} simulated hours, hotspots {self.hotspots or 'none'}")
         LOGGER.info(f"Settings: {json.dumps(settings)}")
         LOGGER.info(f"Logging to {self.folder}")
+        congestion.open_run(self.folder, time)
         if od_hours < self.run_hours:
             LOGGER.warning(f"OD_DURATION_HOURS is {od_hours:g}: no new trips start after the first {od_hours:g} "
                            f"of the {self.run_hours:g} logged hours.")
@@ -278,6 +285,7 @@ class MetricsTracker:
             LOGGER.warning("OD_HOUR_PROFILE is not set: trips start evenly over the day (as many at 3 am as at 8 am).")
 
     def _close_files(self):
+        congestion.close_run()
         for log in self.logs.values():
             log.close()
         self.logs = {}
@@ -511,6 +519,7 @@ class MetricsTracker:
             'travel_time_by_mode': self.travel_by_mode(),
             'completed_trips_per_hour': {f"{h:02d}:00": n for h, n in sorted(self.per_hour.items())},
             'completed_trips_per_sim_hour_avg': round(self.n_completed / hours, 1),
+            'road_congestion': congestion.run_summary(),
         }
 
     def _case_id(self) -> str:
@@ -541,6 +550,7 @@ class MetricsTracker:
                             len(self.visitors[z]), self.arrivals.get(z, 0)])
         for log in self.logs.values():
             log.flush()
+        congestion.write_link_table(self.folder / 'congestion_links.csv')
         try:
             self._plot(self.folder / 'occupancy.png')
         except Exception:                                  # the CSVs are what matters; the figure is a bonus

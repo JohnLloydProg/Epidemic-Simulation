@@ -17,6 +17,7 @@ from ui.facility_editor import FacilityEditor
 from ui.case_manager import CaseManager
 from transport.closures import init_closures, _clear_search_caches
 from transport.tricycle import build_services as build_tricycle_services
+from transport import congestion
 from graphing.data_loader import load_graph_from_data, load_case, data_dir, results_dir, set_case_file, case_file_name
 from agents.od_demand import schedule_od_agents
 from routing_table import build_routing_cache
@@ -65,6 +66,7 @@ class Simulation:
         self.active_cases = []
         self.started = False            # True once time moves or an agent is added; routes are locked then
         self._reset_requested = False
+        self.show_congestion = False    # K: colour the roads by congestion (transport/congestion.py)
         self.metrics = MetricsTracker(self)     # thesis metrics (metrics.py); graph and saving in ui/metrics_panel.py
 
         """Load the case (network, routes, routing cache, OD agents)"""
@@ -93,9 +95,11 @@ class Simulation:
         """Load the open case: network, routes, tricycles, routing cache (from its cache file when there is a
         current one) and the OD agents. on_progress(done, total) is called while a routing cache is computed."""
         environment = load_graph_from_data()
+        congestion.reset()
         self.graph = environment[0]
         self.railway_graph = environment[1]
         self.routes = environment[2]
+        congestion.check_transit_load(self.routes)
         init_closures(self)
         # tricycles: one on-demand service per barangay, territory = it + the barangays touching it
         build_tricycle_services(self.graph, data_dir(), load_case().get('tricycle_disabled', []))
@@ -213,6 +217,7 @@ class Simulation:
             manager.emit(self.start_time + 3, manager.Event(manager.TRANSPORTATION_SPAWN, route))
         Agent.id = 0
         Transportation.id = 0
+        congestion.reset()
         self.schedule_od_demand()
         self.play = False
         self.started = False
@@ -251,7 +256,19 @@ class Simulation:
             lines.append(f"Hotspots ({len(m.hotspots)}): {now} people now | {m.person_minutes(m.hotspots):,.0f} person-min | "
                          f"trips to hotspots: {m.trips_to_hotspot_arrived:,} arrived of {m.trips_to_hotspot_scheduled:,} started | "
                          f"people who entered: {len(m.hot_visitors):,}")
+        lines += self.congestion_lines()
         return lines
+
+    def congestion_lines(self) -> list[str]:
+        """HUD line for the road congestion model (transport/congestion.py)."""
+        if (not congestion.enabled()):
+            return []
+        snap = congestion.last_snapshot()
+        if (not snap):
+            return ["Congestion (K: map): no vehicles on the roads yet"]
+        speeds = ', '.join(f"{mode} {snap['speed_' + mode]}" for mode in ('private', 'jeep', 'bus', 'tricycle') if snap['speed_' + mode] != '')
+        return [f"Congestion (K: map): background {snap['background']:.0%} of jam density, {snap['links_over_critical']} roads past "
+                f"critical density, {snap['waiting']} vehicles held by full roads" + (f" | road km/h: {speeds}" if speeds else '')]
 
     def create_ui_elements(self):
         """Create UI elements such as buttons"""
@@ -265,6 +282,7 @@ class Simulation:
             handle_agent_events(event, time, self)
             handle_transportation_events(event, time, self)
             handle_route_events(event, time, self)
+        congestion.tick(time)
     
     def run(self):
         time = self.start_time
@@ -304,7 +322,9 @@ class Simulation:
                     running = False
                     return
                 elif (event.type == pg.KEYDOWN):
-                    if (event.key == pg.K_UP and self.simulation_multiplier < 30):
+                    if (event.key == pg.K_k):
+                        self.show_congestion = not self.show_congestion
+                    elif (event.key == pg.K_UP and self.simulation_multiplier < 30):
                         self.simulation_multiplier += 1
                     elif (event.key == pg.K_DOWN and self.simulation_multiplier > 1):
                         self.simulation_multiplier -= 1
@@ -350,6 +370,8 @@ class Simulation:
                 routes = sorted(self.routes, key=lambda route:route.get_average_occupancy(), reverse=True)
                 for route in routes:
                     route.draw(self.window, self.graph)
+                if (self.show_congestion and congestion.enabled()):
+                    congestion.draw(self.window, self.graph.camera, time)
                 self.road_editor.draw(self.window)
                 self.editor.draw(self.window)
                 self.zone_editor.draw_labels(self.window)

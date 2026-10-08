@@ -76,6 +76,17 @@ def main():
         row(f"  {mode} mean min (trips {a.get('trips', 0)}/{b.get('trips', 0)})",
             a.get('mean_min', 0.0), b.get('mean_min', 0.0))
 
+    # road congestion (transport/congestion.py), when both runs had it on
+    c0, c1 = s0.get('road_congestion', {}), s1.get('road_congestion', {})
+    if c0.get('enabled') and c1.get('enabled'):
+        row('road delay (vehicle-hours)', c0['delay_vehicle_hours'], c1['delay_vehicle_hours'])
+        for mode in ('private', 'jeep', 'bus', 'tricycle', 'all'):
+            a, b = c0['mean_speed_kmh'].get(mode, ''), c1['mean_speed_kmh'].get(mode, '')
+            if a != '' and b != '':
+                row(f"  {mode} road speed (km/h)", a, b)
+    elif c0.get('enabled') != c1.get('enabled'):
+        print("WARNING: road congestion was on in only one of the runs - travel times are not directly comparable.")
+
     # displacement
     table = []
     for z in sorted(set(z0) | set(z1)):

@@ -11,6 +11,7 @@ PRIVATE_TRANSPORTATION_MOVE = 6
 PRIVATE_TRANSPORTATION_ARRIVED = 7
 AGENT_WALK = 8
 TRICYCLE_PICKUP = 9          # transport/tricycle.py: the wait for a tricycle is over
+VEHICLE_ENTER_RETRY = 10     # transport/congestion.py: the next road was full, try to enter it again
 
 _events:dict[int, list['Event']] = {}
 _time_step = 0

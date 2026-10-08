@@ -165,6 +165,8 @@ def load_graph_from_data() -> tuple[RegionGraph, Graph, list]:
         node.precise_pos = (float(row.x), float(row.y))
         if getattr(row, 'name', None) and isinstance(row.name, str):
             node.name = row.name
+        if 'highway' in nodes.columns:            # OSM node tag (e.g. traffic_signals), used by transport/congestion.py
+            node.osm_highway = row.highway if isinstance(row.highway, str) else ''
 
     # ---- edges (ids are kept from the data so routes and case files can refer to them)
     closed = {_edge_key(e) for e in case['closed_edges']}
@@ -189,6 +191,7 @@ def load_graph_from_data() -> tuple[RegionGraph, Graph, list]:
         edge = Edge(node_a, node_b, max(1, int(round(row.length_m))), edge_id)
         edge.highway = getattr(row, 'highway', None)
         edge.road_name = getattr(row, 'name', None)
+        edge.lanes = getattr(row, 'lanes', None)   # OSM lanes if the export has them (transport/congestion.py)
         edge.oneway_from = oneway_start(row, node_a, node_b)   # one-way: the node vehicles must enter from
         edge.capacity_multiplier = capacity.get(edge_id, 1.0)
         if row.layer == 'transfer':           # transfer edges belong to both layers, like the Excel loader
