@@ -201,12 +201,8 @@ class FacilityEditor:
                 self._commit()
                 return True
             if event.key == pg.K_s and not locked:
-                from transport.route_editor import save_case, RouteChangeError
                 self._commit()
-                try:
-                    self.status = f"Saved case: {save_case(self.sim)}"
-                except RouteChangeError as e:
-                    self.status = str(e)
+                self.sim.case_manager.open_save()       # "Save case as" box (ui/case_manager.py)
                 return True
             return False
 

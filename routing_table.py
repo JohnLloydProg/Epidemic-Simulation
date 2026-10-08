@@ -4,9 +4,16 @@ Routing cache: the walk/ride plan (list of Checkpoints) for every pair of trip-e
 Paths are computed with one search per ORIGIN (graphing.mapping.shortest_paths_from), which gives exactly the
 same paths as one search per pair but is roughly 100x faster. Origins are spread over a process pool.
 
-    build_routing_cache(...)    at start-up: load the cache file for this case, or compute and save it
+    build_routing_cache(...)    at start-up / when a case is opened: load the cache file for this case if it
+                                is current, otherwise compute it and save it
     rebuild_routing_cache(sim)  after a route edit: recompute everything in memory with the edited routes
-                                (not saved; save the edits as a case file to get a cache file for them)
+    save_routing_cache(...)     write the in-memory cache as the cache file of a case (done when the case is
+                                saved, so opening it later does not recompute anything)
+
+Cache file (pickle): {'format': 5, 'tricycles': settings, 'routes': {route key: (spawn id, edge ids)},
+'pairs': {(origin id, destination id): [checkpoint dicts]}}. A route key is "<route_id>#<direction>"; the
+stored route paths are compared with the loaded routes, so a cache never refers to a route that has changed.
+Format 4 files (routes by list position) are still read.
 
 Config keys:
     "ROUTING_PROCESSES": null    number of worker processes (null = all CPU cores, 1 = no pool)
@@ -27,7 +34,8 @@ from transport.transportation import Route, set_route_group_path
 from transport.checkpoint import generate_checkpoints, Checkpoint
 
 CACHE_FILE_NAME = 'routing_table.pkl'
-CACHE_FORMAT = 4            # 4 = routes follow one-way roads; routes by position, tricycles as "tricycle:<barangay>"
+CACHE_FORMAT = 5            # 5 = routes by "<route_id>#<direction>" + route paths; tricycles as "tricycle:<barangay>"
+READABLE_FORMATS = (4, 5)   # 4 = routes by position in the route list
 LOGGER = logging.getLogger('RoutingTable')
 
 
@@ -40,9 +48,29 @@ def get_cache_file() -> str:
 
 
 # --------------------------------------------------------------------------- dehydrate / rehydrate
-def dehydrate(raw_path:list, route_index:dict) -> list[dict]:
-    """Checkpoints as plain data. Routes are stored by their position in the route list, which is the
-    same in every process that loads the same data (Route.id counters are not)."""
+def route_keys(routes:list[Route]) -> dict[int, str]:
+    """{id(route): "<route_id>#<n>"}, n = the route's direction within its route id (0 = forward). Unlike
+    Route.id counters or list positions, this is the same in every process and after a case is re-opened."""
+    keys, seen = {}, {}
+    for i, route in enumerate(routes):
+        route_id = getattr(route, 'route_id', None)
+        if route_id is None:
+            keys[id(route)] = f"#{i}"
+            continue
+        n = seen.get(route_id, 0)
+        seen[route_id] = n + 1
+        keys[id(route)] = f"{route_id}#{n}"
+    return keys
+
+
+def route_signatures(routes:list[Route]) -> dict[str, tuple]:
+    """{route key: (spawn node id, (edge ids...))} — what a cache's ride legs depend on."""
+    keys = route_keys(routes)
+    return {keys[id(r)]: (r.spawn_node.id, tuple(e.id for e in r.path)) for r in routes}
+
+
+def dehydrate_checkpoints(checkpoints:list[Checkpoint], route_index:dict) -> list[dict]:
+    """Checkpoints as plain data (route_index = route_keys(routes))."""
     def route_key(route):
         if route is None:
             return None
@@ -53,7 +81,11 @@ def dehydrate(raw_path:list, route_index:dict) -> list[dict]:
              'start_node': cp.start_node.id if cp.start_node else None,
              'end_node': cp.end_node.id if cp.end_node else None,
              'route': route_key(cp.route)}
-            for cp in generate_checkpoints(raw_path)]
+            for cp in checkpoints]
+
+
+def dehydrate(raw_path:list, route_index:dict) -> list[dict]:
+    return dehydrate_checkpoints(generate_checkpoints(raw_path), route_index)
 
 
 def rehydrate_cache(dehydrated_cache:dict, city:RegionGraph, railway:Graph, routes:list[Route]) -> dict[tuple, list[Checkpoint]]:
@@ -64,12 +96,17 @@ def rehydrate_cache(dehydrated_cache:dict, city:RegionGraph, railway:Graph, rout
 
     from transport.tricycle import service_for
 
+    keys = route_keys(routes)
+    by_key = {keys[id(route)]: route for route in routes}
+
     def route(key):
         if key is None:
             return None
         if isinstance(key, str) and key.startswith('tricycle:'):
             return service_for(key[len('tricycle:'):])
-        return routes[key]
+        if isinstance(key, int):                # format 4: position in the route list
+            return routes[key]
+        return by_key[key]
 
     routing_cache = {}
     for key, pickled_checkpoints in dehydrated_cache.items():
@@ -104,7 +141,7 @@ def init_worker(target_ids:list, route_edits:dict, closed_ids=(), removed_ids=()
     build_services(city, data_dir(), tricycle_off)             # same services, same order as the main process
     worker_city, worker_routes = city, routes
     worker_targets = [city.get_node(i) for i in target_ids]
-    worker_route_index = {id(route): i for i, route in enumerate(routes)}
+    worker_route_index = route_keys(routes)
 
 
 def compute_origin(start_id) -> dict:
@@ -131,7 +168,7 @@ def compute_cache(nodes:list[Node], routes:list[Route], route_edits:dict | None 
     dehydrated = {}
 
     if processes <= 1:
-        route_index = {id(route): i for i, route in enumerate(routes)}
+        route_index = route_keys(routes)
         for done, start in enumerate(nodes, 1):
             dehydrated.update(paths_from_origin(start, nodes, routes, route_index))
             if on_progress:
@@ -150,25 +187,56 @@ def compute_cache(nodes:list[Node], routes:list[Route], route_edits:dict | None 
     return dehydrated
 
 
-def build_routing_cache(nodes:list[Node], city:RegionGraph, railway:Graph, routes:list[Route]) -> dict[tuple, list[Checkpoint]]:
+def cache_is_current(stored, routes:list[Route]) -> bool:
+    """True if a loaded cache file matches the tricycle settings and (format 5) the routes as loaded now."""
+    from transport.tricycle import settings_signature, disabled_psgc
+    if not isinstance(stored, dict) or stored.get('format') not in READABLE_FORMATS:
+        return False
+    if stored.get('tricycles') != settings_signature(disabled_psgc()):
+        return False
+    if stored['format'] >= 5 and stored.get('routes') != route_signatures(routes):
+        return False
+    return True
+
+
+def build_routing_cache(nodes:list[Node], city:RegionGraph, railway:Graph, routes:list[Route],
+                        on_progress=None) -> dict[tuple, list[Checkpoint]]:
     """At start-up: load this case's cache file if it is current, otherwise compute it and save it."""
     cache_path = get_cache_file()
     if os.path.exists(cache_path):
         LOGGER.info(f"Found existing {cache_path}! Loading from disk...")
-        with open(cache_path, 'rb') as f:
-            stored = pickle.load(f)
-        from transport.tricycle import settings_signature, disabled_psgc
-        signature = settings_signature(disabled_psgc())
-        if isinstance(stored, dict) and stored.get('format') == CACHE_FORMAT and stored.get('tricycles') == signature:
+        try:
+            with open(cache_path, 'rb') as f:
+                stored = pickle.load(f)
+        except Exception as e:                  # damaged / half-written file
+            LOGGER.warning(f"Could not read {cache_path} ({e}); rebuilding it.")
+            stored = None
+        if cache_is_current(stored, routes):
             return rehydrate_cache(stored['pairs'], city, railway, routes)
-        LOGGER.info("Cache file is older or was built with other tricycle settings; rebuilding it.")
+        LOGGER.info("Cache file is older or was built with other routes/tricycle settings; rebuilding it.")
 
-    from transport.tricycle import settings_signature, disabled_psgc
-    dehydrated = compute_cache(nodes, routes)
-    LOGGER.info(f"Saving routing cache to {cache_path}...")
-    with open(cache_path, 'wb') as f:
-        pickle.dump({'format': CACHE_FORMAT, 'tricycles': settings_signature(disabled_psgc()), 'pairs': dehydrated}, f)
+    dehydrated = compute_cache(nodes, routes, on_progress=on_progress)
+    write_cache_file(cache_path, dehydrated, routes)
     return rehydrate_cache(dehydrated, city, railway, routes)
+
+
+def write_cache_file(cache_path, dehydrated:dict, routes:list[Route]):
+    from transport.tricycle import settings_signature, disabled_psgc
+    LOGGER.info(f"Saving routing cache to {cache_path}...")
+    tmp = f"{cache_path}.tmp"
+    with open(tmp, 'wb') as f:                  # write then rename: never leaves a half-written cache
+        pickle.dump({'format': CACHE_FORMAT, 'tricycles': settings_signature(disabled_psgc()),
+                     'routes': route_signatures(routes), 'pairs': dehydrated}, f)
+    os.replace(tmp, cache_path)
+
+
+def save_routing_cache(cache_path, routing_table:dict, routes:list[Route]) -> int:
+    """Write an in-memory routing cache (e.g. after route edits / closures) as a case's cache file.
+    The caller makes sure the cache matches `routes` and the current tricycle settings. Returns the pair count."""
+    index = route_keys(routes)
+    dehydrated = {key: dehydrate_checkpoints(checkpoints, index) for key, checkpoints in routing_table.items()}
+    write_cache_file(cache_path, dehydrated, routes)
+    return len(dehydrated)
 
 
 def rebuild_routing_cache(sim, on_progress=None) -> dict[tuple, list[Checkpoint]]:

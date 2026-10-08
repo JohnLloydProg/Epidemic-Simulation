@@ -14,11 +14,14 @@ Loads the simulation environment from the sim_data/ folder instead of the Excel 
 
 Config keys (in the JSON file named by CONFIG_FILE_NAME):
     "DATA_DIR":  "sim_data"             turns this loader on
-    "CASE_FILE": "00_baseline.json"     which case in sim_data/cases/ to run
+    "CASE_FILE": "00_baseline.json"     which case in sim_data/cases/ to open at start-up
+                                        (other cases can be opened in the program: O, see ui/case_manager.py)
 """
 import hashlib
 import json
 import logging
+import os
+import re
 from pathlib import Path
 
 import pandas as pd
@@ -39,12 +42,36 @@ EMPTY_CASE = {
 
 
 # --------------------------------------------------------------------------- paths
+CASE_ENV = 'SIM_CASE_FILE'      # case opened in the running program (set by set_case_file); inherited by the
+                                # routing-cache worker processes so they load the same case
+
+
 def data_dir() -> Path:
     return Path(config.get('DATA_DIR', 'sim_data'))
 
 
-def case_path() -> Path:
-    return data_dir() / 'cases' / config.get('CASE_FILE', '00_baseline.json')
+def cases_dir() -> Path:
+    return data_dir() / 'cases'
+
+
+def case_file_name() -> str:
+    """File name (in sim_data/cases/) of the case that is open: the one opened in the program, else CASE_FILE."""
+    return os.environ.get(CASE_ENV) or config.get('CASE_FILE', '00_baseline.json')
+
+
+def set_case_file(file_name:str):
+    """Make `file_name` the open case for this process and any worker process started after this."""
+    os.environ[CASE_ENV] = file_name
+    config.put('CASE_FILE', file_name)
+
+
+def case_path(file_name:str | None = None) -> Path:
+    return cases_dir() / (file_name or case_file_name())
+
+
+def read_case(path:Path) -> dict:
+    with open(path, encoding='utf-8') as f:
+        return {**EMPTY_CASE, **json.load(f)}
 
 
 def load_case() -> dict:
@@ -52,9 +79,7 @@ def load_case() -> dict:
     if not path.exists():
         LOGGER.warning(f"Case file '{path}' not found, running base data with no changes.")
         return dict(EMPTY_CASE)
-    with open(path, encoding='utf-8') as f:
-        case = json.load(f)
-    return {**EMPTY_CASE, **case}
+    return read_case(path)
 
 
 def results_dir() -> Path:
@@ -63,18 +88,35 @@ def results_dir() -> Path:
     return path
 
 
-def cache_file() -> Path:
-    """Routing-cache file for the current case. The name changes whenever the base data or the case file
-    changes, so a stale cache is never reused (old caches can simply be deleted)."""
+def _base_digest() -> 'hashlib._Hash':
     digest = hashlib.sha1()
     base = data_dir() / 'base'
     for name in ('network_nodes.parquet', 'network_edges.parquet', 'zones.json', 'transit_routes.json'):
         digest.update((base / name).read_bytes())
-    if case_path().exists():
-        digest.update(case_path().read_bytes())
-    path = data_dir() / 'cache' / f"routing_{load_case()['case_id']}_{digest.hexdigest()[:10]}.pkl"
-    path.parent.mkdir(parents=True, exist_ok=True)
-    return path
+    return digest
+
+
+def cache_file(path:Path | None = None, base_digest=None, create_dir:bool = True) -> Path:
+    """Routing-cache file for a case (default: the open one). The name changes whenever the base data or the
+    case file changes, so a stale cache is never reused (old caches can simply be deleted).
+    base_digest: _base_digest() computed once, when looking up many cases."""
+    path = Path(path) if path else case_path()
+    digest = (base_digest or _base_digest()).copy()
+    case_id = EMPTY_CASE['case_id']
+    if path.exists():
+        digest.update(path.read_bytes())
+        case_id = read_case(path)['case_id']
+    cache = data_dir() / 'cache' / f"routing_{case_id}_{digest.hexdigest()[:10]}.pkl"
+    if create_dir:
+        cache.parent.mkdir(parents=True, exist_ok=True)
+    return cache
+
+
+def cache_files_of(case_id:str) -> list[Path]:
+    """Every routing-cache file written for a case id (current and stale)."""
+    pattern = re.compile(rf"routing_{re.escape(case_id)}_[0-9a-f]{{10}}\.pkl")
+    folder = data_dir() / 'cache'
+    return [p for p in folder.glob('routing_*.pkl') if pattern.fullmatch(p.name)] if folder.exists() else []
 
 
 def _edge_key(value, default_layer='city') -> tuple[str, int]:

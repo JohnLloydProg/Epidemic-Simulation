@@ -180,11 +180,7 @@ class ZoneEditor:
             self.status = "All hotspots cleared." + self._recompute_od()
             return True
         if event.type == pg.KEYDOWN and event.key == pg.K_s:
-            from transport.route_editor import save_case, RouteChangeError
-            try:
-                self.status = f"Saved case: {save_case(self.sim)}"
-            except RouteChangeError as e:
-                self.status = str(e)
+            self.sim.case_manager.open_save()           # "Save case as" box (ui/case_manager.py)
             return True
         if event.type == pg.MOUSEBUTTONDOWN and event.button == 1:
             self._down = event.pos

@@ -143,12 +143,7 @@ class RoadEditor:
             self.status = f"All roads reopened. {self._route_note(result)} Leave the mode or press Enter to rebuild."
             return True
         if event.type == pg.KEYDOWN and event.key == pg.K_s:
-            from transport.route_editor import save_case, RouteChangeError
-            self._rebuild()
-            try:
-                self.status = f"Saved case: {save_case(self.sim)}"
-            except RouteChangeError as e:
-                self.status = str(e)
+            self.sim.case_manager.open_save()           # saving applies pending closures first
             return True
         if event.type == pg.MOUSEBUTTONDOWN and event.button == 1:
             self._down = event.pos

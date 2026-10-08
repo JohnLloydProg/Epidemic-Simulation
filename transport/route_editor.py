@@ -32,6 +32,7 @@ from __future__ import annotations
 import json
 import logging
 import math
+import os
 
 import pygame as pg
 
@@ -48,6 +49,10 @@ PICK_RADIUS_PX = 14         # how close a click must be to a route or node
 
 class RouteChangeError(ValueError):
     pass
+
+
+class CaseExistsError(RouteChangeError):
+    """save_case: a case with that name exists and overwrite was not asked for."""
 
 
 # =============================================================================================== core
@@ -147,10 +152,11 @@ def restore_route(sim, route_id:str, on_progress=None) -> str:
     return "Restored — " + apply_route_change(sim, route_id, spawn, path, on_progress)
 
 
-def save_case(sim) -> str:
-    """Write the current case plus everything changed in this session as a new case file:
+def case_from_session(sim) -> tuple[dict, bool]:
+    """(the open case plus everything changed in this session, True if nothing was changed):
     route paths (edits and detours around closed roads) as transit_overrides, closed roads, routes removed by
-    closures, hotspots and barangay trip limits (od_scaling). Never overwrites an existing case."""
+    closures, hotspots, barangay trip limits (od_scaling), facilities and tricycles switched off.
+    case_id is still the open case's; save_case gives it the new one."""
     from graphing.data_loader import load_case, data_dir
     case = load_case()
     zones = list(getattr(sim.graph, 'zones', {}).values())
@@ -174,9 +180,6 @@ def save_case(sim) -> str:
                  and tricycle_off == sorted(map(str, case.get('tricycle_disabled', [])))
                  and hotspots == sorted(map(str, case.get('hotspots', [])))
                  and limits == {str(k): float(v) for k, v in case.get('od_scaling', {}).items()})
-    if unchanged:
-        raise RouteChangeError("Nothing to save: no changes to routes, roads, hotspots or trip limits.")
-
     overrides = dict(case.get('transit_overrides', {}))
     if closed and hasattr(sim, 'all_routes'):
         # a route whose definition uses a closed road would be dropped by the loader, even if its legal
@@ -194,12 +197,6 @@ def save_case(sim) -> str:
                 edits[rid] = (first.spawn_node.id[1], [e.id[1] for e in first.path])
     for route_id, (spawn_id, edge_ids) in edits.items():
         overrides[route_id] = {**overrides.get(route_id, {}), 'start_node': spawn_id, 'edges': edge_ids}
-    stem = case['case_id'].split('_edited')[0] + '_edited'
-    case_id, n = stem, 1
-    while (data_dir() / 'cases' / f'{case_id}.json').exists():      # never overwrite an existing case
-        n += 1
-        case_id = f'{stem}_{n}'
-
     description = (case.get('description') or '').split(' | ')[0]
     if sim.route_edits:
         description += f" | route edits: {', '.join(sorted(sim.route_edits))}"
@@ -213,7 +210,7 @@ def save_case(sim) -> str:
         description += f" | tricycles off in {len(tricycle_off)} barangay(s)"
     if limits:
         description += f" | trip limits: " + ", ".join(f"{r.name} {r.od_scale:.0%}" for r in zones if getattr(r, 'od_scale', 1.0) != 1.0)
-    new_case = {**case, 'case_id': case_id, 'description': description,
+    new_case = {**case, 'description': description,
                 'transit_overrides': overrides, 'hotspots': hotspots, 'od_scaling': limits,
                 'closed_edges': list(dict.fromkeys(list(case.get('closed_edges', [])) + closed)),
                 'disabled_routes': list(dict.fromkeys(list(case.get('disabled_routes', [])) + list(removed_ids)))}
@@ -225,10 +222,39 @@ def save_case(sim) -> str:
     new_case['tricycle_disabled'] = tricycle_off
     if hotspots:                          # keep the run reproducible even if the config default changes
         new_case['hotspot_attraction'] = float(case.get('hotspot_attraction', config.get('HOTSPOT_ATTRACTION', 0.5)))
-    path = data_dir() / 'cases' / f'{case_id}.json'
+    return new_case, unchanged
+
+
+def next_case_name(case_id:str) -> str:
+    """"<case>_edited", "<case>_edited_2", ... — the first name not used by a case file yet."""
+    from graphing.data_loader import cases_dir
+    stem = case_id.split('_edited')[0] + '_edited'
+    name, n = stem, 1
+    while (cases_dir() / f'{name}.json').exists():
+        n += 1
+        name = f'{stem}_{n}'
+    return name
+
+
+def save_case(sim, case_id:str | None = None, overwrite:bool = False) -> str:
+    """Write the open case plus this session's changes as a case file and return its path.
+    Without a case_id the name is "<case>_edited[_n]" and nothing is written if nothing changed; with one,
+    an existing file is only replaced when overwrite=True (CaseExistsError otherwise)."""
+    from graphing.data_loader import cases_dir
+    new_case, unchanged = case_from_session(sim)
+    if case_id is None:
+        if unchanged:
+            raise RouteChangeError("Nothing to save: no changes to routes, roads, hotspots or trip limits.")
+        case_id = next_case_name(new_case['case_id'])
+    path = cases_dir() / f'{case_id}.json'
+    if path.exists() and not overwrite:
+        raise CaseExistsError(f"A case named '{case_id}' already exists.")
+    new_case['case_id'] = case_id
     path.parent.mkdir(parents=True, exist_ok=True)
-    with open(path, 'w', encoding='utf-8') as f:
+    tmp = path.with_suffix('.json.tmp')
+    with open(tmp, 'w', encoding='utf-8') as f:
         json.dump(new_case, f, indent=1)
+    os.replace(tmp, path)
     return str(path)
 
 
@@ -492,10 +518,7 @@ class RouteEditor:
             self._show("Restoring route and rebuilding the routing cache...")
             self.status = restore_route(self.sim, self.route.route_id, self._progress)
         elif key == pg.K_s:
-            try:
-                self.status = f"Saved case: {save_case(self.sim)}"
-            except RouteChangeError as e:
-                self.status = str(e)
+            self.sim.case_manager.open_save()           # "Save case as" box (ui/case_manager.py)
         else:
             return False
         return True

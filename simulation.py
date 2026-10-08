@@ -12,9 +12,10 @@ from transport.route_editor import RouteEditor
 from ui.zone_editor import ZoneEditor, people_in_hotspots, hotspot_zones
 from ui.road_editor import RoadEditor
 from ui.facility_editor import FacilityEditor
-from transport.closures import init_closures
+from ui.case_manager import CaseManager
+from transport.closures import init_closures, _clear_search_caches
 from transport.tricycle import build_services as build_tricycle_services
-from graphing.data_loader import load_graph_from_data, load_case, data_dir, results_dir
+from graphing.data_loader import load_graph_from_data, load_case, data_dir, results_dir, set_case_file, case_file_name
 from agents.od_demand import schedule_od_agents
 from routing_table import build_routing_cache
 from time import time_ns
@@ -24,6 +25,7 @@ import random
 import logging
 import os
 import sys
+import case_files
 
 LOGGER = logging.getLogger('Simulation')
 
@@ -86,7 +88,29 @@ class Simulation:
         self.started = False            # True once time moves or an agent is added; routes are locked then
         self._reset_requested = False
 
-        """Load environment and initialize route spawning events"""
+        """Load the case (network, routes, routing cache, OD agents)"""
+        set_case_file(case_file_name())          # worker processes follow the case opened in the program
+        self.load_case_data()
+
+        LOGGER.info(f'Simulation initialized with {len(self.agents)} agents.')
+        
+        """Mainly for visualization purposes"""
+        self.play = False
+        self.clock = pg.time.Clock()
+        self.window = pg.display.set_mode((1080, 720))
+        self.font = pg.font.Font(None, 15)
+        self.railway_graph.camera = self.graph.camera   # one shared view for both layers
+        all_nodes = list(self.graph.nodes.values()) + list(self.railway_graph.nodes.values())
+        self.graph.camera.fit([node.pos for node in all_nodes], self.window.get_size())
+        self.create_ui_elements()
+        self.case_manager = CaseManager(self)    # O: open a case, Ctrl+S: save one (ui/case_manager.py)
+        self.create_editors()
+        
+        self.run()
+
+    def load_case_data(self, on_progress=None):
+        """Load the open case: network, routes, tricycles, routing cache (from its cache file when there is a
+        current one) and the OD agents. on_progress(done, total) is called while a routing cache is computed."""
         environment = load_graph_from_data()
         self.graph = environment[0]
         self.railway_graph = environment[1]
@@ -103,28 +127,60 @@ class Simulation:
         # Only nodes where trips can start or end are cached (other pairs are computed on demand if ever needed)
         nodes = self.trip_end_nodes()
         LOGGER.info(f'Routing cache covers {len(nodes)} trip-end nodes of {len(self.graph.nodes)}.')
-        self.routing_table = build_routing_cache(nodes, self.graph, self.railway_graph, self.routes)
+        self.routing_table = build_routing_cache(nodes, self.graph, self.railway_graph, self.routes, on_progress)
 
         """Schedule agents from the OD matrix (only when OD_BUNDLE_DIR is set in the config)"""
         self.schedule_od_demand()
+        pg.display.set_caption(f"Simulation — {load_case()['case_id']}")
 
-        LOGGER.info(f'Simulation initialized with {len(self.agents)} agents.')
-        
-        """Mainly for visualization purposes"""
-        self.play = False
-        self.clock = pg.time.Clock()
-        self.window = pg.display.set_mode((1080, 720))
-        self.font = pg.font.Font(None, 15)
-        self.railway_graph.camera = self.graph.camera   # one shared view for both layers
-        all_nodes = list(self.graph.nodes.values()) + list(self.railway_graph.nodes.values())
-        self.graph.camera.fit([node.pos for node in all_nodes], self.window.get_size())
-        self.create_ui_elements()
+    def create_editors(self):
         self.editor = RouteEditor(self)
         self.zone_editor = ZoneEditor(self)
         self.road_editor = RoadEditor(self)
         self.facility_editor = FacilityEditor(self)
-        
-        self.run()
+        self.case_fingerprint = case_files.session_fingerprint(self)   # "unsaved changes" = differs from this
+
+    def _clear_session(self):
+        """Forget everything of the open case: queued events, agents, vehicles, edits and search caches."""
+        manager._events.clear()
+        self.agents.clear()
+        self.transportations.clear()
+        Agent.id = 0
+        Transportation.id = 0
+        self.od_summary = None
+        self.od_spawned = self.od_failed = 0
+        for attr in ('route_edits', 'route_originals'):
+            self.__dict__.pop(attr, None)
+        _clear_search_caches()
+
+    def open_case(self, file_name:str, on_progress=None):
+        """Replace the running case with sim_data/cases/<file_name>, back at the start time (the view is kept).
+        If it cannot be loaded, the previous case is loaded again and the error is raised."""
+        previous = case_file_name()
+        camera = self.graph.camera
+        view = (camera.zoom, camera.x_offset, camera.y_offset, camera._home)
+        LOGGER.info(f"Opening case {file_name}...")
+        self._clear_session()
+        set_case_file(file_name)
+        try:
+            self.load_case_data(on_progress)
+        except Exception:
+            LOGGER.exception(f"Could not open case {file_name}; going back to {previous}.")
+            self._clear_session()
+            set_case_file(previous)
+            self.load_case_data(on_progress)
+            self._after_open(view)
+            raise
+        self._after_open(view)
+
+    def _after_open(self, view):
+        camera = self.graph.camera
+        camera.zoom, camera.x_offset, camera.y_offset, camera._home = view
+        self.railway_graph.camera = camera
+        self.create_editors()
+        self.play = False
+        self.started = False
+        self._reset_requested = True             # run() sets its clock back to start_time
 
     def trip_end_nodes(self) -> list:
         """Nodes where agents can start or end a trip: every node of the OD barangays (OD_TRIP_END_ROLES),
@@ -181,6 +237,7 @@ class Simulation:
         """Create UI elements such as buttons"""
         self.buttons['play'] = TextButton(20, 20, 100, 30, lambda: setattr(self, 'play', not self.play), (255, 0, 0), "Play")
         self.buttons['reset'] = TextButton(130, 20, 100, 30, self.reset, (200, 200, 200), "Reset")
+        self.buttons['cases'] = TextButton(240, 20, 100, 30, lambda: self.case_manager.open_browser(), (170, 200, 240), "Cases")
 
     def handle_events(self, time:int):
         """Event based handling"""
@@ -209,6 +266,12 @@ class Simulation:
 
             for event in pg.event.get():
                 consumed = []
+                if (event.type == pg.QUIT):
+                    return
+                if (self.case_manager.handle_event(event)):    # case list / save box (modal while open)
+                    continue
+                if (self._reset_requested):                   # a case was just opened: drop this frame's events
+                    continue
                 if (self.editor.handle_event(event, time)):
                     continue
                 if (self.zone_editor.handle_event(event, time)):
@@ -315,6 +378,7 @@ class Simulation:
 
                 for button in self.buttons.values():
                     button.draw(self.window)
+                self.case_manager.draw(self.window)
 
                 pg.display.update()
     
