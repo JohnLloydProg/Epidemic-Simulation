@@ -77,9 +77,12 @@ def set_route_group_path(routes:list[Route], route_id:str, spawn_node:Node, path
     end = spawn_node
     for edge in path:
         end = edge.get_adjacent_node(end)       # raises if the edges do not form a chain
-    group[0].set_path(spawn_node, path)
-    for reverse in group[1:]:
-        reverse.set_path(end, list(reversed(path)))
+    # same rule as the data loader: each direction follows one-way roads (transport/oneway_routes.py)
+    from transport.oneway_routes import route_directions
+    city = group[0].graph if group[0].graph.layer == 'city' else None
+    directions = route_directions(spawn_node, path, city, len(group) > 1)
+    for route, (spawn, edges) in zip(group, directions):
+        route.set_path(spawn, edges)
     return group
 
 

@@ -37,6 +37,12 @@ def init_closures(sim):
         if route.graph.layer == 'city' and route_id and route_id not in sim.route_loaded:
             sim.route_loaded[route_id] = (route.spawn_node, list(route.path))
     sim.removed_routes = set()
+    sim.route_loaded_dirs = {}                  # every direction as loaded: {route_id: [(spawn, [edge ids])]}
+    for route in sim.routes:
+        route_id = getattr(route, 'route_id', None)
+        if route.graph.layer == 'city' and route_id:
+            sim.route_loaded_dirs.setdefault(route_id, []).append((route.spawn_node, [e.id for e in route.path]))
+    sim._closure_touched = set()                # routes re-derived because of closures (re-check on reopen)
     sim.network_dirty = False
     sim._edge_order = {node.id: [edge.id for edge in node.edges] for node in sim.graph.nodes.values()}
     if not hasattr(sim, 'route_edits'):
@@ -44,8 +50,9 @@ def init_closures(sim):
 
 
 def _clear_search_caches():
-    from graphing.mapping import shortest_edge_path, _route_index
+    from graphing.mapping import shortest_edge_path, shortest_drive_path, _route_index
     shortest_edge_path.cache_clear()
+    shortest_drive_path.cache_clear()
     _route_index.clear()
 
 
@@ -72,7 +79,7 @@ def reopen_edge(sim, edge_id):
 
 def detour(spawn:Node, path:list[Edge], closed:set, city, railway) -> list[Edge] | None:
     """Path with every run of closed edges replaced by the shortest open road path around it; None if impossible."""
-    from graphing.mapping import shortest_edge_path
+    from graphing.mapping import shortest_edge_path, shortest_drive_path
     out, node, i = [], spawn, 0
     while i < len(path):
         edge = path[i]
@@ -87,7 +94,7 @@ def detour(spawn:Node, path:list[Edge], closed:set, city, railway) -> list[Edge]
             i += 1
         if start is end:
             continue
-        around = shortest_edge_path(start.id, end.id, city, railway)
+        around = shortest_drive_path(start.id, end.id, city) or shortest_edge_path(start.id, end.id, city, railway)
         if not around:
             return None
         out += list(around)
@@ -102,7 +109,12 @@ def update_routes(sim) -> dict:
     remove_all = config.get('CLOSED_ROAD_ROUTES', 'detour') == 'remove'
     detoured, removed = [], set()
     for route_id, (spawn, loaded_path) in sim.route_loaded.items():
+        group = [r for r in sim.all_routes if getattr(r, 'route_id', None) == route_id]
         spawn, intended = sim.route_edits.get(route_id, (spawn, loaded_path))
+        uses_closed = (any(edge.id in closed for edge in intended)
+                       or any(edge.id in closed for r in group for edge in r.path))   # incl. the return trip
+        if not uses_closed and route_id not in sim._closure_touched:
+            continue
         target = intended
         if any(edge.id in closed for edge in intended):
             target = None if remove_all else detour(spawn, intended, closed, sim.graph, sim.railway_graph)
@@ -110,9 +122,15 @@ def update_routes(sim) -> dict:
                 removed.add(route_id)
                 continue
             detoured.append(route_id)
-        group = [r for r in sim.all_routes if getattr(r, 'route_id', None) == route_id]
-        if [e.id for e in group[0].path] != [e.id for e in target] or group[0].spawn_node is not spawn:
-            set_route_group_path(sim.all_routes, route_id, spawn, target)
+        elif uses_closed:
+            detoured.append(route_id)               # only its return trip used the closed road
+        before = [(r.spawn_node, [e.id for e in r.path]) for r in group]
+        set_route_group_path(sim.all_routes, route_id, spawn, target)   # re-derives both legal directions
+        if [(r.spawn_node, [e.id for e in r.path]) for r in group] != before or uses_closed:
+            sim._closure_touched.add(route_id)
+        if any(edge.id in closed for r in group for edge in r.path):    # no way around for a direction
+            detoured.remove(route_id) if route_id in detoured else None
+            removed.add(route_id)
 
     newly_removed = removed - sim.removed_routes
     restored = sim.removed_routes - removed
@@ -142,12 +160,12 @@ def route_state(sim) -> tuple[dict, list, list]:
     """(route paths that differ from the loaded case {route_id: (spawn_id, [edge_ids])},
     closed edge ids, removed route ids) — what worker processes and case files need."""
     edits = {}
-    for route_id, (spawn, path) in sim.route_loaded.items():
+    for route_id, loaded in sim.route_loaded_dirs.items():
         if route_id in sim.removed_routes:
             continue
-        route = next(r for r in sim.all_routes if getattr(r, 'route_id', None) == route_id)
-        if route.spawn_node is not spawn or [e.id for e in route.path] != [e.id for e in path]:
-            edits[route_id] = (route.spawn_node.id, [e.id for e in route.path])
+        group = [r for r in sim.all_routes if getattr(r, 'route_id', None) == route_id]
+        if [(r.spawn_node, [e.id for e in r.path]) for r in group] != loaded:     # any direction changed
+            edits[route_id] = (group[0].spawn_node.id, [e.id for e in group[0].path])
     return edits, sorted(sim.closed_edges), sorted(sim.removed_routes)
 
 

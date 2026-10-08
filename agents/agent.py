@@ -4,7 +4,7 @@ from transport.transportation import Transportation, Route, RoutedTransportation
 from transport.checkpoint import Checkpoint, generate_checkpoints
 from graphing.graph import Graph, RegionGraph
 from graphing.core import Node, Edge
-from graphing.mapping import shortest_edge_path
+from graphing.mapping import shortest_edge_path, shortest_drive_path
 from graphing.mapping import shortest_path
 import logging
 import random
@@ -107,9 +107,13 @@ class Agent:
             self.current_node = None
             simulation.agents.remove(self)
         else:
-            path:list[Edge] = list(shortest_edge_path(self.current_node.id, self.destination_node.id, self.city, self.railway))
+            # private cars follow one-way roads; if no legal drive exists, the agent takes public transport instead
+            path:list[Edge] = list(shortest_drive_path(self.current_node.id, self.destination_node.id, self.city))
             if (not path):
-                raise ValueError(f"No path found from node {self.current_node.id} to node {self.destination_node.id}.")
+                self.current_node.agents.remove(self)
+                self.commuting = True
+                self.set_checkpoints(simulation.routing_table, simulation.routes, time, simulation)
+                return
 
             self.daily_distance += sum(edge.distance for edge in path)
 

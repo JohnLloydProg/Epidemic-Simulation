@@ -86,6 +86,23 @@ def _edge_key(value, default_layer='city') -> tuple[str, int]:
 
 
 # --------------------------------------------------------------------------- loader
+def oneway_start(row, node_a, node_b):
+    """For a one-way road, the end vehicles enter it from (None if two-way or unknown).
+    The edge's u -> v order is NOT reliable for this (in the exported data it is reversed on about half of the
+    one-way roads), but the road geometry ("shape") still runs in the direction of travel, so it decides."""
+    if not bool(getattr(row, 'oneway', False)) or getattr(row, 'layer', 'city') != 'city':
+        return None
+    shape = getattr(row, 'shape', None)
+    try:
+        points = json.loads(shape) if isinstance(shape, str) else list(shape)
+        x, y = points[0][0], points[0][1]
+    except (TypeError, ValueError, IndexError, KeyError):
+        return node_a                                   # no geometry: fall back to u -> v
+    ax, ay = getattr(node_a, 'precise_pos', node_a.pos)
+    bx, by = getattr(node_b, 'precise_pos', node_b.pos)
+    return node_a if (x - ax) ** 2 + (y - ay) ** 2 <= (x - bx) ** 2 + (y - by) ** 2 else node_b
+
+
 def load_graph_from_data() -> tuple[RegionGraph, Graph, list]:
     if (not config.__config):
         config.init()
@@ -130,6 +147,7 @@ def load_graph_from_data() -> tuple[RegionGraph, Graph, list]:
         edge = Edge(node_a, node_b, max(1, int(round(row.length_m))), edge_id)
         edge.highway = getattr(row, 'highway', None)
         edge.road_name = getattr(row, 'name', None)
+        edge.oneway_from = oneway_start(row, node_a, node_b)   # one-way: the node vehicles must enter from
         edge.capacity_multiplier = capacity.get(edge_id, 1.0)
         if row.layer == 'transfer':           # transfer edges belong to both layers, like the Excel loader
             city.edges[edge_id] = edge
@@ -202,9 +220,11 @@ def load_graph_from_data() -> tuple[RegionGraph, Graph, list]:
             continue
 
         interval, peak = int(rd['interval_s']), int(rd.get('peak_interval_s') or rd['interval_s'])
-        directions = [(start, path)]
-        if rd.get('bidirectional', True):
-            directions.append((end, list(reversed(path))))
+        # both directions follow one-way roads (transport/oneway_routes.py); the return trip comes from the
+        # legal forward path
+        from transport.oneway_routes import route_directions
+        directions = route_directions(start, path, graph if graph.layer == 'city' else None,
+                                      bool(rd.get('bidirectional', True)))
         for spawn, edges_in_order in directions:
             route = route_cls(spawn, edges_in_order, graph, interval, peak)
             route.route_id = rd['route_id']

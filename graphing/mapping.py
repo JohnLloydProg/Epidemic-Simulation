@@ -22,6 +22,46 @@ class State:
         return self.cost < other.cost
 
 
+def can_drive(edge:Edge, from_node:Node) -> bool:
+    """Vehicles (private cars, tricycles) may use the edge leaving from_node: two-way, or one-way in this direction.
+    Walkers ignore one-way roads."""
+    start = getattr(edge, 'oneway_from', None)
+    return start is None or start is from_node
+
+
+@lru_cache(maxsize=None, typed=False)
+def shortest_drive_path(start_id: tuple[str, int], end_id: tuple[str, int], city:RegionGraph) -> list[Edge]:
+    """Shortest road path for a vehicle: city roads only, one-way roads only in their direction. [] if none."""
+    start, end = city.nodes.get(start_id), city.nodes.get(end_id)
+    if start is None or end is None:
+        raise ValueError("Start or end node ID not in graph.")
+    if start is end:
+        return []
+    distances, previous, pq, counter = {start_id: 0.0}, {}, [(0.0, 0, start)], 1
+    while pq:
+        dist, _, node = heapq.heappop(pq)
+        if node is end:
+            break
+        if dist > distances.get(node.id, float('inf')):
+            continue
+        for edge in node.edges:
+            neighbor = edge.get_adjacent_node(node)
+            if neighbor.id[0] != city.layer or not can_drive(edge, node):
+                continue
+            new_dist = dist + edge.distance
+            if new_dist < distances.get(neighbor.id, float('inf')):
+                distances[neighbor.id], previous[neighbor.id] = new_dist, (node, edge)
+                heapq.heappush(pq, (new_dist, counter, neighbor))
+                counter += 1
+    if end_id not in previous:
+        return []
+    path, node = [], end
+    while node is not start:
+        node, edge = previous[node.id]
+        path.append(edge)
+    return path[::-1]
+
+
 @lru_cache(maxsize=None, typed=False)
 def shortest_edge_path(start_id: tuple[str, int], end_id: tuple[str, int], city:RegionGraph, railway:Graph) -> list[Edge]:
     total_nodes = city.nodes.copy()
@@ -158,7 +198,7 @@ def shortest_paths_from(start_node:Node, targets:list[Node], routes:list[Route])
         # Scenario C: Riding a tricycle (any allowed road inside its territory)
         elif getattr(current_route, 'mode', None) == 'tricycle':
             for edge in current_node.edges:
-                if current_route.allows(edge):
+                if current_route.allows(edge) and can_drive(edge, current_node):
                     neighbor_node = edge.get_adjacent_node(current_node)
                     heapq.heappush(open_set, State(neighbor_node, current_state.cost + edge.distance / current_route.expected_speed, current_route, current_state))
             heapq.heappush(open_set, State(current_node, current_state.cost, None, current_state))     # alight

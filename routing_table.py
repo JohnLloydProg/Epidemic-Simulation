@@ -27,7 +27,7 @@ from transport.transportation import Route, set_route_group_path
 from transport.checkpoint import generate_checkpoints, Checkpoint
 
 CACHE_FILE_NAME = 'routing_table.pkl'
-CACHE_FORMAT = 3            # 3 = routes by position in the route list, tricycles as "tricycle:<barangay>"
+CACHE_FORMAT = 4            # 4 = routes follow one-way roads; routes by position, tricycles as "tricycle:<barangay>"
 LOGGER = logging.getLogger('RoutingTable')
 
 

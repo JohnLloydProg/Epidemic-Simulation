@@ -71,7 +71,8 @@ def road_path(a:Node, b:Node, city, railway) -> list[Edge]:
     """Shortest road path between two city nodes."""
     if a is b:
         return []
-    path = shortest_edge_path(a.id, b.id, city, railway)
+    from graphing.mapping import shortest_drive_path
+    path = shortest_drive_path(a.id, b.id, city) or shortest_edge_path(a.id, b.id, city, railway)   # legal first
     if not path:
         raise RouteChangeError(f"No road connects node {a.id[1]} to node {b.id[1]}.")
     return list(path)
@@ -177,6 +178,20 @@ def save_case(sim) -> str:
         raise RouteChangeError("Nothing to save: no changes to routes, roads, hotspots or trip limits.")
 
     overrides = dict(case.get('transit_overrides', {}))
+    if closed and hasattr(sim, 'all_routes'):
+        # a route whose definition uses a closed road would be dropped by the loader, even if its legal
+        # paths avoid that road: store its current path as an override too
+        with open(data_dir() / 'base' / 'transit_routes.json', encoding='utf-8') as f:
+            definitions = {r['route_id']: r['edges'] for r in json.load(f)['routes']}
+        closed_set = {int(e) for e in closed if not isinstance(e, str)} | {int(e) for e in case.get('closed_edges', []) if not isinstance(e, str)}
+        for route in sim.routes:
+            rid = getattr(route, 'route_id', None)
+            if route.graph.layer != 'city' or rid in edits:
+                continue
+            definition = overrides.get(rid, {}).get('edges', definitions.get(rid, []))
+            if closed_set & {int(e) for e in definition}:
+                first = next(r for r in sim.routes if getattr(r, 'route_id', None) == rid)
+                edits[rid] = (first.spawn_node.id[1], [e.id[1] for e in first.path])
     for route_id, (spawn_id, edge_ids) in edits.items():
         overrides[route_id] = {**overrides.get(route_id, {}), 'start_node': spawn_id, 'edges': edge_ids}
     stem = case['case_id'].split('_edited')[0] + '_edited'

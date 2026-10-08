@@ -188,6 +188,25 @@ def node_zone_rows(model: ODModel, city, data_dir: Path) -> dict:
     return rows
 
 
+def _base_legal_edges(city, base: dict) -> dict:
+    """Base route paths the way the loader builds them (following one-way roads), computed once per network so
+    unchanged routes compare equal. Falls back to the file's edges where they are not in the network."""
+    cached = getattr(city, '_base_legal_route_edges', None)
+    if cached is not None:
+        return cached
+    from transport.oneway_routes import legalize
+    out = {}
+    for route_id, rd in base.items():
+        path = [city.edges.get(('city', int(e))) for e in rd['edges']]
+        start = city.get_node(('city', int(rd['start_node'])))
+        if start is None or any(e is None for e in path):
+            out[route_id] = rd['edges']
+            continue
+        out[route_id] = [e.id[1] for e in legalize(start, path, city)[1]]
+    city._base_legal_route_edges = out
+    return out
+
+
 def sim_route_changes(model: ODModel, city, routes: list, data_dir: Path) -> list[RouteChange]:
     """Simulation routes (road layer) whose served OD zones differ from sim_data/base/transit_routes.json."""
     edges = pd.read_parquet(data_dir / 'base' / 'network_edges.parquet')
@@ -205,6 +224,7 @@ def sim_route_changes(model: ODModel, city, routes: list, data_dir: Path) -> lis
 
     with open(data_dir / 'base' / 'transit_routes.json', encoding='utf-8') as f:
         base = {r['route_id']: r for r in json.load(f)['routes'] if r.get('layer', 'city') == 'city'}
+    base_edges = _base_legal_edges(city, base)
     now = {}
     for route in routes:                                 # first direction of each route = its definition
         route_id = getattr(route, 'route_id', None)
@@ -213,7 +233,7 @@ def sim_route_changes(model: ODModel, city, routes: list, data_dir: Path) -> lis
 
     changes = []
     for route_id in list(base) + [r for r in now if r not in base]:
-        old = zones(base[route_id]['edges']) if route_id in base else []
+        old = zones(base_edges[route_id]) if route_id in base else []
         new = zones([edge.id[1] for edge in now[route_id].path]) if route_id in now else []
         if set(old) != set(new):
             mode = (base.get(route_id) or {}).get('mode') or getattr(now.get(route_id), 'mode', '')

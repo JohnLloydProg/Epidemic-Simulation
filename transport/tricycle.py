@@ -5,6 +5,7 @@ Territory follows the OD model (manila_od.py, neighbors.csv): the tricycles of b
 between any two points of A and the barangays touching A. So a commuter can take a tricycle to the edge of
 that territory and continue by jeepney, bus, train, foot, or another barangay's tricycle (a new boarding).
 
+  * Tricycles follow one-way roads (graphing/mapping.py can_drive); their passengers' walks do not.
   * Boarding: at any node of the territory (tricycles are hailed, not taken at stops), after an expected wait
     (TRICYCLE_WAIT_S). Riding: along roads inside the territory that tricycles may use (not the road types in
     TRICYCLE_EXCLUDED_ROADS — by default national-highway classes, where tricycles are generally barred), at
@@ -34,6 +35,7 @@ from pathlib import Path
 
 import configuration as config
 from graphing.core import Edge, Node
+from graphing.mapping import can_drive
 
 LOGGER = logging.getLogger('Tricycle')
 
@@ -74,7 +76,7 @@ class TricycleService:
             if d > dist.get(node.id, float('inf')):
                 continue
             for edge in node.edges:
-                if not self.allows(edge):
+                if not self.allows(edge) or not can_drive(edge, node):
                     continue
                 nxt = edge.get_adjacent_node(node)
                 nd = d + edge.distance
@@ -127,7 +129,7 @@ def settings_signature(disabled=()) -> dict:
     """Everything that changes tricycle routing (stored with the routing cache to know when to rebuild)."""
     if not enabled():
         return {'tricycles': False}
-    return {'tricycles': True, 'speed': float(config.get('TRICYCLE_SPEED_MPS', 5.0)),
+    return {'tricycles': True, 'oneway': True, 'speed': float(config.get('TRICYCLE_SPEED_MPS', 5.0)),
             'wait': float(config.get('TRICYCLE_WAIT_S', 120)),
             'fare_s': float(config.get('TRICYCLE_FARE_S', 300)),
             'excluded': sorted(config.get('TRICYCLE_EXCLUDED_ROADS', DEFAULT_EXCLUDED)),

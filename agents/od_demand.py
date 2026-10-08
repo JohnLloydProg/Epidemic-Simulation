@@ -11,8 +11,9 @@ How trips become agents
        - other study barangays (connectors) -> dropped
      Kept trips: study <-> study, and study <-> outside if OD_EXTERNAL_TRIPS. Outside <-> outside (through
      trips) and trips whose two ends land on the same node are dropped.
-  4. Only the share of daily trips that falls in the simulated window is kept (OD_HOUR_PROFILE), divided by
-     OD_TRIPS_PER_AGENT, then turned into whole agents (OD_SAMPLING).
+  4. Only the share of daily trips that falls in the simulated window is kept (OD_HOUR_PROFILE), then turned
+     into whole agents (OD_SAMPLING). One agent is always exactly one trip (TRIPS_PER_AGENT), so agent counts,
+     vehicle loads, capacities and all metrics are in people.
   5. Each agent gets a departure second inside the window and is scheduled as an AGENT_SPAWN event.
   6. Agents of a study barangay start/end at one of the zone's nodes, every node equally likely
      (OD_SPAWN_AT = "zone_nodes"), and are routed directly between their own nodes. Only nodes that can walk
@@ -24,7 +25,6 @@ Config keys (JSON file named by CONFIG_FILE_NAME)
   "SIM_START_HOUR":      6             clock time when the simulation starts
   "OD_DURATION_HOURS":   3             hours of departures generated, starting at SIM_START_HOUR
   "OD_HOUR_PROFILE":     [24 weights]  relative trips per hour of day, hour 0 first (default: uniform)
-  "OD_TRIPS_PER_AGENT":  1             1 = full scale; >1 thins demand (vehicles then look emptier than reality)
   "OD_SAMPLING":         "sample"      "sample" (multinomial, keeps small flows) or "round" (deterministic)
   "OD_SEED":             42
   "OD_EXTERNAL_TRIPS":   true
@@ -50,6 +50,8 @@ import configuration as config
 import manager
 
 LOGGER = logging.getLogger('ODDemand')
+
+TRIPS_PER_AGENT = 1          # fixed: one agent = one trip (one person), so counts and vehicle loads stay consistent
 
 
 class TripSpec:
@@ -257,9 +259,10 @@ def schedule_od_agents(city, railway, case: dict, data_dir: Path, start_time: in
     window_share = float(weights.sum() / profile.sum())
 
     # ---- whole agents
-    per_agent = float(config.get('OD_TRIPS_PER_AGENT', 1))
+    if config.get('OD_TRIPS_PER_AGENT', 1) != 1:
+        LOGGER.warning("OD_TRIPS_PER_AGENT is no longer used: one agent is always one trip.")
     rng = np.random.default_rng(config.get('OD_SEED', 42))
-    counts = whole_agents(pairs['trips'].to_numpy() * window_share / per_agent,
+    counts = whole_agents(pairs['trips'].to_numpy() * window_share / TRIPS_PER_AGENT,
                           config.get('OD_SAMPLING', 'sample'), rng)
     rows = np.repeat(np.arange(len(pairs)), counts)
     hour_pick = rng.choice(hours, size=rows.size, p=weights / weights.sum())
@@ -300,7 +303,7 @@ def schedule_od_agents(city, railway, case: dict, data_dir: Path, start_time: in
     summary = {
         'daily_trips_in_scope': round(daily_trips),
         'window_share': round(window_share, 4),
-        'trips_per_agent': per_agent,
+        'trips_per_agent': TRIPS_PER_AGENT,
         'agents_scheduled': int(rows.size),
         'by_kind': schedule['kind'].value_counts().to_dict(),
         'spawn_at': spawn_at,
