@@ -1,0 +1,12 @@
+{
+  "scenarios": [
+    "scenario1_HighOrigin_baseline",
+    "scenario2_HighDestination_baseline",
+    "scenario3_HighThrough_baseline"
+  ],
+  "interventions": {
+    "rerouting":   { "reroute_share": 0.5 },
+    "roadclosure": { "close_share": 0.5 },
+    "triplimit":   { "trip_factor": 0.5 }
+  }
+}

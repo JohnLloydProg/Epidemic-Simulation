@@ -1,0 +1,19 @@
+{
+  "seeds": [1],
+  "hours": 24,
+  "runs": [
+    "00_baseline",
+    "scenario1_HighOrigin_baseline",
+    "scenario1_HighOrigin_intervention_rerouting",
+    "scenario1_HighOrigin_intervention_roadclosure",
+    "scenario1_HighOrigin_intervention_triplimit",
+    "scenario2_HighDestination_baseline",
+    "scenario2_HighDestination_intervention_rerouting",
+    "scenario2_HighDestination_intervention_roadclosure",
+    "scenario2_HighDestination_intervention_triplimit",
+    "scenario3_HighThrough_baseline",
+    "scenario3_HighThrough_intervention_rerouting",
+    "scenario3_HighThrough_intervention_roadclosure",
+    "scenario3_HighThrough_intervention_triplimit"
+  ]
+}
