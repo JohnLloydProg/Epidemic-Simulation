@@ -1,0 +1,37 @@
+{
+ "case_id": "scenario2_HighDestination_intervention_triplimit",
+ "description": "scenario2_HighDestination_intervention_triplimit: scenario2_HighDestination_baseline with trips to and from hotspots limited to 50% (hotspots: Barangay 657, Barangay 658, Barangay 659, Barangay 666, Barangay 669, Barangay 670)",
+ "hotspots": [
+  "1303901657",
+  "1303901658",
+  "1303901659",
+  "1303901666",
+  "1303901669",
+  "1303901670"
+ ],
+ "closed_edges": [],
+ "capacity_multipliers": {},
+ "disabled_routes": [],
+ "transit_overrides": {},
+ "added_routes": [],
+ "od_scaling": {
+  "1303901657": 0.5,
+  "1303901658": 0.5,
+  "1303901659": 0.5,
+  "1303901666": 0.5,
+  "1303901669": 0.5,
+  "1303901670": 0.5
+ },
+ "hotspot_attraction": 1.0,
+ "od_settings": {},
+ "tricycle_disabled": [],
+ "built_from": {
+  "parent": "scenario2_HighDestination_baseline",
+  "setup": {
+   "parent": "scenario2_HighDestination_baseline",
+   "rule": {
+    "trip_factor": 0.5
+   }
+  }
+ }
+}

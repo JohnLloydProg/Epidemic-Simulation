@@ -1,0 +1,19 @@
+{
+ "case_id": "scenario2_HighDestination_baseline",
+ "description": "Scenario 2 (high-destination), baseline: top 6 barangays by daily trips attracted (base OD matrix): Barangay 669, Barangay 659, Barangay 657, Barangay 666, Barangay 658, Barangay 670",
+ "hotspots": [
+  "1303901657",
+  "1303901658",
+  "1303901659",
+  "1303901666",
+  "1303901669",
+  "1303901670"
+ ],
+ "closed_edges": [],
+ "capacity_multipliers": {},
+ "disabled_routes": [],
+ "transit_overrides": {},
+ "added_routes": [],
+ "od_scaling": {},
+ "hotspot_attraction": 1.0
+}
