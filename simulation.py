@@ -7,7 +7,7 @@ import configuration as config
 from graphing.graph import RegionGraph
 from agents.agent import Agent, handle_agent_events
 from transport.transportation import Transportation, RoutedTransportation, handle_route_events, handle_transportation_events, BusRoute, JeepRoute, TrainRoute
-from ui.button import ButtonBehavior, TextButton
+from ui.button import ButtonBehavior, ToolbarButton, layout_row, draw_toolbar
 from transport.route_editor import RouteEditor
 from ui.zone_editor import ZoneEditor
 from ui.metrics_panel import MetricsPanel
@@ -15,6 +15,9 @@ from metrics import MetricsTracker
 from ui.road_editor import RoadEditor
 from ui.facility_editor import FacilityEditor
 from ui.case_manager import CaseManager
+from ui.view_filter import ViewFilter
+from ui.renderer import SceneRenderer
+from ui.filter_panel import FilterPanel
 from transport.closures import init_closures, _clear_search_caches
 from transport.tricycle import build_services as build_tricycle_services
 from transport import congestion
@@ -80,6 +83,8 @@ class Simulation:
         self.clock = pg.time.Clock()
         self.window = pg.display.set_mode((1080, 720))
         self.font = pg.font.Font(None, 15)
+        self.view_filter = ViewFilter(config.get('GRAPHICS_VIEW', True), config.get('GRAPHICS_SCALE', 2.0))   # V / [ ]
+        self.renderer = SceneRenderer(self)                                 # ui/renderer.py draws the map
         self.railway_graph.camera = self.graph.camera   # one shared view for both layers
         all_nodes = list(self.graph.nodes.values()) + list(self.railway_graph.nodes.values())
         self.graph.camera.fit([node.pos for node in all_nodes], self.window.get_size())
@@ -87,6 +92,7 @@ class Simulation:
         self.case_manager = CaseManager(self)    # O: open a case, Ctrl+S: save one (ui/case_manager.py)
         self.create_editors()
         self.metrics_panel = MetricsPanel(self)  # G: occupancy graph, M: save metrics
+        self.filter_panel = FilterPanel(self)    # L: show/hide people, vehicle types and routes on the map
 
         if (not headless):
             self.run()
@@ -272,9 +278,24 @@ class Simulation:
 
     def create_ui_elements(self):
         """Create UI elements such as buttons"""
-        self.buttons['play'] = TextButton(20, 20, 100, 30, lambda: setattr(self, 'play', not self.play), (255, 0, 0), "Play")
-        self.buttons['reset'] = TextButton(130, 20, 100, 30, self.reset, (200, 200, 200), "Reset")
-        self.buttons['cases'] = TextButton(240, 20, 100, 30, lambda: self.case_manager.open_browser(), (170, 200, 240), "Cases")
+        self.buttons['play'] = ToolbarButton(0, 0, lambda: setattr(self, 'play', not self.play),
+                                             label=lambda: "Pause" if self.play else "Play",
+                                             icon=lambda: 'pause' if self.play else 'play',
+                                             style=lambda: 'warning' if self.play else 'primary',
+                                             widest=("Play", "Pause"), tooltip="Start / pause the simulation")
+        self.buttons['reset'] = ToolbarButton(0, 0, self.reset, "Reset", 'reset',
+                                              tooltip="Back to the start time (keeps route and hotspot edits)")
+        self.buttons['cases'] = ToolbarButton(0, 0, lambda: self.case_manager.open_browser(), "Cases", 'folder',
+                                              tooltip="Open a case (O)  ·  save with Ctrl+S")
+        self.buttons['view'] = ToolbarButton(0, 0, lambda: self.view_filter.toggle_view(),
+                                             label=lambda: "Graphics" if self.view_filter.graphics else "Bare",
+                                             icon='eye', widest=("Graphics", "Bare"),
+                                             tooltip="Switch between graphics and bare view (V)  ·  size: [ ]")
+        self.buttons['filters'] = ToolbarButton(0, 0, lambda: self.filter_panel.toggle(), "Filters", 'filter',
+                                                style=lambda: 'active' if self.filter_panel.visible else 'neutral',
+                                                badge=lambda: self.view_filter.is_filtered(),
+                                                tooltip="Show / hide vehicle types, people and routes (L)")
+        layout_row(list(self.buttons.values()), 16, 14, gap=8)
 
     def handle_events(self, time:int):
         """Event based handling"""
@@ -293,10 +314,6 @@ class Simulation:
 
         LOGGER.info('Starting simulation...')
         while (running):
-            second = time % 60
-            minute = (time // 60) % 60
-            hour = (time // 3600) % 24
-            day = time // (3600 * 24)
             time_record = time_ns()
 
             for event in pg.event.get():
@@ -307,6 +324,8 @@ class Simulation:
                 if (self.case_manager.handle_event(event)):    # case list / save box (modal while open)
                     continue
                 if (self._reset_requested):                   # a case was just opened: drop this frame's events
+                    continue
+                if (self.filter_panel.handle_event(event)):   # clicks/wheel over the filter panel, search typing
                     continue
                 if (self.editor.handle_event(event, time)):
                     continue
@@ -324,6 +343,12 @@ class Simulation:
                 elif (event.type == pg.KEYDOWN):
                     if (event.key == pg.K_k):
                         self.show_congestion = not self.show_congestion
+                    elif (event.key == pg.K_v):
+                        self.view_filter.toggle_view()
+                    elif (event.key == pg.K_l):
+                        self.filter_panel.toggle()
+                    elif (event.key in (pg.K_LEFTBRACKET, pg.K_RIGHTBRACKET)):   # graphics size (ui/view_filter.py)
+                        self.view_filter.change_size(1 if event.key == pg.K_RIGHTBRACKET else -1)
                     elif (event.key == pg.K_UP and self.simulation_multiplier < 30):
                         self.simulation_multiplier += 1
                     elif (event.key == pg.K_DOWN and self.simulation_multiplier > 1):
@@ -363,43 +388,45 @@ class Simulation:
             """Visualization and metrics. Here the drawing is done."""
             if (time_ns() - draw_time >= (10**9)//60):
                 draw_time = time_ns()
-                self.window.fill((255, 255, 255))
-                self.zone_editor.draw_zones(self.window)
-                self.graph.draw(self.window, self.font,  self.layer)
-                
-                routes = sorted(self.routes, key=lambda route:route.get_average_occupancy(), reverse=True)
-                for route in routes:
-                    route.draw(self.window, self.graph)
-                if (self.show_congestion and congestion.enabled()):
-                    congestion.draw(self.window, self.graph.camera, time)
-                self.road_editor.draw(self.window)
-                self.editor.draw(self.window)
-                self.zone_editor.draw_labels(self.window)
-                self.facility_editor.draw(self.window)
-                
-                text = self.font.render(f"time: {time} (Day {day} {str(hour).zfill(2)}:{str(minute).zfill(2)}:{str(second).zfill(2)}) {self.simulation_multiplier}x {round(delta, 2)}ms per step {len(manager._events.values())} events", False, (0, 0, 0))
-                
-                if (self.od_summary):
-                    od_text = self.font.render(f"OD agents spawned: {self.od_spawned:,}/{self.od_summary['agents_scheduled']:,}, active: {len(self.agents):,}, failed: {self.od_failed}", False, (0, 0, 0))
-                    self.window.blit(od_text, od_text.get_rect(topleft=(20, 60)))
-                for i, line in enumerate(self.metrics_lines(time)):
-                    surf = self.font.render(line, False, (180, 0, 0) if line.startswith('Hotspots') else (0, 0, 0))
-                    self.window.blit(surf, surf.get_rect(topleft=(20, 80 + 18 * i)))
-
-                for transpo in self.transportations:
-                    transpo.draw(self.window, self.graph.camera, time)
-                for agent in self.agents:
-                    agent.draw(self.window, self.graph.camera, time)
-                self.metrics_panel.draw(self.window, time)
-                pg.draw.circle(self.window, (0, 255, 0), pg.mouse.get_pos(), 5)
-                self.window.blit(text, text.get_rect(topright=(1060, 20)))
-
-                for button in self.buttons.values():
-                    button.draw(self.window)
-                self.case_manager.draw(self.window)
-
+                self.draw_frame(time, delta)
                 pg.display.update()
     
+
+    def draw_frame(self, time:int, delta:float = 0):
+        """Draw one frame into the window (the map through ui/renderer.py, in the graphics or bare view)."""
+        second = time % 60
+        minute = (time // 60) % 60
+        hour = (time // 3600) % 24
+        day = time // (3600 * 24)
+        self.renderer.draw_background(self.window)
+        self.zone_editor.draw_zones(self.window)
+        self.renderer.draw_network(self.window, self.font)
+        self.renderer.draw_routes(self.window)
+        if (self.show_congestion and congestion.enabled()):
+            congestion.draw(self.window, self.graph.camera, time)
+        self.road_editor.draw(self.window)
+        self.editor.draw(self.window)
+        self.zone_editor.draw_labels(self.window)
+        self.facility_editor.draw(self.window)
+
+        text = self.font.render(f"time: {time} (Day {day} {str(hour).zfill(2)}:{str(minute).zfill(2)}:{str(second).zfill(2)}) {self.simulation_multiplier}x {round(delta, 2)}ms per step {len(manager._events.values())} events", False, (0, 0, 0))
+
+        if (self.od_summary):
+            od_text = self.font.render(f"OD agents spawned: {self.od_spawned:,}/{self.od_summary['agents_scheduled']:,}, active: {len(self.agents):,}, failed: {self.od_failed}", False, (0, 0, 0))
+            self.window.blit(od_text, od_text.get_rect(topleft=(20, 60)))
+        for i, line in enumerate(self.metrics_lines(time)):
+            surf = self.font.render(line, False, (180, 0, 0) if line.startswith('Hotspots') else (0, 0, 0))
+            self.window.blit(surf, surf.get_rect(topleft=(20, 80 + 18 * i)))
+
+        self.renderer.draw_movers(self.window, time)        # vehicles and people, filtered (ui/view_filter.py)
+        self.metrics_panel.draw(self.window, time)
+        self.filter_panel.draw(self.window)
+        pg.draw.circle(self.window, (0, 255, 0), pg.mouse.get_pos(), 5)
+        self.window.blit(text, text.get_rect(topright=(1060, 20)))
+
+        draw_toolbar(self.window, list(self.buttons.values()))
+        self.case_manager.draw(self.window)
+
 
 if __name__ == '__main__':
     LOGGER.info(f"Simulation Start: {datetime.now().isoformat()}")
