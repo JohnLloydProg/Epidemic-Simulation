@@ -119,6 +119,22 @@ def cache_files_of(case_id:str) -> list[Path]:
     return [p for p in folder.glob('routing_*.pkl') if pattern.fullmatch(p.name)] if folder.exists() else []
 
 
+def _stored_return_trip(graph, rd:dict):
+    """(spawn node, [edges]) of a return trip stored in a case override ("return_start_node", "return_edges"),
+    or None if it uses a missing/closed edge or the edges do not form a chain from the start node."""
+    start = graph.get_node((graph.layer, int(rd['return_start_node']))) if 'return_start_node' in rd else None
+    edges = [graph.get_edge((graph.layer, int(e))) for e in rd.get('return_edges', [])]
+    if start is None or not edges or any(e is None for e in edges):
+        return None
+    node = start
+    try:
+        for edge in edges:
+            node = edge.get_adjacent_node(node)
+    except ValueError:
+        return None
+    return start, edges
+
+
 def _edge_key(value, default_layer='city') -> tuple[str, int]:
     """Case files may write a closed edge as 1042 (city) or "railway:3"."""
     if isinstance(value, str) and ':' in value:
@@ -266,10 +282,18 @@ def load_graph_from_data() -> tuple[RegionGraph, Graph, list]:
 
         interval, peak = int(rd['interval_s']), int(rd.get('peak_interval_s') or rd['interval_s'])
         # both directions follow one-way roads (transport/oneway_routes.py); the return trip comes from the
-        # legal forward path
+        # legal forward path, unless the case stores one (a reroute around hotspots plans its return trip around
+        # them too — re-deriving it here would let it drive back through the hotspots)
         from transport.oneway_routes import route_directions
         directions = route_directions(start, path, graph if graph.layer == 'city' else None,
                                       bool(rd.get('bidirectional', True)))
+        if len(directions) > 1 and rd.get('return_edges'):
+            back = _stored_return_trip(graph, rd)
+            if back is not None:
+                directions[1] = back
+            else:
+                LOGGER.warning(f"{rd['route_id']}: stored return trip uses a missing/closed road or is not a "
+                               f"connected path; deriving it from the forward path instead.")
         for spawn, edges_in_order in directions:
             route = route_cls(spawn, edges_in_order, graph, interval, peak)
             route.route_id = rd['route_id']

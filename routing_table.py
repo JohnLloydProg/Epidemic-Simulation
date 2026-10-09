@@ -152,7 +152,8 @@ def compute_origin(start_id) -> dict:
 def compute_cache(nodes:list[Node], routes:list[Route], route_edits:dict | None = None, on_progress=None,
                   closed_ids=(), removed_ids=(), tricycle_off=None) -> dict:
     """Plain-data cache for every ordered pair of `nodes`.
-    route_edits: {route_id: (spawn_node_id, [edge_ids])} already applied to `routes`; workers re-apply them,
+    route_edits: {route_id: (spawn_node_id, [edge_ids][, return_trip])} already applied to `routes` (return_trip =
+    (spawn_node_id, [edge_ids]) of the second direction, kept exactly; see closures.route_state); workers re-apply them,
     after closing `closed_ids` and dropping the routes in `removed_ids` (see transport/closures.py).
     on_progress(done, total) is called after each origin (e.g. to keep a window responsive)."""
     if tricycle_off is None:

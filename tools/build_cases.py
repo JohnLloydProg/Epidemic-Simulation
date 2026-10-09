@@ -28,8 +28,11 @@ THE RULES (the hotspots are the parent case's hotspot barangays)
                  it does not start or end in (it still has to reach its own terminal). Each stretch through a
                  hotspot is replaced by the shortest drivable road path outside the hotspots (one-way roads
                  respected); a stretch with no way around is kept, so a route counts as rerouted when at least one
-                 of its hotspot stretches moved. Both directions of the route are re-derived. Routes where nothing
-                 can move (no legal way around on one-way roads) are not reroutable and not counted.
+                 of its hotspot stretches moved. The return trip is chosen among legal options (re-derived with
+                 the same hotspot roads blocked, re-derived with every road open, or the original return trip) as
+                 the one driving the least inside the hotspots, so it never gets worse; the case stores both
+                 directions. Routes where nothing can move (no legal way around on one-way roads) are not
+                 reroutable and not counted.
   close_share    This share of the CLOSABLE road segments inside the hotspots is closed (closable = closing it alone
                  does not cut part of the network off, e.g. not a dead-end street), starting with the segments used
                  by the most transit routes (then the higher road class, then the longer segment). A segment that
@@ -308,18 +311,56 @@ def _plan_reroute(sim, rid, avoid_nodes, zone_of_node, zones_by_name):
 
 
 def _reroute(sim, rid, avoid_nodes, zone_of_node, zones_by_name, notes) -> bool:
-    """Apply _plan_reroute. True if the route changed."""
-    from transport.transportation import set_route_group_path
+    """Apply _plan_reroute. True if the route changed.
+    The forward direction gets the detoured path. The return trip used to be re-derived from it along one-way
+    roads (transport/oneway_routes.py) with every road open, which could send it back through the hotspots. Now
+    up to three legal return trips are compared and the one with the least distance inside the hotspots is kept
+    (then the shortest): (a) derived with the avoided hotspot roads still blocked (only the stretches the forward
+    path cannot avoid stay open), (b) derived as before, (c) the route's original return trip (same terminals).
+    So a reroute never makes the return trip drive more inside the hotspots. The case file stores both directions."""
+    from transport.transportation import set_route_group_path, set_route_group_paths
+    from transport.closures import _clear_search_caches
+    from transport.oneway_routes import is_legal
     plan = _plan_reroute(sim, rid, avoid_nodes, zone_of_node, zones_by_name)
     if plan is None:
         return False
     spawn, path, new_path, blocked = plan
-    set_route_group_path(sim.all_routes, rid, spawn, new_path)
+    group = [r for r in sim.all_routes if getattr(r, 'route_id', None) == rid]
+    old_dirs = [(r.spawn_node, list(r.path)) for r in group]
+    candidates = {}
+    if len(group) > 1:
+        candidates['original'] = old_dirs[1]                       # (c) still connects the same terminals
+        kept = {e.id for e in new_path if e.id in blocked}           # hotspot stretches with no way around
+        blocked_edges = [sim.graph.edges[i] for i in blocked - kept if i in sim.graph.edges]
+        for e in blocked_edges:
+            _detach(e)
+        _clear_search_caches()
+        try:
+            set_route_group_path(sim.all_routes, rid, spawn, new_path)
+            if is_legal(group[1].spawn_node, group[1].path):        # detached roads cannot be in a legal path
+                candidates['planned around hotspots'] = (group[1].spawn_node, list(group[1].path))   # (a)
+        finally:
+            for e in blocked_edges:
+                _attach(e)
+            _restore_order(sim)
+            _clear_search_caches()
+    set_route_group_path(sim.all_routes, rid, spawn, new_path)       # forward direction + (b)
+    if len(group) > 1:
+        if is_legal(group[1].spawn_node, group[1].path):
+            candidates['derived as before'] = (group[1].spawn_node, list(group[1].path))
+        in_hot = lambda p: sum(e.distance for e in p if any(n.id in avoid_nodes for n in e.nodes))
+        length = lambda p: sum(e.distance for e in p)
+        order = ['planned around hotspots', 'derived as before', 'original']    # ties: prefer the new plan
+        choice = min((k for k in order if k in candidates),
+                     key=lambda k: (round(in_hot(candidates[k][1])), round(length(candidates[k][1])), order.index(k)))
+        set_route_group_paths(sim.all_routes, rid, [(group[0].spawn_node, list(group[0].path)), candidates[choice]])
     sim.route_edits[rid] = (spawn, list(new_path))
-    inside = lambda p: sum(e.distance for e in p if e.id in blocked) / 1000
+    inside = lambda p: sum(e.distance for e in p if any(n.id in avoid_nodes for n in e.nodes)) / 1000
     km = lambda p: sum(e.distance for e in p) / 1000
+    back = (f"; return trip inside {inside(old_dirs[1][1]):.2f} km -> {inside(group[1].path):.2f} km ({choice})"
+            if len(group) > 1 else '')
     notes.append(f"   {rid}: {km(path):.2f} km -> {km(new_path):.2f} km, "
-                 f"inside hotspots {inside(path):.2f} km -> {inside(new_path):.2f} km")
+                 f"inside hotspots {inside(path):.2f} km -> {inside(new_path):.2f} km{back}")
     return True
 
 

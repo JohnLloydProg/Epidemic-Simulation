@@ -156,6 +156,8 @@ def case_from_session(sim) -> tuple[dict, bool]:
     """(the open case plus everything changed in this session, True if nothing was changed):
     route paths (edits and detours around closed roads) as transit_overrides, closed roads, routes removed by
     closures, hotspots, barangay trip limits (od_scaling), facilities and tricycles switched off.
+    A changed two-direction route also stores its return trip ("return_start_node", "return_edges"), so the
+    loader uses it as it was planned (e.g. around hotspots) instead of re-deriving it from the forward path.
     case_id is still the open case's; save_case gives it the new one."""
     from graphing.data_loader import load_case, data_dir
     case = load_case()
@@ -166,9 +168,11 @@ def case_from_session(sim) -> tuple[dict, bool]:
     if hasattr(sim, 'route_loaded'):
         from transport.closures import route_state
         edits, closed_ids, removed_ids = route_state(sim)
-        edits = {rid: (spawn_id[1], [e[1] for e in edge_ids]) for rid, (spawn_id, edge_ids) in edits.items()}
+        edits = {rid: (spawn_id[1], [e[1] for e in edge_ids],
+                       (back[0][1], [e[1] for e in back[1]]) if back else None)
+                 for rid, (spawn_id, edge_ids, back) in edits.items()}
     else:
-        edits = {rid: (spawn.id[1], [e.id[1] for e in path]) for rid, (spawn, path) in sim.route_edits.items()}
+        edits = {rid: (spawn.id[1], [e.id[1] for e in path], None) for rid, (spawn, path) in sim.route_edits.items()}
         closed_ids, removed_ids = [], []
     closed = [e[1] if e[0] == 'city' else f"{e[0]}:{e[1]}" for e in closed_ids]
 
@@ -193,10 +197,16 @@ def case_from_session(sim) -> tuple[dict, bool]:
                 continue
             definition = overrides.get(rid, {}).get('edges', definitions.get(rid, []))
             if closed_set & {int(e) for e in definition}:
-                first = next(r for r in sim.routes if getattr(r, 'route_id', None) == rid)
-                edits[rid] = (first.spawn_node.id[1], [e.id[1] for e in first.path])
-    for route_id, (spawn_id, edge_ids) in edits.items():
-        overrides[route_id] = {**overrides.get(route_id, {}), 'start_node': spawn_id, 'edges': edge_ids}
+                group = [r for r in sim.routes if getattr(r, 'route_id', None) == rid]
+                back = (group[1].spawn_node.id[1], [e.id[1] for e in group[1].path]) if len(group) > 1 else None
+                edits[rid] = (group[0].spawn_node.id[1], [e.id[1] for e in group[0].path], back)
+    for route_id, (spawn_id, edge_ids, back) in edits.items():
+        override = {k: v for k, v in overrides.get(route_id, {}).items()
+                    if k not in ('return_start_node', 'return_edges')}     # never keep a stale return trip
+        override.update({'start_node': spawn_id, 'edges': edge_ids})
+        if back is not None:
+            override.update({'return_start_node': back[0], 'return_edges': back[1]})
+        overrides[route_id] = override
     description = (case.get('description') or '').split(' | ')[0]
     if sim.route_edits:
         description += f" | route edits: {', '.join(sorted(sim.route_edits))}"
