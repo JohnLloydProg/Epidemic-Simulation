@@ -87,6 +87,15 @@ class ZoneEditor:
     def short_name(region) -> str:
         return str(region.name).replace('Barangay ', '')
 
+    def label_text(self, region) -> str:
+        """Map label of a barangay: short name plus its trip limit, tricycle and facility markers."""
+        from transport.tricycle import service_for
+        limit = getattr(region, 'od_scale', 1.0)
+        service = service_for(region.name)
+        return (self.short_name(region) + (f" · {limit:.0%}" if limit != 1.0 else "")
+                + (" · no trike" if service is not None and not service.enabled else "")
+                + (" · F" if region.name in getattr(self.sim, 'zone_facilities', {}) else ""))
+
     def _over_button(self, pos) -> bool:
         return any(b.rect.collidepoint(pos) for b in self.sim.buttons.values())
 
@@ -242,7 +251,9 @@ class ZoneEditor:
             self.status = "HOTSPOT MODE — click a barangay to make it a hotspot (click again to remove)."
         overlay = self.show or self.active or getattr(getattr(self.sim, 'facility_editor', None), 'active', False)
         cam = self.camera
-        for region in self.zones:
+        view = getattr(self.sim, 'view_filter', None)
+        names_on_map = view is not None and view.graphics and view.zone_labels   # ui/renderer.py draws them
+        for region in (() if names_on_map else self.zones):
             hot = getattr(region, 'is_hotspot', False)
             limit = getattr(region, 'od_scale', 1.0)
             if not (overlay or hot or limit != 1.0):

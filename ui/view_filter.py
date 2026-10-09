@@ -79,6 +79,8 @@ class ViewFilter:
         self.size = min(SIZE_STEPS, key=lambda step: abs(step - size))
         self.modes = {key: True for key, _, _, _ in MODES}
         self.hidden_routes:set[str] = set()
+        self.real_map = True            # graphics view: street map + real barangay boundaries (B; ui/basemap.py)
+        self.zone_labels = True         # graphics view: barangay names
         self._route_lines = {'bare': True, 'graphics': False}   # graphics view: roads stay readable by default
 
     # ---------------------------------------------------------------- view

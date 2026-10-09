@@ -268,6 +268,14 @@ def draw_icon(surface:pg.Surface, name:str, center, size:float, color):
         pg.draw.polygon(surface, color, [(cx - s * 0.95, cy - s * 0.8), (cx + s * 0.95, cy - s * 0.8),
                                          (cx + s * 0.22, cy + s * 0.05), (cx + s * 0.22, cy + s * 0.85),
                                          (cx - s * 0.22, cy + s * 0.6), (cx - s * 0.22, cy + s * 0.05)])
+    elif name in ('expand', 'shrink'):                     # four corner brackets, pointing out / in
+        arm, k = s * 0.5, s * 0.85
+        for sx, sy in ((-1, -1), (1, -1), (-1, 1), (1, 1)):
+            corner = (cx + sx * k, cy + sy * k) if name == 'expand' else (cx + sx * (k - arm), cy + sy * (k - arm))
+            ox = -sx if name == 'expand' else sx
+            oy = -sy if name == 'expand' else sy
+            pg.draw.line(surface, color, corner, (corner[0] + ox * arm, corner[1]), lw)
+            pg.draw.line(surface, color, corner, (corner[0], corner[1] + oy * arm), lw)
     elif name == 'minus':
         pg.draw.rect(surface, color, pg.Rect(cx - s * 0.7, cy - lw / 2, s * 1.4, lw), border_radius=lw // 2)
     elif name == 'plus':

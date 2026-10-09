@@ -3,6 +3,8 @@ filter_panel.py — the "Show on map" panel (L, or the Filters button): the view
 
     View ............. Graphics / Bare (also V, or the View button)
     Size ............. bigger / smaller roads, vehicles and people in the graphics view (also [ and ])
+    Real map ......... street map and real barangay boundaries under the graphics view (also B; ui/basemap.py)
+    Barangay names ... the barangay labels on the graphics view
     People / vehicle types
                        tick to show or hide walking people, waiting people, private cars, tricycles, jeepneys,
                        buses and trains; each row shows how many there are right now (shown or not)
@@ -141,6 +143,10 @@ class FilterPanel:
             vf.change_size(action[1])
         elif kind == 'mode':
             vf.toggle_mode(action[1])
+        elif kind == 'map':
+            vf.real_map = not vf.real_map
+        elif kind == 'names':
+            vf.zone_labels = not vf.zone_labels
         elif kind == 'lines':
             vf.route_lines = not vf.route_lines
         elif kind == 'all':
@@ -216,7 +222,25 @@ class FilterPanel:
             hits.append((rect, ('size', step)))
         value = self.small.render(f"{vf.size:g}x" + ("" if vf.graphics else " (graphics)"), True, size_color)
         window.blit(value, value.get_rect(center=(x + 70 + 34 + 46, y + 10)))
-        y += 28
+        y += 26
+
+        # real map and barangay names (graphics view)
+        status = getattr(renderer, 'map_status', lambda: '')() if renderer is not None else ''
+        status_text = {'streets': 'street map', 'barangays': 'barangay map', 'loading': 'loading...',
+                       'off': ''}.get(status, f"downloading {status}" if status.endswith('%') else status)
+        for action, label, on, note in ((('map',), "Real map (B)", vf.real_map, status_text),
+                                        (('names',), "Barangay names", vf.zone_labels, '')):
+            row = pg.Rect(self.rect.left + 2, y, self.WIDTH - 4, self.ROW_H)
+            if row.collidepoint(mouse) and vf.graphics:
+                pg.draw.rect(window, (245, 240, 220), row)
+            self._checkbox(window, x, y + 3, on, dim=not vf.graphics)
+            window.blit(self.small.render(label, True, TEXT if vf.graphics else MUTED), (x + 22, y + 4))
+            if note and vf.graphics:
+                note_surface = self.small.render(note, True, MUTED)
+                window.blit(note_surface, note_surface.get_rect(topright=(right, y + 4)))
+            hits.append((row, action))
+            y += self.ROW_H
+        y += 4
 
         # modes
         for key, label, color, sprite_name in MODES:

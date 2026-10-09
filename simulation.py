@@ -81,7 +81,10 @@ class Simulation:
         """Mainly for visualization purposes"""
         self.play = False
         self.clock = pg.time.Clock()
-        self.window = pg.display.set_mode((1080, 720))
+        self.fullscreen = False                  # F11 / toolbar button; the window can also be resized
+        self._windowed_size = (1080, 720)
+        self.window = pg.display.set_mode(self._windowed_size, pg.RESIZABLE)
+        self._last_size = self.window.get_size()
         self.font = pg.font.Font(None, 15)
         self.view_filter = ViewFilter(config.get('GRAPHICS_VIEW', True), config.get('GRAPHICS_SCALE', 2.0))   # V / [ ]
         self.renderer = SceneRenderer(self)                                 # ui/renderer.py draws the map
@@ -89,6 +92,8 @@ class Simulation:
         all_nodes = list(self.graph.nodes.values()) + list(self.railway_graph.nodes.values())
         self.graph.camera.fit([node.pos for node in all_nodes], self.window.get_size())
         self.create_ui_elements()
+        if (config.get('FULLSCREEN', False) and not headless):
+            self.set_fullscreen(True)
         self.case_manager = CaseManager(self)    # O: open a case, Ctrl+S: save one (ui/case_manager.py)
         self.create_editors()
         self.metrics_panel = MetricsPanel(self)  # G: occupancy graph, M: save metrics
@@ -295,7 +300,46 @@ class Simulation:
                                                 style=lambda: 'active' if self.filter_panel.visible else 'neutral',
                                                 badge=lambda: self.view_filter.is_filtered(),
                                                 tooltip="Show / hide vehicle types, people and routes (L)")
+        self.buttons['screen'] = ToolbarButton(0, 0, lambda: self.set_fullscreen(not self.fullscreen),
+                                               label=lambda: "Exit full screen" if self.fullscreen else "Full screen",
+                                               icon=lambda: 'shrink' if self.fullscreen else 'expand',
+                                               widest=("Exit full screen", "Full screen"),
+                                               tooltip="Full screen on / off (F11)")
         layout_row(list(self.buttons.values()), 16, 14, gap=8)
+
+    # ------------------------------------------------------------------ window size
+    def set_fullscreen(self, on:bool):
+        """Full screen on the current display, or back to the resizable window; the map keeps its centre."""
+        if (on == self.fullscreen):
+            return
+        if (on):
+            self._windowed_size = self.window.get_size()
+            sizes = pg.display.get_desktop_sizes() or [self._windowed_size]
+            pg.display.set_mode(sizes[0], pg.FULLSCREEN)
+        else:
+            pg.display.set_mode(self._windowed_size, pg.RESIZABLE)
+        self.fullscreen = on
+        self._sync_window()
+
+    def _sync_window(self):
+        """After the window changed size: keep the same map point in the middle and refit the home view (0 key)."""
+        surface = pg.display.get_surface()
+        if (surface is None):
+            return
+        self.window = surface
+        new = surface.get_size()
+        old = self._last_size
+        if (new == old):
+            return
+        camera = self.graph.camera
+        center = camera.to_world((old[0] / 2, old[1] / 2))
+        zoom = camera.zoom
+        all_nodes = list(self.graph.nodes.values()) + list(self.railway_graph.nodes.values())
+        camera.fit([node.pos for node in all_nodes], new)             # new home view for this size
+        camera.zoom = zoom
+        camera.x_offset = new[0] / 2 - center[0] * zoom
+        camera.y_offset = new[1] / 2 - center[1] * zoom
+        self._last_size = new
 
     def handle_events(self, time:int):
         """Event based handling"""
@@ -321,6 +365,12 @@ class Simulation:
                 if (event.type == pg.QUIT):
                     self.end_metrics_run('program closed')
                     return
+                if (event.type in (pg.VIDEORESIZE, pg.WINDOWSIZECHANGED)):
+                    self._sync_window()
+                    continue
+                if (event.type == pg.KEYDOWN and event.key == pg.K_F11):
+                    self.set_fullscreen(not self.fullscreen)
+                    continue
                 if (self.case_manager.handle_event(event)):    # case list / save box (modal while open)
                     continue
                 if (self._reset_requested):                   # a case was just opened: drop this frame's events
@@ -347,6 +397,8 @@ class Simulation:
                         self.view_filter.toggle_view()
                     elif (event.key == pg.K_l):
                         self.filter_panel.toggle()
+                    elif (event.key == pg.K_b):                       # real map under the graphics view
+                        self.view_filter.real_map = not self.view_filter.real_map
                     elif (event.key in (pg.K_LEFTBRACKET, pg.K_RIGHTBRACKET)):   # graphics size (ui/view_filter.py)
                         self.view_filter.change_size(1 if event.key == pg.K_RIGHTBRACKET else -1)
                     elif (event.key == pg.K_UP and self.simulation_multiplier < 30):
@@ -398,31 +450,41 @@ class Simulation:
         minute = (time // 60) % 60
         hour = (time // 3600) % 24
         day = time // (3600 * 24)
-        self.renderer.draw_background(self.window)
-        self.zone_editor.draw_zones(self.window)
-        self.renderer.draw_network(self.window, self.font)
-        self.renderer.draw_routes(self.window)
+        window = self.window
+        self.renderer.draw_background(window)              # real map in the graphics view (ui/basemap.py)
+        self.zone_editor.draw_zones(window)
+        self.renderer.draw_network(window, self.font)
+        self.renderer.draw_routes(window)
         if (self.show_congestion and congestion.enabled()):
-            congestion.draw(self.window, self.graph.camera, time)
-        self.road_editor.draw(self.window)
-        self.editor.draw(self.window)
-        self.zone_editor.draw_labels(self.window)
-        self.facility_editor.draw(self.window)
+            congestion.draw(window, self.graph.camera, time)
+        self.renderer.draw_movers(window, time)            # vehicles and people, filtered (ui/view_filter.py)
+        self.renderer.draw_zone_labels(window)             # barangay names above the traffic (graphics view)
+        self.road_editor.draw(window)
+        self.editor.draw(window)
+        self.zone_editor.draw_labels(window)
+        self.facility_editor.draw(window)
 
-        text = self.font.render(f"time: {time} (Day {day} {str(hour).zfill(2)}:{str(minute).zfill(2)}:{str(second).zfill(2)}) {self.simulation_multiplier}x {round(delta, 2)}ms per step {len(manager._events.values())} events", False, (0, 0, 0))
+        lines = [(f"OD agents spawned: {self.od_spawned:,}/{self.od_summary['agents_scheduled']:,}, active: {len(self.agents):,}, failed: {self.od_failed}", (0, 0, 0))] if self.od_summary else []
+        lines += [(line, (180, 0, 0) if line.startswith('Hotspots') else (0, 0, 0)) for line in self.metrics_lines(time)]
+        surfaces = [self.font.render(line, True, color) for line, color in lines]
+        if (surfaces):                                      # readable over the map: a soft panel behind the text
+            box = pg.Rect(12, 56, max(s.get_width() for s in surfaces) + 16, 18 * len(surfaces) + 6)
+            back = pg.Surface(box.size, pg.SRCALPHA)
+            pg.draw.rect(back, (255, 255, 255, 200), back.get_rect(), border_radius=8)
+            window.blit(back, box.topleft)
+            for i, surf in enumerate(surfaces):
+                window.blit(surf, surf.get_rect(topleft=(20, 60 + 18 * i)))
 
-        if (self.od_summary):
-            od_text = self.font.render(f"OD agents spawned: {self.od_spawned:,}/{self.od_summary['agents_scheduled']:,}, active: {len(self.agents):,}, failed: {self.od_failed}", False, (0, 0, 0))
-            self.window.blit(od_text, od_text.get_rect(topleft=(20, 60)))
-        for i, line in enumerate(self.metrics_lines(time)):
-            surf = self.font.render(line, False, (180, 0, 0) if line.startswith('Hotspots') else (0, 0, 0))
-            self.window.blit(surf, surf.get_rect(topleft=(20, 80 + 18 * i)))
-
-        self.renderer.draw_movers(self.window, time)        # vehicles and people, filtered (ui/view_filter.py)
-        self.metrics_panel.draw(self.window, time)
-        self.filter_panel.draw(self.window)
-        pg.draw.circle(self.window, (0, 255, 0), pg.mouse.get_pos(), 5)
-        self.window.blit(text, text.get_rect(topright=(1060, 20)))
+        clock_text = self.font.render(f"time: {time} (Day {day} {str(hour).zfill(2)}:{str(minute).zfill(2)}:{str(second).zfill(2)}) {self.simulation_multiplier}x {round(delta, 2)}ms per step {len(manager._events.values())} events", True, (0, 0, 0))
+        clock_rect = clock_text.get_rect(topright=(window.get_width() - 20, 20))
+        back = pg.Surface(clock_rect.inflate(12, 26).size, pg.SRCALPHA)
+        pg.draw.rect(back, (255, 255, 255, 200), back.get_rect(), border_radius=8)
+        window.blit(back, clock_rect.inflate(12, 26).move(0, 9).topleft)
+        self.metrics_panel.draw(window, time)
+        self.filter_panel.draw(window)
+        self.renderer.draw_attribution(window)
+        pg.draw.circle(window, (0, 255, 0), pg.mouse.get_pos(), 5)
+        window.blit(clock_text, clock_rect)
 
         draw_toolbar(self.window, list(self.buttons.values()))
         self.case_manager.draw(self.window)

@@ -63,7 +63,7 @@ class MetricsPanel:
             return
         m = self.sim.metrics
         x0 = window.get_width() - self.WIDTH - 10
-        y0 = window.get_height() - self.HEIGHT - 10
+        y0 = window.get_height() - self.HEIGHT - 26      # room for the map credit line under it
         panel = pg.Surface((self.WIDTH, self.HEIGHT), pg.SRCALPHA)
         panel.fill((255, 255, 255, 230))
         pg.draw.rect(panel, (120, 120, 120), panel.get_rect(), 1)
