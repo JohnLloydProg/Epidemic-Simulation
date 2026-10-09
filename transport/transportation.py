@@ -87,6 +87,21 @@ def set_route_group_path(routes:list[Route], route_id:str, spawn_node:Node, path
     return group
 
 
+def set_route_group_paths(routes:list[Route], route_id:str, directions:list[tuple]) -> list[Route]:
+    """Give each direction of a route exactly the given (spawn_node, path), in order (forward, return), without
+    re-deriving any of them — used for return trips stored in a case file (e.g. a reroute around hotspots, whose
+    return trip must avoid the same hotspots). Directions not given keep their path."""
+    group = [route for route in routes if getattr(route, 'route_id', None) == route_id]
+    if not group:
+        raise ValueError(f"Route '{route_id}' not found.")
+    for route, (spawn, path) in zip(group, directions):
+        end = spawn
+        for edge in path:
+            end = edge.get_adjacent_node(end)   # raises if the edges do not form a chain
+        route.set_path(spawn, path)
+    return group
+
+
 class JeepRoute(Route):
     def __init__(self, spawn_node:Node, path:list[Edge], graph:Graph, spawn_time:int, peak_spawn:int):
         super().__init__(spawn_node, path, graph, spawn_time, peak_spawn)

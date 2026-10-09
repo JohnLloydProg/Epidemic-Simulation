@@ -1,0 +1,19 @@
+{
+ "case_id": "scenario3_HighThrough_baseline",
+ "description": "Scenario 3 (high through-traffic), baseline: top 6 barangays by people passing through per trip end (mean of 1 reference run(s) of 00_baseline): Barangay 656, Barangay 675, Barangay 676, Barangay 694, Barangay 659-A, Barangay 666",
+ "hotspots": [
+  "1303901656",
+  "1303901666",
+  "1303901675",
+  "1303901676",
+  "1303901694",
+  "1303901959"
+ ],
+ "closed_edges": [],
+ "capacity_multipliers": {},
+ "disabled_routes": [],
+ "transit_overrides": {},
+ "added_routes": [],
+ "od_scaling": {},
+ "hotspot_attraction": 1.0
+}

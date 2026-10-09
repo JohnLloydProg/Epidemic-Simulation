@@ -1,0 +1,37 @@
+{
+ "case_id": "scenario1_HighOrigin_intervention_triplimit",
+ "description": "scenario1_HighOrigin_intervention_triplimit: scenario1_HighOrigin_baseline with trips to and from hotspots limited to 50% (hotspots: Barangay 649, Barangay 650, Barangay 659-A, Barangay 669, Barangay 696, Barangay 697)",
+ "hotspots": [
+  "1303901649",
+  "1303901650",
+  "1303901669",
+  "1303901696",
+  "1303901697",
+  "1303901959"
+ ],
+ "closed_edges": [],
+ "capacity_multipliers": {},
+ "disabled_routes": [],
+ "transit_overrides": {},
+ "added_routes": [],
+ "od_scaling": {
+  "1303901649": 0.5,
+  "1303901650": 0.5,
+  "1303901959": 0.5,
+  "1303901669": 0.5,
+  "1303901696": 0.5,
+  "1303901697": 0.5
+ },
+ "hotspot_attraction": 1.0,
+ "od_settings": {},
+ "tricycle_disabled": [],
+ "built_from": {
+  "parent": "scenario1_HighOrigin_baseline",
+  "setup": {
+   "parent": "scenario1_HighOrigin_baseline",
+   "rule": {
+    "trip_factor": 0.5
+   }
+  }
+ }
+}

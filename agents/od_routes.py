@@ -72,7 +72,9 @@ class SimRouteODModel(ODModel):
         counts = super().route_counts(cfg, change)
         if change is None or not self.sim_changes:          # None = the bundle baseline (used for calibration)
             return counts
-        return counts + self._sim_counts(cfg, 'new') - self._sim_counts(cfg, 'old')
+        # the simulation has many more lines than the bundle, so the difference can go below zero when many
+        # routes leave a zone (e.g. a road closure); a zone cannot have fewer than no routes
+        return np.maximum(counts + self._sim_counts(cfg, 'new') - self._sim_counts(cfg, 'old'), 0.0)
 
     def hops_for(self, change: dict, cfg: dict) -> np.ndarray:
         if not self.sim_changes and not self.tricycle_off:

@@ -179,6 +179,8 @@ class MetricsTracker:
         self.visitors:dict[str, Bitset] = {}          # zone -> agents that were inside at some point
         self.hot_visitors = Bitset()                  # agents that were inside any hotspot
         self.arrivals:Counter = Counter()             # zone -> completed trips ending there
+        self.through:Counter = Counter()              # zone -> visitors whose trip neither starts nor ends there
+        self.trip_ends:Counter = Counter()            # zone -> visitors whose trip starts or ends there
         self.travel:dict[str, array] = {}             # main mode -> travel minutes of completed trips
         self.travel_sum:Counter = Counter()
         self.n_completed = 0
@@ -352,6 +354,10 @@ class MetricsTracker:
             counts[zone] += 1
             if self.visitors[zone].add(agent.id):
                 self.h_new_visitors[zone] += 1
+                if zone in (agent.origin_zone, agent.destination_zone):   # scenario C: through-traffic
+                    self.trip_ends[zone] += 1
+                else:
+                    self.through[zone] += 1
             if zone in hot and self.hot_visitors.add(agent.id):
                 self.h_hot_entered += 1
         self.now, self.live_modes, self.waiting = counts, modes, waiting
@@ -542,12 +548,13 @@ class MetricsTracker:
         with open(self.folder / 'zones.csv', 'w', newline='', encoding='utf-8') as f:
             w = csv.writer(f)
             w.writerow(['zone', 'psgc', 'role', 'hotspot', 'person_minutes', 'peak', 'peak_at',
-                        'minutes_above_threshold', 'visitors', 'arrivals'])
+                        'minutes_above_threshold', 'visitors', 'arrivals', 'through', 'trip_ends'])
             for z in sorted(self.zones, key=lambda z: -self.person_s.get(z, 0)):
                 info = self.zone_info[z]
                 w.writerow([z, info['psgc'], info['role'], info['hotspot'], round(self.person_minutes([z]), 1),
                             self.peak[z], clock(self.peak_time[z]), self.minutes_above(z),
-                            len(self.visitors[z]), self.arrivals.get(z, 0)])
+                            len(self.visitors[z]), self.arrivals.get(z, 0),
+                            self.through.get(z, 0), self.trip_ends.get(z, 0)])
         for log in self.logs.values():
             log.flush()
         congestion.write_link_table(self.folder / 'congestion_links.csv')

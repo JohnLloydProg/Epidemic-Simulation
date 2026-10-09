@@ -157,20 +157,24 @@ def update_routes(sim) -> dict:
 
 
 def route_state(sim) -> tuple[dict, list, list]:
-    """(route paths that differ from the loaded case {route_id: (spawn_id, [edge_ids])},
-    closed edge ids, removed route ids) — what worker processes and case files need."""
+    """(route paths that differ from the loaded case {route_id: (spawn_id, [edge_ids], return_trip)},
+    closed edge ids, removed route ids) — what worker processes and case files need.
+    return_trip is (spawn_id, [edge_ids]) of the route's second direction, or None for one-direction routes:
+    it is kept as it is (not re-derived from the forward path), so a return trip planned around hotspots stays so."""
     edits = {}
     for route_id, loaded in sim.route_loaded_dirs.items():
         if route_id in sim.removed_routes:
             continue
         group = [r for r in sim.all_routes if getattr(r, 'route_id', None) == route_id]
         if [(r.spawn_node, [e.id for e in r.path]) for r in group] != loaded:     # any direction changed
-            edits[route_id] = (group[0].spawn_node.id, [e.id for e in group[0].path])
+            back = (group[1].spawn_node.id, [e.id for e in group[1].path]) if len(group) > 1 else None
+            edits[route_id] = (group[0].spawn_node.id, [e.id for e in group[0].path], back)
     return edits, sorted(sim.closed_edges), sorted(sim.removed_routes)
 
 
 def apply_in_worker(city, routes:list, closed_ids, removed_ids, edits) -> list:
     """Repeat the main process's closures, removals and route paths on a freshly loaded network."""
+    from transport.transportation import set_route_group_paths
     for edge_id in closed_ids:
         edge = city.edges.pop(tuple(edge_id), None)
         if edge is not None:
@@ -179,8 +183,15 @@ def apply_in_worker(city, routes:list, closed_ids, removed_ids, edits) -> list:
                     node.edges.remove(edge)
     removed = set(removed_ids)
     routes = [r for r in routes if getattr(r, 'route_id', None) not in removed]
-    for route_id, (spawn_id, edge_ids) in edits.items():
-        set_route_group_path(routes, route_id, city.get_node(tuple(spawn_id)), [city.get_edge(tuple(e)) for e in edge_ids])
+    for route_id, edit in edits.items():
+        spawn_id, edge_ids = edit[0], edit[1]
+        back = edit[2] if len(edit) > 2 else None
+        forward = (city.get_node(tuple(spawn_id)), [city.get_edge(tuple(e)) for e in edge_ids])
+        if back is not None:                    # both directions exactly as in the main process
+            reverse = (city.get_node(tuple(back[0])), [city.get_edge(tuple(e)) for e in back[1]])
+            set_route_group_paths(routes, route_id, [forward, reverse])
+        else:
+            set_route_group_path(routes, route_id, *forward)
     return routes
 
 
